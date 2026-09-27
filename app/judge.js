@@ -7,7 +7,12 @@ const EXACT_ANSWERS_ONLY = /yalniz deqiq/;
 const SHORTEST_MEANING_MATCH = 5;
 
 const compact = text => fold(text ?? '').replace(/[^\p{L}\p{N}]+/gu, '');
-const words = text => fold(text ?? '').split(/[^\p{L}\p{N}]+/u).filter(Boolean);
+const JOINING_WORDS = new Set(['ve', 'va', 'ile', 'and']);
+// Players without an Azerbaijani keyboard type "a" for "ə", "sh" for "ş" and "ch" for "ç".
+const latin = text => fold(text).replace(/sh/g, 's').replace(/ch/g, 'c');
+const spellings = text => [...new Set([latin(text ?? ''), latin((text ?? '').replace(/[əƏ]/g, 'a'))])];
+const words = text => text.split(/[^\p{L}\p{N}]+/u).filter(word => word && !JOINING_WORDS.has(word));
+const listParts = text => text.split(/[,;&]|\s(?:ve|va|ile|and)\s/).map(words).filter(part => part.length);
 const dot = (a, b) => a.reduce((sum, value, i) => sum + value * b[i], 0);
 
 function answerCandidates(question) {
@@ -19,22 +24,36 @@ function answerCandidates(question) {
 }
 
 function editDistance(a, b) {
-  let previous = Array.from({ length: b.length + 1 }, (_, j) => j);
+  let [beforePrevious, previous] = [[], Array.from({ length: b.length + 1 }, (_, j) => j)];
   for (let i = 1; i <= a.length; i++) {
     const current = [i];
-    for (let j = 1; j <= b.length; j++) current[j] = Math.min(previous[j] + 1, current[j - 1] + 1, previous[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
-    previous = current;
+    for (let j = 1; j <= b.length; j++) {
+      current[j] = Math.min(previous[j] + 1, current[j - 1] + 1, previous[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+      if (i > 1 && j > 1 && a[i - 1] === b[j - 2] && a[i - 2] === b[j - 1]) current[j] = Math.min(current[j], beforePrevious[j - 2] + 1);
+    }
+    [beforePrevious, previous] = [previous, current];
   }
   return previous[b.length];
 }
 
 const typosAllowed = length => (length >= 9 ? 2 : length >= 5 ? 1 : 0);
 
+const sameWords = (givenWords, candidateWords) => givenWords.length === candidateWords.length
+  && candidateWords.every((word, i) => editDistance(givenWords[i], word) <= typosAllowed(word.length));
+
+// List answers ("Adəm, Həvva") match in any order.
+function sameList(given, candidate) {
+  const left = listParts(candidate);
+  return left.length > 1 && listParts(given).length === left.length && listParts(given).every(part => {
+    const i = left.findIndex(other => sameWords(part, other));
+    return i >= 0 && left.splice(i, 1);
+  });
+}
+
 function matchesAsText(given, candidate) {
   if (compact(given) === compact(candidate)) return true;
-  const [givenWords, candidateWords] = [words(given), words(candidate)];
-  return givenWords.length === candidateWords.length
-    && candidateWords.every((word, i) => editDistance(givenWords[i], word) <= typosAllowed(word.length));
+  const [typed] = spellings(given);
+  return spellings(candidate).some(expected => sameWords(words(typed), words(expected)) || sameList(typed, expected));
 }
 
 async function judgeAnswer(question, given, embedTexts) {
@@ -56,4 +75,4 @@ async function judgeAnswer(question, given, embedTexts) {
   return { verdict, similarity, closestAnswer, method: 'ai' };
 }
 
-module.exports = { JUDGE_THRESHOLDS, answerCandidates, matchesAsText, judgeAnswer };
+module.exports = { JUDGE_THRESHOLDS, answerCandidates, editDistance, matchesAsText, judgeAnswer };

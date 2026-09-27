@@ -1,5 +1,7 @@
 'use strict';
 const updateUrl = process.env.UPDATE_URL;
+// A platform-level `files` list drops the exclusions below, so pick the other OS's onnxruntime binaries here.
+const otherOs = process.argv.includes('--mac') ? 'win32' : 'darwin';
 
 module.exports = {
   appId: 'az.kimhardaneapp',
@@ -15,7 +17,7 @@ module.exports = {
     '!**/*.{map,d.ts,d.mts,d.cts}',
     '!node_modules/@huggingface/transformers/dist/!(transformers.node.mjs)',
     '!node_modules/onnxruntime-web/**',
-    '!node_modules/onnxruntime-node/bin/napi-v6/{darwin,linux}/**',
+    `!node_modules/onnxruntime-node/bin/napi-v6/{${otherOs},linux}/**`,
     '!node_modules/onnxruntime-node/bin/napi-v6/win32/arm64/**',
   ],
   asarUnpack: ['node_modules/onnxruntime-node/**', 'node_modules/sharp/**', 'node_modules/@img/**'],
@@ -26,6 +28,8 @@ module.exports = {
     { from: 'bundle/images', to: 'data/images' },
   ],
   win: { icon: 'icon.png', target: [{ target: 'nsis', arch: ['x64'] }] },
+  // ponytail: arm64 only (onnxruntime-node ships no darwin/x64 binary); unsigned, so no auto-update on Mac
+  mac: { icon: 'icon.png', category: 'public.app-category.education', target: [{ target: 'dmg', arch: ['arm64'] }] },
   nsis: { oneClick: true, perMachine: false },
   publish: updateUrl ? [{ provider: 'generic', url: updateUrl }] : null,
 };

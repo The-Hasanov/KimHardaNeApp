@@ -57,6 +57,8 @@ the TV never receive it early.
 Download `KimHardaNeApp-Setup-<version>.exe` from
 [Releases](https://github.com/The-Hasanov/KimHardaNeApp/releases) and run it. The installer is not
 code-signed, so Windows SmartScreen warns on the first install: choose **More info → Run anyway**.
+On a Mac with Apple silicon, download `KimHardaNeApp-<version>-arm64.dmg`, drag the app to Applications, and on the
+first launch choose **System Settings → Privacy & Security → Open Anyway**.
 
 Windows Firewall asks once whether KimHardaNeApp may accept connections on private networks. Allow it, or
 phones cannot join a party.
@@ -86,6 +88,8 @@ Requires Node 22.5+. Other commands:
 ```bash
 npm test          # offline tests
 npm run dist      # Windows installer in app/dist
+npm run dist:mac  # Mac (Apple silicon) disk image in app/dist
+node bench/judge.js 1000  # benchmark the answer check
 ```
 
 ## Documentation

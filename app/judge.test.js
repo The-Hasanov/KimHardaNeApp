@@ -25,6 +25,12 @@ test('text matching ignores case, diacritics, punctuation and small typos', () =
   assert.ok(!matchesAsText('Gəncə', 'Bakı'));
   assert.ok(!matchesAsText('birinci siçan', 'İkinci siçan'));
   assert.ok(matchesAsText('ikinçi sican', 'İkinci siçan'));
+  assert.ok(matchesAsText('Adəm və Həvva', 'Adəm,Həvva'));
+  assert.ok(!matchesAsText('Adəm və Həvva', 'Adəm'));
+  assert.ok(matchesAsText('Gunash va ay', 'Günəş və ay'));
+  assert.ok(matchesAsText('Bsoton', 'Boston'));
+  assert.ok(matchesAsText('Həvva, Adəm', 'Adəm və Həvva'));
+  assert.ok(!matchesAsText('Həvva, Həvva', 'Adəm, Həvva'));
 });
 
 test('judging: text match, AI meaning match, unsure zone and exact-only questions', async () => {

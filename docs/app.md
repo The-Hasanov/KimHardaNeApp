@@ -37,7 +37,8 @@ npm test         # offline tests for the scraper, search, ranking, edits, data u
   answer is left for you to mark *Correct* or *Wrong*.
   Each question's timer starts when it appears; type the answer and press Enter, or let the time run out.
   The answer is checked at once (`judge.js`): first as text against the answer and the accepted answers,
-  ignoring case, diacritics, punctuation and small typos in each word; otherwise by meaning with the AI model,
+  ignoring case, diacritics, punctuation and small typos in each word (a swap of two letters is one typo),
+  "a" for "ə", "sh"/"ch" for "ş"/"ç", joining words ("və", "ilə") and the order of a list's parts; otherwise by meaning with the AI model,
   *correct* at 86% similarity or more, *not sure* from 60%, *wrong* below. Crediting notes such as
   "Yalnız dəqiq cavablar" are not treated as answers, and exact-only or very short answers skip the AI check.
   You can overrule every verdict with *Correct* / *Wrong*. The score and every answer are saved; *Your results*
@@ -127,6 +128,7 @@ npm test         # offline tests for the scraper, search, ranking, edits, data u
 cd app
 npm run dist                                          # dist/KimHardaNeApp Setup <version>.exe (~365 MB)
 UPDATE_URL=https://your.host/3sual/ npm run dist      # same, plus in-app auto-update from that folder
+npm run dist:mac                                      # dist/KimHardaNeApp-<version>-arm64.dmg, Apple silicon only
 ```
 
 `npm run dist` snapshots `data/3sual.sqlite` with `VACUUM INTO`, without the AI vectors and lists. It refuses

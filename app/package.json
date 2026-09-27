@@ -1,7 +1,7 @@
 {
   "name": "kimhardaneapp",
   "productName": "KimHardaNeApp",
-  "version": "1.5.0",
+  "version": "1.5.1",
   "private": true,
   "description": "Search and edit the 3sual.az question dataset",
   "author": "KimHardaNeApp",
@@ -12,7 +12,8 @@
     "embed": "node ai.js",
     "test": "node --test",
     "bench": "node bench.js run",
-    "dist": "vite build && node build-data.js && electron-builder --config electron-builder.config.js --win --publish never"
+    "dist": "vite build && node build-data.js && electron-builder --config electron-builder.config.js --win --publish never",
+    "dist:mac": "vite build && node build-data.js && electron-builder --config electron-builder.config.js --mac --publish never"
   },
   "dependencies": {
     "@huggingface/transformers": "^4.3.0",
