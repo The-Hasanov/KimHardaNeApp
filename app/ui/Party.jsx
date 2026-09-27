@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import QRCode from 'qrcode';
 import { cn } from 'cn';
 import {
-  AppWindowIcon, ArrowRightIcon, CastIcon, CheckIcon, ChevronDownIcon, CircleHelpIcon, DoorClosedIcon, EyeOffIcon, FlagIcon, GamepadIcon, PauseIcon, PlayIcon, QrCodeIcon,
+  AppWindowIcon, ArrowRightIcon, CastIcon, CheckIcon, ChevronDownIcon, CircleHelpIcon, DoorClosedIcon, EyeIcon, EyeOffIcon, FlagIcon, GamepadIcon, PauseIcon, PlayIcon, QrCodeIcon,
   RotateCcwIcon, SkipForwardIcon, TrophyIcon, TvIcon, UserXIcon, UsersIcon, WifiOffIcon, XIcon,
 } from 'lucide-react';
 import {
@@ -32,6 +32,7 @@ const PHASES_IN_ROUND = ['waiting', 'question', 'judging', 'reveal'];
 
 const pointsLabel = points => (points > 0 ? `+${points}` : points < 0 ? `−${-points}` : '0');
 const hostOf = url => url.replace(/^http:\/\//, '').replace(/\/$/, '');
+const isWaitingToReveal = party => party.phase === 'judging' && party.rules.revealAtEnd && party.answers.every(answer => answer.isCorrect !== undefined);
 const outcomeOf = answer => (answer.isCorrect ? 'correct' : answer.verdict === 'unsure' && !answer.decidedByHost ? 'unsure' : 'wrong');
 const OUTCOMES = {
   correct: { label: 'Correct', Icon: CheckIcon, className: 'text-emerald-600 dark:text-emerald-400' },
@@ -95,14 +96,14 @@ function Leaderboard({ entries, showsRoundScore = false }) {
   );
 }
 
-function PlayerAnswers({ party }) {
-  const answeredIds = new Set(party.answers.map(answer => answer.playerId));
+function PlayerAnswers({ party, answers = party.answers, position = party.index }) {
+  const answeredIds = new Set(answers.map(answer => answer.playerId));
   const silentPlayers = party.players.filter(player => !answeredIds.has(player.id));
   return (
     <div className="space-y-2">
       <h2 className="text-sm font-medium text-muted-foreground">Answers</h2>
       <ul className="divide-y rounded-lg border">
-        {party.answers.map(answer => {
+        {answers.map(answer => {
           const { label, Icon, className } = OUTCOMES[outcomeOf(answer)];
           return (
             <li key={answer.playerId} className="flex flex-wrap items-center gap-x-4 gap-y-1 px-4 py-2.5">
@@ -112,16 +113,16 @@ function PlayerAnswers({ party }) {
               <span className="w-8 text-right text-sm tabular-nums">{pointsLabel(answer.points)}</span>
               <div className="flex gap-1">
                 <Button size="icon-sm" variant={answer.isCorrect ? 'default' : 'outline'} aria-label={`Mark ${answer.name} correct`}
-                  onClick={() => api.partySetCorrect(answer.playerId, party.index, true)}><CheckIcon /></Button>
+                  onClick={() => api.partySetCorrect(answer.playerId, position, true)}><CheckIcon /></Button>
                 <Button size="icon-sm" variant={!answer.isCorrect && outcomeOf(answer) === 'wrong' ? 'default' : 'outline'}
-                  aria-label={`Mark ${answer.name} wrong`} onClick={() => api.partySetCorrect(answer.playerId, party.index, false)}><XIcon /></Button>
+                  aria-label={`Mark ${answer.name} wrong`} onClick={() => api.partySetCorrect(answer.playerId, position, false)}><XIcon /></Button>
               </div>
             </li>
           );
         })}
-        {!party.answers.length && <li className="px-4 py-3 text-sm text-muted-foreground">Nobody answered.</li>}
+        {!answers.length && <li className="px-4 py-3 text-sm text-muted-foreground">Nobody answered.</li>}
       </ul>
-      {silentPlayers.length > 0 && party.answers.length > 0 && (
+      {silentPlayers.length > 0 && answers.length > 0 && (
         <p className="text-sm text-muted-foreground">No answer: {silentPlayers.map(player => player.name).join(', ')}</p>
       )}
     </div>
@@ -133,6 +134,13 @@ function QuestionForHost({ party }) {
   return (
     <div className="mx-auto grid max-w-6xl gap-8 px-8 py-8 lg:grid-cols-[1fr_20rem]">
       <div className="space-y-6">
+        {party.previous && (
+          <div className="space-y-4 rounded-lg border p-4">
+            <p className="text-sm font-medium text-muted-foreground">Check the answers · question {party.previous.index + 1} of {party.total}</p>
+            <CorrectAnswer question={party.previous.question} />
+            <PlayerAnswers party={party} answers={party.previous.answers} position={party.previous.index} />
+          </div>
+        )}
         <p className="text-sm font-medium text-muted-foreground">
           {isUpNext ? `Up next · question ${party.index + 1} of ${party.total}` : `On the TV · question ${party.index + 1} of ${party.total}`}
         </p>
@@ -141,6 +149,7 @@ function QuestionForHost({ party }) {
           <p className="flex items-center gap-2 text-xs font-medium text-muted-foreground"><EyeOffIcon className="size-3.5" />Answer · only you see this</p>
           <CorrectAnswer question={party.question} />
         </div>
+        {isWaitingToReveal(party) && <PlayerAnswers party={party} />}
       </div>
       <div className="space-y-2">
         <h2 className="text-sm font-medium text-muted-foreground">Players</h2>
@@ -307,7 +316,7 @@ export default function PartyScreen({ party, isVisible, lobbySettings, onBackToL
     if (!isVisible || e.target.closest?.('input, textarea, [role=dialog], [role=alertdialog], [role=listbox]')) return;
     if (party.phase === 'waiting' && [' ', 'ArrowRight'].includes(e.key)) api.partySkipWait();
     else if (hasRunningClock && party.phase !== 'waiting' && e.key === ' ') (party.isPaused ? api.partyResume : api.partyPause)();
-    else if (party.phase === 'reveal' && ['Enter', 'ArrowRight'].includes(e.key)) api.partyNext();
+    else if ((party.phase === 'reveal' || isWaitingToReveal(party)) && ['Enter', 'ArrowRight'].includes(e.key)) api.partyNext();
     else return;
     e.preventDefault();
   };
@@ -415,7 +424,12 @@ export default function PartyScreen({ party, isVisible, lobbySettings, onBackToL
             <span className="text-lg"><span className="font-semibold tabular-nums">{answeredCount}</span> of {party.players.length} answered</span>
             <Button size="lg" variant="outline" className="ml-auto" onClick={() => api.partyCloseAnswers()}>Close answers now</Button>
           </>}
-          {party.phase === 'judging' && <span className="flex items-center gap-2 text-lg"><Spinner />Checking answers…</span>}
+          {party.phase === 'judging' && !isWaitingToReveal(party) && <span className="flex items-center gap-2 text-lg"><Spinner />Checking answers…</span>}
+          {isWaitingToReveal(party) && (
+            <Button size="lg" className="ml-auto" onClick={() => api.partyNext()}>
+              <EyeIcon />Show the answers<Kbd className={KEY_HINT_ON_PRIMARY_BUTTON}>Enter</Kbd>
+            </Button>
+          )}
           {party.phase === 'reveal' && (
             <Button size="lg" className="ml-auto" onClick={() => api.partyNext()}>
               {isLastQuestion ? <><TrophyIcon />Round results</> : <>{party.rules.revealAtEnd ? 'Next answer' : 'Next question'}<ArrowRightIcon /></>}

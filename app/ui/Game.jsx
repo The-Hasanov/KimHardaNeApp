@@ -33,6 +33,7 @@ const MAX_RANDOM_COUNT = 50;
 const DEFAULT_SECONDS_PER_QUESTION = 60;
 const RANDOM_SOURCE = 'random';
 const MAX_SECONDS_BETWEEN_QUESTIONS = 120;
+const MIN_SECONDS_TO_CHECK_ANSWERS = 15;
 const DEFAULT_SECONDS_ON_ANSWER = 10;
 const RANDOM_GAME_TITLE = 'Random · Nə? Harada? Nə zaman?';
 
@@ -62,7 +63,7 @@ const MODE_DESCRIPTIONS = {
 const TIMING_HELP = {
   host: "Between questions the next question's number fills the screen; Space skips the wait. Auto-start starts each question's timer as soon as the question appears.",
   play: "Between questions the next question's number fills the screen; Space skips the wait. Each question's timer starts as soon as it appears.",
-  party: "Between questions the next question's number fills every screen. Autoplay moves on to the next question once the answer has been shown for that many seconds; Pause holds it. Showing the answers at the end keeps every answer and score hidden until the last question, then shows the answers one by one. A blank answer scores 0; a wrong one scores the points for a wrong answer (use a negative number as a penalty).",
+  party: "Between questions the next question's number fills every screen. Autoplay moves on to the next question once the answer has been shown for that many seconds; Pause holds it. Showing the answers at the end keeps every answer and score hidden until the last question: you check each question's answers during the seconds between questions (Pause gives more time), and the last one's before you show the answers one by one. A blank answer scores 0; a wrong one scores the points for a wrong answer (use a negative number as a penalty).",
 };
 
 function RoundSettings({ mode, questions, lists, listId, onListIdChange, onNewSet, settings, onSettingsChange, action }) {
@@ -126,7 +127,7 @@ function RoundSettings({ mode, questions, lists, listId, onListIdChange, onNewSe
         <NumberField id="seconds-per-question" label="Seconds per question" value={settings.secondsPerQuestion} min={10} max={600} step={5}
           onChange={secondsPerQuestion => onSettingsChange({ secondsPerQuestion })} />
         <NumberField id="seconds-between-questions" label="Seconds between questions" value={settings.secondsBetweenQuestions}
-          min={0} max={MAX_SECONDS_BETWEEN_QUESTIONS} step={5} onChange={secondsBetweenQuestions => onSettingsChange({ secondsBetweenQuestions })} />
+          min={mode === 'party' && settings.isRevealAtEnd ? MIN_SECONDS_TO_CHECK_ANSWERS : 0} max={MAX_SECONDS_BETWEEN_QUESTIONS} step={5} onChange={secondsBetweenQuestions => onSettingsChange({ secondsBetweenQuestions })} />
         {mode === 'host' && (
           <div className="flex h-8 items-center gap-2">
             <Switch id="auto-start-next-question" checked={settings.shouldAutoStartTimer}
@@ -318,7 +319,10 @@ export default function Game({ isVisible, lists, listId, onListIdChange, isAiRea
     if ('pointsForCorrect' in changes) setPointsForCorrect(changes.pointsForCorrect);
     if ('pointsForWrong' in changes) setPointsForWrong(changes.pointsForWrong);
     if ('isAutoplay' in changes) setIsAutoplay(changes.isAutoplay);
-    if ('isRevealAtEnd' in changes) setIsRevealAtEnd(changes.isRevealAtEnd);
+    if ('isRevealAtEnd' in changes) {
+      setIsRevealAtEnd(changes.isRevealAtEnd);
+      if (changes.isRevealAtEnd) setSecondsBetweenQuestions(seconds => Math.max(seconds, MIN_SECONDS_TO_CHECK_ANSWERS));
+    }
     if ('secondsOnAnswer' in changes) setSecondsOnAnswer(changes.secondsOnAnswer);
     if ('randomCount' in changes) {
       setRandomCount(changes.randomCount);
@@ -344,7 +348,8 @@ export default function Game({ isVisible, lists, listId, onListIdChange, isAiRea
     }
   };
   const startPartyRound = () => api.partyStartRound({
-    uids: questions.map(question => question.uid), secondsPerQuestion, secondsBetweenQuestions, pointsForCorrect, pointsForWrong,
+    uids: questions.map(question => question.uid), secondsPerQuestion, pointsForCorrect, pointsForWrong,
+    secondsBetweenQuestions: isRevealAtEnd ? Math.max(secondsBetweenQuestions, MIN_SECONDS_TO_CHECK_ANSWERS) : secondsBetweenQuestions,
     secondsOnAnswer: isAutoplay ? secondsOnAnswer : 0, revealAtEnd: isRevealAtEnd,
   });
   const partyBackToLobby = async keepScores => {

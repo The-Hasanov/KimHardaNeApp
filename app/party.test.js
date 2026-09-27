@@ -161,7 +161,7 @@ test('the host can pause and resume the timer, and pick what the TV shows until 
   game.finish();
 });
 
-test('the TV page, join code and feed never carry the answer before the reveal, and follow night mode', async () => {
+test('the TV page, join code and feed never carry the answer before the reveal, and phones and TV follow night mode', async () => {
   const { game, close } = await openParty({ judge: judgeByText }, { port: 0 });
   const base = `http://127.0.0.1:${game.port}`;
   try {
@@ -185,6 +185,7 @@ test('the TV page, join code and feed never carry the answer before the reveal, 
     assert.equal(shownAtReveal.isNightMode, true);
     game.setNightMode(false);
     assert.equal(game.tvView().isNightMode, false);
+    assert.equal(game.playerView(aysel).isNightMode, false);
   } finally {
     await close();
   }
@@ -237,15 +238,24 @@ test('phones wait for the host while an answer is not decided yet', async () => 
   game.finish();
 });
 
-test('answers can wait for the end of the round, then show one by one without leaking scores before', async () => {
+test('answers can wait for the end of the round: the host checks them between questions, phones learn nothing until the host reveals', async () => {
   const game = newGame();
   const aysel = game.join('Aysel');
-  game.startRound({ ...ROUND, revealAtEnd: true });
-  game.submitAnswer(aysel.token, 'Bakı');
+  game.startRound({ ...ROUND, secondsBetweenQuestions: 5, revealAtEnd: true });
+  game.skipWait();
+  game.submitAnswer(aysel.token, 'Baki');
   await game.closeAnswers();
-  assert.deepEqual([game.phase, game.index, game.playerView(aysel).me.score, game.playerView(aysel).reveal], ['question', 1, 0, null]);
+  assert.deepEqual([game.phase, game.index, game.hostView().previous.answers[0].given], ['waiting', 1, 'Baki']);
+  game.setCorrect(aysel.id, 0, true);
+  assert.deepEqual([game.playerView(aysel).me.score, game.playerView(aysel).reveal], [0, null]);
+  assert.ok(!JSON.stringify(game.playerView(aysel)).includes('Bakı'));
+  assert.ok(!JSON.stringify(game.tvView()).includes('Baki'));
+  game.skipWait();
+  assert.equal(game.hostView().previous, null);
   game.submitAnswer(aysel.token, 'Nizami Gəncəvi');
   await game.closeAnswers();
+  assert.deepEqual([game.phase, game.playerView(aysel).me.score, game.playerView(aysel).reveal], ['judging', 0, null]);
+  game.next();
   assert.deepEqual([game.phase, game.index, game.tvView().question.answer, game.playerView(aysel).me.score], ['reveal', 0, 'Bakı', 1]);
   game.next();
   assert.deepEqual([game.phase, game.index, game.tvView().question.answer, game.playerView(aysel).me.score], ['reveal', 1, 'Nizami Gəncəvi', 2]);

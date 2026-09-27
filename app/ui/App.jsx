@@ -25,6 +25,7 @@ import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '@/componen
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Spinner } from '@/components/ui/spinner';
 import { Switch } from '@/components/ui/switch';
+import { Toggle } from '@/components/ui/toggle';
 import { Textarea } from '@/components/ui/textarea';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
@@ -592,11 +593,12 @@ export default function App() {
           </TabsList>
         </Tabs>
         {view === 'game' && (
-          <div className="ml-auto flex items-center gap-2 px-1">
-            <MoonIcon className="size-4 text-muted-foreground" />
-            <Label htmlFor="night-mode" className="font-normal">Night mode</Label>
-            <Switch id="night-mode" checked={nightMode} onCheckedChange={setNightMode} />
-          </div>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Toggle aria-label="Night mode" className="ml-auto px-2" pressed={nightMode} onPressedChange={setNightMode}><MoonIcon /></Toggle>
+            </TooltipTrigger>
+            <TooltipContent>Night mode</TooltipContent>
+          </Tooltip>
         )}
         {isMine && <Button variant="outline" className="ml-auto" onClick={startNewQuestion}><PlusIcon />New question</Button>}
         {view === 'search' && <>

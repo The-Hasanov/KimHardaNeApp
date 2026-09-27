@@ -31,8 +31,8 @@ npm test         # offline tests for the scraper, search, ranking, edits, data u
   *Seconds between questions* (0 = off) shows the next question's number full screen for that many seconds
   before each question, starting with question 1; Space or → skips the wait. *Auto-start next question* starts
   each question's timer as soon as the question appears.
-  Scoring stays with the host. The *Night mode* switch (in Settings, and top right in the Game tab) toggles the dark and
-  light themes for the whole app; the choice is remembered, and until it is made the app follows Windows.
+  Scoring stays with the host. *Night mode* (the switch in Settings, or the moon button top right in the Game tab) toggles the dark and
+  light themes for the whole app, the TV and the phones; the choice is remembered, and until it is made the app follows Windows.
 - **Play mode** (Game tab, *Host* / *Play* switch): answer the questions yourself. With AI search off, every
   answer is left for you to mark *Correct* or *Wrong*.
   Each question's timer starts when it appears; type the answer and press Enter, or let the time run out.
@@ -72,8 +72,9 @@ npm test         # offline tests for the scraper, search, ranking, edits, data u
   *The host is checking* until then); phones then show their verdict, the answer and the
   leaderboard, and the host sees every answer and can overrule it. The host sets the points for a correct
   answer and for a wrong one (for example −1; a blank answer always scores 0). *Show the answers: At the end of
-  the round* runs the questions back to back and keeps every answer and score hidden; after the last question the
-  host steps through the answers with *Next answer*, and the scores grow as they are revealed. After the last question the
+  the round* keeps every answer and score hidden from phones and the TV; it needs seconds between questions, and
+  during them the host checks the previous question's answers. After the last question the host checks its answers,
+  presses *Show the answers* and steps through them with *Next answer*, and the scores grow as they are revealed. After the last question the
   round's leaderboard appears: *Next round* keeps the scores and *New game* resets them; either way players
   stay connected and the host picks the next questions in the lobby. Random questions never repeat one already
   shown while the party is open (lists play as chosen). Players can only join and send answers:

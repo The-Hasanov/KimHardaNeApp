@@ -193,9 +193,13 @@ class PartyGame {
       answer.isCorrect = answer.verdict === 'correct';
     }
     if (this.phase !== 'judging' || this.answers !== answers) return;
-    if (this.rules.revealAtEnd && position + 1 < this.questions.length) return this.goTo(position + 1);
-    if (this.rules.revealAtEnd) this.index = 0;
-    this.showAnswer();
+    if (!this.rules.revealAtEnd) return this.showAnswer();
+    if (position + 1 < this.questions.length) return this.goTo(position + 1);
+    this.changed();
+  }
+
+  isJudged() {
+    return [...this.answers[this.index].values()].every(answer => answer.isCorrect !== undefined);
   }
 
   showAnswer() {
@@ -214,6 +218,10 @@ class PartyGame {
   }
 
   next() {
+    if (this.phase === 'judging' && this.rules.revealAtEnd && this.isJudged()) {
+      this.index = 0;
+      return this.showAnswer();
+    }
     if (this.phase !== 'reveal') return;
     if (this.index + 1 >= this.questions.length) return this.finish();
     if (!this.rules.revealAtEnd) return this.goTo(this.index + 1);
@@ -252,20 +260,23 @@ class PartyGame {
 
   hostView() {
     const current = this.answers[this.index];
+    const answerRows = position => [...(this.answers[position] ?? [])].map(([playerId, answer]) => ({
+      playerId, name: this.players.get(playerId)?.name, points: this.pointsFor(answer), ...answer,
+    }));
+    const checkedIndex = this.rules.revealAtEnd && this.phase === 'waiting' ? this.index - 1 : -1;
     return {
       id: this.id, phase: this.phase, round: this.round, index: this.index, total: this.questions.length,
       remainingMs: this.remainingMs(), isPaused: this.pausedRemainingMs != null, screen: this.screen,
       rules: this.rules, urls: this.urls, port: this.port, question: this.questions[this.index] ?? null,
       players: [...this.players.values()].map(p => ({ id: p.id, name: p.name, hasAnswered: !!current?.has(p.id) })),
-      answers: current ? [...current].map(([playerId, answer]) => ({
-        playerId, name: this.players.get(playerId)?.name, points: this.pointsFor(answer), ...answer,
-      })) : [],
+      answers: answerRows(this.index),
+      previous: checkedIndex >= 0 ? { index: checkedIndex, question: this.questions[checkedIndex], answers: answerRows(checkedIndex) } : null,
       leaderboard: this.leaderboard(),
     };
   }
 
   tvView() {
-    const view = this.hostView();
+    const { previous, ...view } = this.hostView();
     const question = PHASES_WITH_QUESTION.includes(this.phase) ? this.questions[this.index] : null;
     const isRevealed = this.phase === 'reveal';
     return {
@@ -292,7 +303,7 @@ class PartyGame {
     const showsLeaderboard = ['reveal', 'finished'].includes(this.phase) || (this.phase === 'lobby' && this.round > 0);
     return {
       partyId: this.id, phase: this.phase, round: this.round, index: this.index, total: this.questions.length,
-      remainingMs: this.remainingMs(), isPaused: this.pausedRemainingMs != null, playerCount: this.players.size,
+      remainingMs: this.remainingMs(), isPaused: this.pausedRemainingMs != null, playerCount: this.players.size, isNightMode: this.isNightMode,
       rules: { pointsForCorrect: this.rules.pointsForCorrect, pointsForWrong: this.rules.pointsForWrong },
       me: { name: player.name, score: me?.score ?? 0, roundScore: me?.roundScore ?? 0, rank: me?.rank ?? null },
       question: PHASES_WITH_QUESTION.includes(this.phase) ? {
