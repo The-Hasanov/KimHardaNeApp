@@ -17,7 +17,7 @@ game from the app. Bring your own questions or use the bundled question bank.
 - **Any TV**: a TV window on a second screen, Miracast, or the web browser of a Samsung Smart TV.
 - **Host controls**: points for right and wrong answers, pause, autoplay, several rounds with or without
   keeping the scores, and no question shown twice in one party.
-- **Your own questions**: write them on the *My questions* page, add a handout picture and an answer picture,
+- **Your own questions**: write them on the *Custom* tab, add a handout picture and an answer picture,
   collect them in lists and play a list in order.
 - **Game helper and solo play**: a timer for the host, or play alone and mark your answers yourself or let the
   AI check them.

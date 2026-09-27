@@ -26,7 +26,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Spinner } from '@/components/ui/spinner';
 import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
-import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import {
@@ -55,6 +54,7 @@ const REFRESH_MODES = [
 const STAGES = { list: 'Listing packages', packages: 'Downloading packages', audit: 'Checking authors',
   images: 'Downloading images', index: 'Rebuilding search index', embed: 'Computing AI vectors' };
 const PAGE = 100;
+const VIEWS = [['search', SearchIcon, 'Search'], ['mine', NotebookPenIcon, 'Custom'], ['lists', ListIcon, 'Lists'], ['game', TimerIcon, 'Game']];
 const OWN_PACKAGE_ID = 0;
 const OWN_GAME_ID = 0;
 const NEW_QUESTION = { uid: null, package_id: OWN_PACKAGE_ID, game_name: 'My questions' };
@@ -113,6 +113,7 @@ function Shortcuts() {
       <KbdGroup><Kbd>Ctrl</Kbd><Kbd>K</Kbd></KbdGroup><span>Search</span>
       <KbdGroup><Kbd>↑</Kbd><Kbd>↓</Kbd></KbdGroup><span>Move through results</span>
       <KbdGroup><Kbd>Ctrl</Kbd><Kbd>S</Kbd></KbdGroup><span>Save the open question</span>
+      <KbdGroup><Kbd>Ctrl</Kbd><Kbd>1</Kbd>–<Kbd>4</Kbd></KbdGroup><span>Switch tabs</span>
     </div>
   );
 }
@@ -518,6 +519,12 @@ export default function App() {
   }
 
   onKey.current = e => {
+    const viewAtKey = e.ctrlKey && !e.altKey && VIEWS[Number(e.key) - 1];
+    if (viewAtKey) {
+      e.preventDefault();
+      setView(viewAtKey[0]);
+      return;
+    }
     if (!isBrowsing) return;
     const key = e.key.toLowerCase();
     if (e.ctrlKey && key === 's') {
@@ -573,10 +580,14 @@ export default function App() {
       <header className="flex shrink-0 flex-wrap items-center gap-2 border-b px-3 py-2">
         <Tabs value={view} onValueChange={setView}>
           <TabsList>
-            <TabsTrigger value="search" className="px-2.5"><SearchIcon />Questions</TabsTrigger>
-            <TabsTrigger value="mine" className="px-2.5"><NotebookPenIcon />My questions</TabsTrigger>
-            <TabsTrigger value="lists" className="px-2.5"><ListIcon />Lists</TabsTrigger>
-            <TabsTrigger value="game" className="px-2.5"><TimerIcon />Game</TabsTrigger>
+            {VIEWS.map(([value, Icon, label], index) => (
+              <Tooltip key={value}>
+                <TooltipTrigger asChild>
+                  <TabsTrigger value={value} className="px-2.5"><Icon />{label}</TabsTrigger>
+                </TooltipTrigger>
+                <TooltipContent className="flex items-center gap-2">Switch with<KbdGroup><Kbd>Ctrl</Kbd><Kbd>{index + 1}</Kbd></KbdGroup></TooltipContent>
+              </Tooltip>
+            ))}
           </TabsList>
         </Tabs>
         {view === 'game' && (
@@ -604,19 +615,17 @@ export default function App() {
             ) : <KbdGroup><Kbd>Ctrl</Kbd><Kbd>K</Kbd></KbdGroup>}
           </InputGroupAddon>
         </InputGroup>
-        <ToggleGroup type="single" variant="outline" spacing={0} value={searchMode} aria-label="Ranking"
-          onValueChange={v => v && (v === 'keyword' || isAiReady ? filter(setMode)(v) : setIsSettingsOpen(true))}>
-          {MODES.map(([value, label, hint]) => (
-            <Tooltip key={value}>
-              <TooltipTrigger asChild>
-                <ToggleGroupItem value={value} className={cn('px-3 aria-checked:bg-muted aria-checked:text-foreground', value !== 'keyword' && !isAiReady && 'text-muted-foreground')}>
-                  {value === 'ai' && <SparklesIcon />}{label}
-                </ToggleGroupItem>
-              </TooltipTrigger>
-              <TooltipContent>{value === 'keyword' || isAiReady ? hint : 'Turn on AI search in Settings'}</TooltipContent>
-            </Tooltip>
-          ))}
-        </ToggleGroup>
+        <Select value={searchMode} onValueChange={v => (v === 'keyword' || isAiReady ? filter(setMode)(v) : setIsSettingsOpen(true))}>
+          <SelectTrigger className="w-28" aria-label="Ranking"><SelectValue /></SelectTrigger>
+          <SelectContent position="popper">
+            {MODES.map(([value, label, hint]) => (
+              <SelectItem key={value} value={value} title={value === 'keyword' || isAiReady ? hint : 'Turn on AI search in Settings'}
+                className={cn(value !== 'keyword' && !isAiReady && 'text-muted-foreground')}>
+                {value === 'ai' && <SparklesIcon />}{label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
         <Select value={game} onValueChange={filter(setGame)}>
           <SelectTrigger className="w-48" aria-label="Game"><SelectValue /></SelectTrigger>
           <SelectContent position="popper">

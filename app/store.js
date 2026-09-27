@@ -289,11 +289,12 @@ class Store {
     return this.get(uid);
   }
 
-  randomPlayableQuestions(gameId, count, excludedUids = []) {
-    return this.db.prepare(`SELECT uid FROM questions WHERE game_id = ? AND kind = 'question' AND COALESCE(group_size, 1) <= 1
-      AND length(text) > 20 AND trim(COALESCE(answer, '')) NOT IN ('', '-') AND uid NOT IN (SELECT value FROM json_each(?))
-      ORDER BY random() LIMIT ?`)
-      .all(gameId, JSON.stringify(excludedUids), count).map(r => this.get(r.uid));
+  randomPlayableQuestions(gameId, count, excludedUids = [], { includeOwn = false } = {}) {
+    return this.db.prepare(`SELECT uid FROM (SELECT uid FROM questions
+      WHERE (game_id = ? OR (? AND package_id = ?)) AND kind = 'question' AND COALESCE(group_size, 1) <= 1
+      AND (package_id = ? OR length(text) > 20) AND trim(COALESCE(answer, '')) NOT IN ('', '-') AND uid NOT IN (SELECT value FROM json_each(?))
+      ORDER BY package_id = ? DESC, random() LIMIT ?) ORDER BY random()`)
+      .all(gameId, includeOwn ? 1 : 0, OWN_PACKAGE_ID, OWN_PACKAGE_ID, JSON.stringify(excludedUids), OWN_PACKAGE_ID, count).map(r => this.get(r.uid));
   }
 
   allLists() {

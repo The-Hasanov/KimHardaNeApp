@@ -15,6 +15,7 @@ import { Input } from '@/components/ui/input';
 import { Kbd } from '@/components/ui/kbd';
 import { Label } from '@/components/ui/label';
 import { Progress } from '@/components/ui/progress';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Select, SelectContent, SelectItem, SelectSeparator, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Spinner } from '@/components/ui/spinner';
 import { Switch } from '@/components/ui/switch';
@@ -27,7 +28,8 @@ import PartyScreen from './Party';
 import { PlayHistory, PlayResults, PlayRound } from './Play';
 
 const { api } = window;
-const QUESTIONS_PER_GAME = 10;
+const DEFAULT_RANDOM_COUNT = 10;
+const MAX_RANDOM_COUNT = 50;
 const DEFAULT_SECONDS_PER_QUESTION = 60;
 const RANDOM_SOURCE = 'random';
 const MAX_SECONDS_BETWEEN_QUESTIONS = 120;
@@ -74,7 +76,7 @@ function RoundSettings({ mode, questions, lists, listId, onListIdChange, onNewSe
             onValueChange={value => onListIdChange(value === RANDOM_SOURCE ? null : Number(value))}>
             <SelectTrigger className="w-64"><SelectValue /></SelectTrigger>
             <SelectContent position="popper">
-              <SelectItem value={RANDOM_SOURCE}>{QUESTIONS_PER_GAME} random · Nə? Harada? Nə zaman?</SelectItem>
+              <SelectItem value={RANDOM_SOURCE}>Random questions</SelectItem>
               {lists.length > 0 && <SelectSeparator />}
               {lists.map(list => (
                 <SelectItem key={list.id} value={String(list.id)} disabled={!list.count}>
@@ -84,9 +86,26 @@ function RoundSettings({ mode, questions, lists, listId, onListIdChange, onNewSe
             </SelectContent>
           </Select>
         </div>
-        {!chosenList && <Button variant="outline" onClick={onNewSet} disabled={!questions}><ShuffleIcon />New set</Button>}
+        {!chosenList && <>
+          <NumberField id="random-question-count" label="How many" value={settings.randomCount} min={1} max={MAX_RANDOM_COUNT}
+            onChange={randomCount => onSettingsChange({ randomCount })} />
+          <Button variant="outline" onClick={onNewSet} disabled={!questions}><ShuffleIcon />New set</Button>
+        </>}
         <div className="ml-auto">{action}</div>
       </div>
+      {!chosenList && (
+        <RadioGroup value={settings.includeOwn ? 'with-own' : 'bank'} onValueChange={value => onSettingsChange({ includeOwn: value === 'with-own' })}
+          className="flex flex-wrap gap-x-6 gap-y-2">
+          <div className="flex items-center gap-2">
+            <RadioGroupItem id="random-from-bank" value="bank" />
+            <Label htmlFor="random-from-bank" className="font-normal">Only Nə? Harada? Nə zaman?</Label>
+          </div>
+          <div className="flex items-center gap-2">
+            <RadioGroupItem id="random-with-own" value="with-own" />
+            <Label htmlFor="random-with-own" className="font-normal">Include my questions (picked first)</Label>
+          </div>
+        </RadioGroup>
+      )}
       <div className="flex flex-wrap items-end gap-x-6 gap-y-4 rounded-lg border p-4">
         <NumberField id="seconds-per-question" label="Seconds per question" value={settings.secondsPerQuestion} min={10} max={600} step={5}
           onChange={secondsPerQuestion => onSettingsChange({ secondsPerQuestion })} />
@@ -123,7 +142,7 @@ function GameSetup({ mode, onModeChange, isAiReady, onOpenSettings, onStart, ...
   const { questions, lists, listId } = roundSettings;
   const chosenList = lists.find(list => list.id === listId);
   const needsAi = mode !== 'host';
-  const questionsSummary = chosenList ? `the ${questions?.length ?? chosenList.count} questions of this list` : `${QUESTIONS_PER_GAME} random questions`;
+  const questionsSummary = chosenList ? `the ${questions?.length ?? chosenList.count} questions of this list` : `${questions?.length ?? roundSettings.settings.randomCount} random questions`;
   return (
     <div className="mx-auto max-w-3xl space-y-6 px-6 py-8">
       <div className="flex flex-wrap items-start gap-4">
@@ -202,6 +221,8 @@ export default function Game({ isVisible, lists, listId, onListIdChange, isAiRea
   const [pointsForWrong, setPointsForWrong] = useState(0);
   const [isAutoplay, setIsAutoplay] = useState(false);
   const [secondsOnAnswer, setSecondsOnAnswer] = useState(DEFAULT_SECONDS_ON_ANSWER);
+  const [randomCount, setRandomCount] = useState(() => Number(localStorage.getItem('randomQuestionCount')) || DEFAULT_RANDOM_COUNT);
+  const [includeOwn, setIncludeOwn] = useState(() => localStorage.getItem('includeOwnQuestions') === '1');
   const [partyState, setPartyState] = useState(null);
   const [waitEndsAt, setWaitEndsAt] = useState(null);
   const [waitSecondsLeft, setWaitSecondsLeft] = useState(0);
@@ -215,10 +236,10 @@ export default function Game({ isVisible, lists, listId, onListIdChange, isAiRea
   const handleKeyDown = useRef(null);
   const listIdOfQuestions = useRef(null);
 
-  const pickQuestions = () => {
+  const pickQuestions = ({ count = randomCount, withOwn = includeOwn } = {}) => {
     setQuestions(null);
     listIdOfQuestions.current = listId;
-    const loading = listId == null ? api.gameQuestions(QUESTIONS_PER_GAME) : api.listQuestions(listId);
+    const loading = listId == null ? api.gameQuestions(count, withOwn) : api.listQuestions(listId);
     loading.then(setQuestions, e => toast.error('Could not load questions', { description: e.message }));
   };
   useEffect(() => {
@@ -267,7 +288,9 @@ export default function Game({ isVisible, lists, listId, onListIdChange, isAiRea
     setPhase('setup');
     pickQuestions();
   };
-  const roundSettingsValues = { secondsPerQuestion, secondsBetweenQuestions, shouldAutoStartTimer, pointsForCorrect, pointsForWrong, isAutoplay, secondsOnAnswer };
+  const roundSettingsValues = {
+    secondsPerQuestion, secondsBetweenQuestions, shouldAutoStartTimer, pointsForCorrect, pointsForWrong, isAutoplay, secondsOnAnswer, randomCount, includeOwn,
+  };
   const changeRoundSettings = changes => {
     if ('secondsPerQuestion' in changes) {
       setSecondsPerQuestion(changes.secondsPerQuestion);
@@ -279,9 +302,19 @@ export default function Game({ isVisible, lists, listId, onListIdChange, isAiRea
     if ('pointsForWrong' in changes) setPointsForWrong(changes.pointsForWrong);
     if ('isAutoplay' in changes) setIsAutoplay(changes.isAutoplay);
     if ('secondsOnAnswer' in changes) setSecondsOnAnswer(changes.secondsOnAnswer);
+    if ('randomCount' in changes) {
+      setRandomCount(changes.randomCount);
+      localStorage.setItem('randomQuestionCount', String(changes.randomCount));
+      pickQuestions({ count: changes.randomCount });
+    }
+    if ('includeOwn' in changes) {
+      setIncludeOwn(changes.includeOwn);
+      localStorage.setItem('includeOwnQuestions', changes.includeOwn ? '1' : '0');
+      pickQuestions({ withOwn: changes.includeOwn });
+    }
   };
   const roundSettingsProps = {
-    questions, lists, listId, onListIdChange, onNewSet: pickQuestions, settings: roundSettingsValues, onSettingsChange: changeRoundSettings,
+    questions, lists, listId, onListIdChange, onNewSet: () => pickQuestions(), settings: roundSettingsValues, onSettingsChange: changeRoundSettings,
   };
   useEffect(() => { api.onParty(setPartyState); }, []);
   const openParty = async () => {

@@ -101,7 +101,7 @@ npm test         # offline tests for the scraper, search, ranking, edits, data u
   Saving writes only the fields that changed. It sets `questions.edited_at` and re-embeds the question.
   `crawl --refresh` keeps edited rows. The site's original values are still in `packages.raw_json`, and
   the export includes `edited_at`.
-- **Your own questions**: the *My questions* tab lists them next to the editor, and *New question* there opens an
+- **Your own questions**: the *Custom* tab lists them next to the editor, and *New question* there opens an
   empty editor; a question needs its text and answer. Once saved, it can get a handout picture and an answer
   picture (PNG, JPEG, GIF or WebP), copied to `images/own/` next to the database and kept through updates. They are stored in the same `questions` table (`package_id` 0, `origin` `own`), so search, lists,
   games and parties treat them like any other question, and *My questions* in the game filter finds them in search too.

@@ -126,6 +126,10 @@ test('random picks playable questions of one game only', () => {
   assert.equal(s.randomPlayableQuestions(1, 1).length, 1);
   assert.deepEqual(s.randomPlayableQuestions(99, 10), []);
   assert.deepEqual(s.randomPlayableQuestions(1, 10, ['1:question:1']).map(q => q.uid), ['1:question:2']);
+  const own = s.createQuestion({ text: 'Qısa?', answer: 'Bəli' });
+  assert.ok(!s.randomPlayableQuestions(1, 10).some(q => q.uid === own.uid));
+  assert.deepEqual(s.randomPlayableQuestions(1, 1, [], { includeOwn: true }).map(q => q.uid), [own.uid]);
+  assert.deepEqual(s.randomPlayableQuestions(1, 10, [], { includeOwn: true }).map(q => q.uid).sort(), [own.uid, '1:question:1', '1:question:2']);
 });
 
 test('lists keep their questions in order and survive renames, removals and deletion', () => {

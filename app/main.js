@@ -223,7 +223,7 @@ app.whenReady().then(() => {
     return store.search(opts, useAi ? await ai.embedQuery(opts.q) : null);
   });
   handle('get', uid => store.get(uid));
-  handle('game-questions', count => store.randomPlayableQuestions(WHAT_WHERE_WHEN_GAME_ID, count, party ? [...party.game.shownUids] : []));
+  handle('game-questions', (count, includeOwn) => store.randomPlayableQuestions(WHAT_WHERE_WHEN_GAME_ID, count, party ? [...party.game.shownUids] : [], { includeOwn }));
   handle('lists', () => store.allLists());
   handle('create-list', name => store.createList(name));
   handle('rename-list', (listId, name) => store.renameList(listId, name));
