@@ -46,9 +46,10 @@ the TV never receive it early.
 
 | | |
 |---|---|
-| ![Questions](docs/screenshots/search.png) | ![TV lobby](docs/screenshots/tv-lobby.png) |
-| ![Game setup](docs/screenshots/game-setup.png) | ![Lists](docs/screenshots/lists.png) |
-| ![Settings](docs/screenshots/settings.png) | ![Night mode](docs/screenshots/search-dark.png) |
+| ![Search](docs/screenshots/search.png) | ![Custom questions](docs/screenshots/custom.png) |
+| ![Lists](docs/screenshots/lists.png) | ![Game setup](docs/screenshots/game-setup.png) |
+| ![TV lobby](docs/screenshots/tv-lobby.png) | ![Settings](docs/screenshots/settings.png) |
+| ![Night mode](docs/screenshots/search-dark.png) | |
 
 ## Install
 

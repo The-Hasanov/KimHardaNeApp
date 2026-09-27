@@ -557,9 +557,10 @@ export default function App() {
     );
   }
 
+  const isSearching = !isMine && !!query.trim();
   const summary = results && [
-    results.matches != null && (query.trim() ? `${fmt(results.matches)} keyword ${results.matches === 1 ? 'match' : 'matches'}` : plural(results.matches, 'question')),
-    query.trim() && searchMode !== 'keyword' && (results.ai ? 'AI ranked' : 'AI unavailable, keyword only'),
+    results.matches != null && (isSearching ? `${fmt(results.matches)} keyword ${results.matches === 1 ? 'match' : 'matches'}` : plural(results.matches, 'question')),
+    isSearching && searchMode !== 'keyword' && (results.ai ? 'AI ranked' : 'AI unavailable, keyword only'),
     `showing ${fmt(hits.length)}`, `${results.ms} ms`,
   ].filter(Boolean).join(' · ');
   const stage = progress && (stopping ? 'Stopping…'
