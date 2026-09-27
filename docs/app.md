@@ -71,7 +71,9 @@ npm test         # offline tests for the scraper, search, ranking, edits, data u
   AI search checks every answer as in Play mode (with AI search off the host marks each one, and phones show
   *The host is checking* until then); phones then show their verdict, the answer and the
   leaderboard, and the host sees every answer and can overrule it. The host sets the points for a correct
-  answer and for a wrong one (for example −1; a blank answer always scores 0). After the last question the
+  answer and for a wrong one (for example −1; a blank answer always scores 0). *Show the answers: At the end of
+  the round* runs the questions back to back and keeps every answer and score hidden; after the last question the
+  host steps through the answers with *Next answer*, and the scores grow as they are revealed. After the last question the
   round's leaderboard appears: *Next round* keeps the scores and *New game* resets them; either way players
   stay connected and the host picks the next questions in the lobby. Random questions never repeat one already
   shown while the party is open (lists play as chosen). Players can only join and send answers:

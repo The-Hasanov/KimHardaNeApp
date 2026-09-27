@@ -402,7 +402,7 @@ export default function PartyScreen({ party, isVisible, lobbySettings, onBackToL
             <span className={cn('min-w-24 text-4xl font-semibold tabular-nums', party.phase !== 'question' && 'text-muted-foreground',
               isRunningOut && 'text-amber-500')}>{formatClock(wholeSecondsLeft)}</span>
           )}
-          {party.phase === 'reveal' && hasRunningClock && <span className="text-lg text-muted-foreground">until {isLastQuestion ? 'the round results' : 'the next question'} (autoplay)</span>}
+          {party.phase === 'reveal' && hasRunningClock && <span className="text-lg text-muted-foreground">until {isLastQuestion ? 'the round results' : party.rules.revealAtEnd ? 'the next answer' : 'the next question'} (autoplay)</span>}
           {party.phase === 'waiting' && (
             <Button size="lg" onClick={() => api.partySkipWait()}><SkipForwardIcon />Skip wait<Kbd className={KEY_HINT_ON_PRIMARY_BUTTON}>Space</Kbd></Button>
           )}
@@ -418,7 +418,7 @@ export default function PartyScreen({ party, isVisible, lobbySettings, onBackToL
           {party.phase === 'judging' && <span className="flex items-center gap-2 text-lg"><Spinner />Checking answers…</span>}
           {party.phase === 'reveal' && (
             <Button size="lg" className="ml-auto" onClick={() => api.partyNext()}>
-              {isLastQuestion ? <><TrophyIcon />Round results</> : <>Next question<ArrowRightIcon /></>}
+              {isLastQuestion ? <><TrophyIcon />Round results</> : <>{party.rules.revealAtEnd ? 'Next answer' : 'Next question'}<ArrowRightIcon /></>}
               <Kbd className={KEY_HINT_ON_PRIMARY_BUTTON}>Enter</Kbd>
             </Button>
           )}

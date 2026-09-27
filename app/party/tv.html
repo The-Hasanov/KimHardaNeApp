@@ -34,15 +34,15 @@ body { font-family: "Segoe UI", SamsungOne, "Tizen Sans", Roboto, Arial, sans-se
 .board .score { width: 3em; text-align: right; font-weight: 700; }
 .standings { -webkit-flex: 1; flex: 1; display: -webkit-flex; display: flex; -webkit-flex-direction: column; flex-direction: column; -webkit-justify-content: center; justify-content: center; width: 70vw; margin: 0 auto; }
 .standings .title { margin-bottom: 1.5vw; }
-.top { display: -webkit-flex; display: flex; -webkit-align-items: center; align-items: center; height: 9vw; padding: 1vw 3vw 0; }
+.top { display: -webkit-flex; display: flex; -webkit-align-items: center; align-items: center; height: 7.3vw; padding: .8vw 3vw 0; font-size: .81em; }
 .top > * + * { margin-left: 2vw; }
-.clock { margin-left: auto !important; font-size: 4.5vw; font-weight: 700; line-height: 1; }
+.clock { margin-left: auto !important; font-size: 3.65vw; font-weight: 700; line-height: 1; }
 .clock .label { font-size: .45em; color: #a3a3a3; margin-right: .8em; }
-.clock.final { font-size: 8vw; }
+.clock.final { font-size: 6.5vw; }
 .clock.pulse { -webkit-animation: pulse .6s ease-out; animation: pulse .6s ease-out; }
 @-webkit-keyframes pulse { from { -webkit-transform: scale(1.35); } to { -webkit-transform: scale(1); } }
 @keyframes pulse { from { transform: scale(1.35); } to { transform: scale(1); } }
-.progress { height: .5vw; margin: 1.2vw 3vw 0; background: #262626; border-radius: 1vw; overflow: hidden; }
+.progress { height: .4vw; margin: .97vw 3vw 0; background: #262626; border-radius: 1vw; overflow: hidden; }
 .progress div { height: 100%; width: 0; background: #fafafa; -webkit-transition: width .2s linear; transition: width .2s linear; }
 .progress.low div { background: #fbbf24; }
 .question { -webkit-flex: 1; flex: 1; min-height: 0; overflow: hidden; display: -webkit-flex; display: flex; -webkit-align-items: flex-start; align-items: flex-start; padding: 2vw 5vw; }

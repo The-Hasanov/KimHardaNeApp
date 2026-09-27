@@ -49,6 +49,7 @@ class PartyGame {
     this.rules = { ...DEFAULT_RULES };
     this.phase = 'lobby';
     this.index = -1;
+    this.revealedCount = 0;
     this.endsAt = null;
     this.timer = null;
     this.pausedRemainingMs = null;
@@ -91,11 +92,12 @@ class PartyGame {
     this.changed();
   }
 
-  startRound({ questions, secondsPerQuestion, secondsBetweenQuestions, secondsOnAnswer = 0, pointsForCorrect, pointsForWrong }) {
+  startRound({ questions, secondsPerQuestion, secondsBetweenQuestions, secondsOnAnswer = 0, pointsForCorrect, pointsForWrong, revealAtEnd = false }) {
     if (this.phase !== 'lobby' || !questions.length) return;
     this.questions = questions;
     this.answers = questions.map(() => new Map());
-    this.rules = { secondsPerQuestion, secondsBetweenQuestions, secondsOnAnswer, pointsForCorrect, pointsForWrong };
+    this.rules = { secondsPerQuestion, secondsBetweenQuestions, secondsOnAnswer, pointsForCorrect, pointsForWrong, revealAtEnd: !!revealAtEnd };
+    this.revealedCount = 0;
     this.round += 1;
     this.goTo(0);
   }
@@ -191,7 +193,14 @@ class PartyGame {
       answer.isCorrect = answer.verdict === 'correct';
     }
     if (this.phase !== 'judging' || this.answers !== answers) return;
+    if (this.rules.revealAtEnd && position + 1 < this.questions.length) return this.goTo(position + 1);
+    if (this.rules.revealAtEnd) this.index = 0;
+    this.showAnswer();
+  }
+
+  showAnswer() {
     this.phase = 'reveal';
+    this.revealedCount = this.index + 1;
     if (this.rules.secondsOnAnswer) this.schedule(this.rules.secondsOnAnswer, () => this.next());
     this.changed();
   }
@@ -207,13 +216,16 @@ class PartyGame {
   next() {
     if (this.phase !== 'reveal') return;
     if (this.index + 1 >= this.questions.length) return this.finish();
-    this.goTo(this.index + 1);
+    if (!this.rules.revealAtEnd) return this.goTo(this.index + 1);
+    this.index += 1;
+    this.showAnswer();
   }
 
   finish() {
     if (this.phase === 'lobby' || this.phase === 'finished') return;
     this.stopTimer();
     this.phase = 'finished';
+    this.revealedCount = this.questions.length;
     this.changed();
   }
 
@@ -226,7 +238,7 @@ class PartyGame {
   leaderboard() {
     const scored = [...this.players.values()]
       .map(p => {
-        const roundScore = this.answers.reduce((sum, answers) => sum + this.pointsFor(answers.get(p.id)), 0);
+        const roundScore = this.answers.slice(0, this.revealedCount).reduce((sum, answers) => sum + this.pointsFor(answers.get(p.id)), 0);
         return { id: p.id, name: p.name, roundScore, score: (this.bankedScores.get(p.id) ?? 0) + roundScore };
       })
       .sort((a, b) => b.score - a.score || a.name.localeCompare(b.name));

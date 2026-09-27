@@ -62,7 +62,7 @@ const MODE_DESCRIPTIONS = {
 const TIMING_HELP = {
   host: "Between questions the next question's number fills the screen; Space skips the wait. Auto-start starts each question's timer as soon as the question appears.",
   play: "Between questions the next question's number fills the screen; Space skips the wait. Each question's timer starts as soon as it appears.",
-  party: "Between questions the next question's number fills every screen. Autoplay moves on to the next question once the answer has been shown for that many seconds; Pause holds it. A blank answer scores 0; a wrong one scores the points for a wrong answer (use a negative number as a penalty).",
+  party: "Between questions the next question's number fills every screen. Autoplay moves on to the next question once the answer has been shown for that many seconds; Pause holds it. Showing the answers at the end keeps every answer and score hidden until the last question, then shows the answers one by one. A blank answer scores 0; a wrong one scores the points for a wrong answer (use a negative number as a penalty).",
 };
 
 function RoundSettings({ mode, questions, lists, listId, onListIdChange, onNewSet, settings, onSettingsChange, action }) {
@@ -107,6 +107,22 @@ function RoundSettings({ mode, questions, lists, listId, onListIdChange, onNewSe
         </RadioGroup>
       )}
       <div className="flex flex-wrap items-end gap-x-6 gap-y-4 rounded-lg border p-4">
+        {mode === 'party' && (
+          <div className="grid basis-full gap-2">
+            <Label>Show the answers</Label>
+            <RadioGroup value={settings.isRevealAtEnd ? 'end' : 'each'} onValueChange={value => onSettingsChange({ isRevealAtEnd: value === 'end' })}
+              className="flex flex-wrap gap-x-6 gap-y-2">
+              <div className="flex items-center gap-2">
+                <RadioGroupItem id="reveal-after-each" value="each" />
+                <Label htmlFor="reveal-after-each" className="font-normal">After each question</Label>
+              </div>
+              <div className="flex items-center gap-2">
+                <RadioGroupItem id="reveal-at-end" value="end" />
+                <Label htmlFor="reveal-at-end" className="font-normal">At the end of the round</Label>
+              </div>
+            </RadioGroup>
+          </div>
+        )}
         <NumberField id="seconds-per-question" label="Seconds per question" value={settings.secondsPerQuestion} min={10} max={600} step={5}
           onChange={secondsPerQuestion => onSettingsChange({ secondsPerQuestion })} />
         <NumberField id="seconds-between-questions" label="Seconds between questions" value={settings.secondsBetweenQuestions}
@@ -220,6 +236,7 @@ export default function Game({ isVisible, lists, listId, onListIdChange, isAiRea
   const [pointsForCorrect, setPointsForCorrect] = useState(1);
   const [pointsForWrong, setPointsForWrong] = useState(0);
   const [isAutoplay, setIsAutoplay] = useState(false);
+  const [isRevealAtEnd, setIsRevealAtEnd] = useState(false);
   const [secondsOnAnswer, setSecondsOnAnswer] = useState(DEFAULT_SECONDS_ON_ANSWER);
   const [randomCount, setRandomCount] = useState(() => Number(localStorage.getItem('randomQuestionCount')) || DEFAULT_RANDOM_COUNT);
   const [includeOwn, setIncludeOwn] = useState(() => localStorage.getItem('includeOwnQuestions') === '1');
@@ -289,7 +306,7 @@ export default function Game({ isVisible, lists, listId, onListIdChange, isAiRea
     pickQuestions();
   };
   const roundSettingsValues = {
-    secondsPerQuestion, secondsBetweenQuestions, shouldAutoStartTimer, pointsForCorrect, pointsForWrong, isAutoplay, secondsOnAnswer, randomCount, includeOwn,
+    secondsPerQuestion, secondsBetweenQuestions, shouldAutoStartTimer, pointsForCorrect, pointsForWrong, isAutoplay, secondsOnAnswer, randomCount, includeOwn, isRevealAtEnd,
   };
   const changeRoundSettings = changes => {
     if ('secondsPerQuestion' in changes) {
@@ -301,6 +318,7 @@ export default function Game({ isVisible, lists, listId, onListIdChange, isAiRea
     if ('pointsForCorrect' in changes) setPointsForCorrect(changes.pointsForCorrect);
     if ('pointsForWrong' in changes) setPointsForWrong(changes.pointsForWrong);
     if ('isAutoplay' in changes) setIsAutoplay(changes.isAutoplay);
+    if ('isRevealAtEnd' in changes) setIsRevealAtEnd(changes.isRevealAtEnd);
     if ('secondsOnAnswer' in changes) setSecondsOnAnswer(changes.secondsOnAnswer);
     if ('randomCount' in changes) {
       setRandomCount(changes.randomCount);
@@ -327,7 +345,7 @@ export default function Game({ isVisible, lists, listId, onListIdChange, isAiRea
   };
   const startPartyRound = () => api.partyStartRound({
     uids: questions.map(question => question.uid), secondsPerQuestion, secondsBetweenQuestions, pointsForCorrect, pointsForWrong,
-    secondsOnAnswer: isAutoplay ? secondsOnAnswer : 0,
+    secondsOnAnswer: isAutoplay ? secondsOnAnswer : 0, revealAtEnd: isRevealAtEnd,
   });
   const partyBackToLobby = async keepScores => {
     await api.partyBackToLobby(keepScores);

@@ -236,3 +236,19 @@ test('phones wait for the host while an answer is not decided yet', async () => 
   assert.deepEqual([game.playerView(aysel).reveal.isPending, game.playerView(aysel).reveal.isCorrect], [false, true]);
   game.finish();
 });
+
+test('answers can wait for the end of the round, then show one by one without leaking scores before', async () => {
+  const game = newGame();
+  const aysel = game.join('Aysel');
+  game.startRound({ ...ROUND, revealAtEnd: true });
+  game.submitAnswer(aysel.token, 'Bakı');
+  await game.closeAnswers();
+  assert.deepEqual([game.phase, game.index, game.playerView(aysel).me.score, game.playerView(aysel).reveal], ['question', 1, 0, null]);
+  game.submitAnswer(aysel.token, 'Nizami Gəncəvi');
+  await game.closeAnswers();
+  assert.deepEqual([game.phase, game.index, game.tvView().question.answer, game.playerView(aysel).me.score], ['reveal', 0, 'Bakı', 1]);
+  game.next();
+  assert.deepEqual([game.phase, game.index, game.tvView().question.answer, game.playerView(aysel).me.score], ['reveal', 1, 'Nizami Gəncəvi', 2]);
+  game.next();
+  assert.equal(game.phase, 'finished');
+});
