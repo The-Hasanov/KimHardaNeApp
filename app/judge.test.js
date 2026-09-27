@@ -39,3 +39,9 @@ test('judging: text match, AI meaning match, unsure zone and exact-only question
   const exactOnly = { answer: 'Senator', accepted_answers: 'Yalnız dəqiq cavablar' };
   assert.equal((await judgeAnswer(exactOnly, 'Parlament üzvü', fakeEmbeddings({ Senator: 0.9 }))).verdict, 'wrong');
 });
+
+test('without AI search the host decides every answer that was given', async () => {
+  const question = { answer: 'Bakı', accepted_answers: null };
+  assert.deepEqual(await judgeAnswer(question, 'Bakı', null), { verdict: 'unsure', similarity: null, closestAnswer: null, method: 'host' });
+  assert.equal((await judgeAnswer(question, '  ', null)).verdict, 'wrong');
+});

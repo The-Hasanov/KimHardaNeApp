@@ -49,6 +49,8 @@ contextBridge.exposeInMainWorld('api', {
   save: (uid, fields) => ipcRenderer.invoke('save', uid, fields),
   createQuestion: fields => ipcRenderer.invoke('create-question', fields),
   deleteQuestion: uid => ipcRenderer.invoke('delete-question', uid),
+  pickQuestionImage: (uid, column) => ipcRenderer.invoke('pick-question-image', uid, column),
+  removeQuestionImage: (uid, column) => ipcRenderer.invoke('remove-question-image', uid, column),
   onUpdate: cb => ipcRenderer.on('update', (_e, status) => cb(status)),
   installUpdate: () => ipcRenderer.invoke('install-update'),
   refresh: mode => ipcRenderer.invoke('refresh', mode),

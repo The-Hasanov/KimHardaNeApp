@@ -33,7 +33,8 @@ npm test         # offline tests for the scraper, search, ranking, edits, data u
   each question's timer as soon as the question appears.
   Scoring stays with the host. The *Night mode* switch (in Settings, and top right in the Game tab) toggles the dark and
   light themes for the whole app; the choice is remembered, and until it is made the app follows Windows.
-- **Play mode** (Game tab, *Host* / *Play* switch): answer the questions yourself. Needs AI search turned on.
+- **Play mode** (Game tab, *Host* / *Play* switch): answer the questions yourself. With AI search off, every
+  answer is left for you to mark *Correct* or *Wrong*.
   Each question's timer starts when it appears; type the answer and press Enter, or let the time run out.
   The answer is checked at once (`judge.js`): first as text against the answer and the accepted answers,
   ignoring case, diacritics, punctuation and small typos in each word; otherwise by meaning with the AI model,
@@ -67,14 +68,15 @@ npm test         # offline tests for the scraper, search, ranking, edits, data u
   has been shown for *Seconds on the answer*; the host can still press *Next question* early or *Pause* (Space)
   to look at the answers longer. Each question and its images appear on every phone with an answer box and a
   countdown. When the time is up (or *Close answers now*),
-  AI search checks every answer as in Play mode; phones then show their verdict, the answer and the
+  AI search checks every answer as in Play mode (with AI search off the host marks each one, and phones show
+  *The host is checking* until then); phones then show their verdict, the answer and the
   leaderboard, and the host sees every answer and can overrule it. The host sets the points for a correct
   answer and for a wrong one (for example −1; a blank answer always scores 0). After the last question the
   round's leaderboard appears: *Next round* keeps the scores and *New game* resets them; either way players
   stay connected and the host picks the next questions in the lobby. Random questions never repeat one already
   shown while the party is open (lists play as chosen). Players can only join and send answers:
   every host control stays in the app, phones never receive an answer before the reveal, names and answers are
-  length-limited, and the host can remove a player. Needs AI search; party results are not saved. Windows
+  length-limited, and the host can remove a player. Party results are not saved. Windows
   Firewall asks once whether KimHardaNeApp may accept connections on private networks; allow it.
 - **Lists**: *Add to list* in the editor puts the open question into one or more of your lists, or creates a
   new list with it. The **Lists** tab shows each list in order: move questions up or down, open one in the
@@ -99,9 +101,10 @@ npm test         # offline tests for the scraper, search, ranking, edits, data u
   Saving writes only the fields that changed. It sets `questions.edited_at` and re-embeds the question.
   `crawl --refresh` keeps edited rows. The site's original values are still in `packages.raw_json`, and
   the export includes `edited_at`.
-- **Your own questions**: *New question* (above the results) opens an empty editor; a question needs its text
-  and answer. They are stored in the same `questions` table (`package_id` 0, `origin` `own`), so search, lists,
-  games and parties treat them like any other question, and *My questions* in the game filter shows them all.
+- **Your own questions**: the *My questions* tab lists them next to the editor, and *New question* there opens an
+  empty editor; a question needs its text and answer. Once saved, it can get a handout picture and an answer
+  picture (PNG, JPEG, GIF or WebP), copied to `images/own/` next to the database and kept through updates. They are stored in the same `questions` table (`package_id` 0, `origin` `own`), so search, lists,
+  games and parties treat them like any other question, and *My questions* in the game filter finds them in search too.
   Like edits, they survive refreshes and version updates, and `npm run dist` leaves them out of the installer.
   Only your own questions can be deleted.
 - **Images** are shown from `data/images/` when `scraper.js images` has fetched them, otherwise from the site.

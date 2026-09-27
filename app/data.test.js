@@ -14,6 +14,7 @@ function bundle(dir, name, rows, { withVectors = true } = {}) {
   db.exec(`CREATE TABLE questions (package_id INTEGER, kind TEXT, value_id INTEGER, uid TEXT UNIQUE, text TEXT, answer TEXT,
            edited_at TEXT, PRIMARY KEY (package_id, kind, value_id))`);
   db.exec('CREATE TABLE embeddings (uid TEXT PRIMARY KEY, hash TEXT NOT NULL, vec BLOB NOT NULL)');
+  db.exec('CREATE TABLE images (url TEXT PRIMARY KEY, status TEXT, path TEXT)');
   const add = db.prepare("INSERT INTO questions VALUES (1, 'question', ?, ?, ?, ?, NULL)");
   const vec = db.prepare('INSERT INTO embeddings VALUES (?, ?, ?)');
   for (const [id, text, answer] of rows) {
@@ -153,5 +154,20 @@ test("the user's play results survive a version update", () => {
   const updated = new DatabaseSync(up.db, { readOnly: true });
   assert.deepEqual(updated.prepare('SELECT id, title FROM play_games').all().map(r => [r.id, r.title]), [[3, 'Friday']]);
   assert.equal(updated.prepare('SELECT given_answer FROM play_answers').get().given_answer, 'a');
+  updated.close();
+});
+
+test('your own questions and their pictures survive a version update', () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'quiz-data-'));
+  const dir = path.join(tmp, 'userData');
+  const { db } = installData({ bundled: bundle(tmp, 'v1.sqlite', [[1, 'one', 'a']]), dir, version: '1' });
+  const w = new DatabaseSync(db);
+  w.exec(`INSERT INTO questions VALUES (0, 'question', 5, '0:question:5', 'mine', 'x', '2026-09-27');
+    INSERT INTO images VALUES ('own-image:abc.png', 'ok', 'images/own/abc.png'), ('https://site/old.png', 'ok', 'images/ol/old.png')`);
+  w.close();
+  installData({ bundled: bundle(tmp, 'v2.sqlite', [[1, 'one', 'a']]), dir, version: '2' });
+  const updated = new DatabaseSync(db, { readOnly: true });
+  assert.deepEqual(updated.prepare('SELECT url FROM images').all().map(r => r.url), ['own-image:abc.png']);
+  assert.equal(updated.prepare("SELECT text FROM questions WHERE uid = '0:question:5'").get().text, 'mine');
   updated.close();
 });

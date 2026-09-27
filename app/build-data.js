@@ -4,7 +4,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { DatabaseSync } = require('node:sqlite');
 const sharp = require('sharp');
-const { Store, OWN_PACKAGE_ID } = require('./store');
+const { Store, OWN_PACKAGE_ID, OWN_IMAGE_PREFIX } = require('./store');
 
 const src = process.env.QUIZ_DB || path.join(__dirname, '..', 'data', '3sual.sqlite');
 const bundle = path.join(__dirname, 'bundle');
@@ -68,6 +68,7 @@ async function main() {
   db.close();
   const shipped = new DatabaseSync(out);
   shipped.prepare('DELETE FROM questions WHERE package_id = ?').run(OWN_PACKAGE_ID);
+  shipped.prepare('DELETE FROM images WHERE url LIKE ?').run(`${OWN_IMAGE_PREFIX}%`);
   shipped.exec('DROP TABLE IF EXISTS embeddings; DROP TABLE IF EXISTS list_questions; DROP TABLE IF EXISTS lists; DROP TABLE IF EXISTS play_answers; DROP TABLE IF EXISTS play_games; VACUUM;');
   shipped.close();
   await bundleImages(out);

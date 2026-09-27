@@ -3,8 +3,8 @@ import { toast } from 'sonner';
 import { useDefaultLayout } from 'react-resizable-panels';
 import { cn } from 'cn';
 import {
-  DownloadIcon, EyeIcon, FileTextIcon, LayersIcon, PencilIcon, RefreshCwIcon, RotateCcwIcon, SaveIcon, SearchIcon,
-  ListIcon, ListPlusIcon, MoonIcon, PlusIcon, SearchXIcon, SettingsIcon, SparklesIcon, SquareIcon, TimerIcon, Trash2Icon, UserIcon, XIcon, ZapIcon,
+  DownloadIcon, EyeIcon, FileTextIcon, ImagePlusIcon, LayersIcon, PencilIcon, RefreshCwIcon, RotateCcwIcon, SaveIcon, SearchIcon,
+  ListIcon, ListPlusIcon, MoonIcon, NotebookPenIcon, PlusIcon, SearchXIcon, SettingsIcon, SparklesIcon, SquareIcon, TimerIcon, Trash2Icon, UserIcon, XIcon, ZapIcon,
 } from 'lucide-react';
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter,
@@ -56,7 +56,12 @@ const STAGES = { list: 'Listing packages', packages: 'Downloading packages', aud
   images: 'Downloading images', index: 'Rebuilding search index', embed: 'Computing AI vectors' };
 const PAGE = 100;
 const OWN_PACKAGE_ID = 0;
+const OWN_GAME_ID = 0;
 const NEW_QUESTION = { uid: null, package_id: OWN_PACKAGE_ID, game_name: 'My questions' };
+const PICTURES = [
+  ['rekvizit_url', 'rekvizit_src', 'Handout picture', 'shown with the question'],
+  ['source_media_url', 'source_media_src', 'Answer picture', 'shown with the answer'],
+];
 
 const fmt = n => n.toLocaleString('en');
 const local = t => t && new Date(t.replace(' ', 'T') + 'Z').toLocaleString();
@@ -137,7 +142,34 @@ function AddToListButton({ lists, listIdsOfQuestion, onToggle, onCreateNew }) {
   );
 }
 
-function Editor({ q, draft, setDraft, dirtyKeys, saving, savedAt, concealed, onReveal, onAuthor, onSave, onDiscard, onDelete, onZoom, listControl }) {
+function OwnPictures({ q, concealed, onReveal, onZoom, onPick, onRemove }) {
+  if (!q.uid) return <p className="text-sm text-muted-foreground">Save the question to add pictures.</p>;
+  return (
+    <div className="grid gap-4 sm:grid-cols-2">
+      {PICTURES.map(([column, srcKey, label, hint]) => {
+        const src = q[srcKey];
+        const hide = concealed && column === 'source_media_url';
+        return (
+          <div key={column} className="grid content-start gap-2">
+            <Label>{label}<span className="font-normal text-muted-foreground">{hint}</span></Label>
+            {src && (
+              <button type="button" onClick={() => (hide ? onReveal() : onZoom(src))} title={hide ? 'Answer hidden: click to show' : 'Click to enlarge'}
+                className="cursor-zoom-in overflow-hidden rounded-lg border bg-muted/30 transition-opacity hover:opacity-90">
+                <img src={src} alt={label} className={cn('max-h-48 w-full object-contain', hide && 'blur-xl')} />
+              </button>
+            )}
+            <div className="flex gap-2">
+              <Button variant="outline" size="sm" onClick={() => onPick(column)}><ImagePlusIcon />{src ? 'Replace' : 'Add picture'}</Button>
+              {src && <Button variant="ghost" size="sm" onClick={() => onRemove(column)}><XIcon />Remove</Button>}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function Editor({ q, draft, setDraft, dirtyKeys, saving, savedAt, concealed, onReveal, onAuthor, onSave, onDiscard, onDelete, onZoom, onPickPicture, onRemovePicture, listControl }) {
   const isOwn = q.package_id === OWN_PACKAGE_ID;
   const isNew = !q.uid;
   const canCreate = !!(draft.text.trim() && draft.answer.trim());
@@ -180,7 +212,9 @@ function Editor({ q, draft, setDraft, dirtyKeys, saving, savedAt, concealed, onR
               ))}
             </dl>
           </div>
-          {images.length > 0 && (
+          {isOwn ? (
+            <OwnPictures q={q} concealed={concealed} onReveal={onReveal} onZoom={onZoom} onPick={onPickPicture} onRemove={onRemovePicture} />
+          ) : images.length > 0 && (
             <div className="flex flex-wrap gap-3">
               {images.map(([src, hide]) => (
                 <button key={src} type="button" onClick={() => (hide ? onReveal() : onZoom(src))} title={hide ? 'Answer hidden: click to show' : 'Click to enlarge'}
@@ -300,6 +334,8 @@ export default function App() {
   const filter = set => v => { set(v); setLimit(PAGE); };
   const isAiReady = aiStatus.state === 'ready';
   const searchMode = isAiReady ? mode : 'keyword';
+  const isMine = view === 'mine';
+  const isBrowsing = view === 'search' || isMine;
   const aiWork = describeAiWork(aiStatus);
   const changeAiSearch = isOn => api.setAiSearch(isOn).then(setAiStatus);
 
@@ -333,7 +369,9 @@ export default function App() {
     if (!info) return;
     const my = ++searchSeq.current;
     setSearching(true);
-    api.search({ q: query, mode: searchMode, game: game === 'all' ? null : game, edited, withImage, author: author?.id, limit }).then(res => {
+    const request = isMine ? { q: '', mode: 'keyword', game: String(OWN_GAME_ID), limit }
+      : { q: query, mode: searchMode, game: game === 'all' ? null : game, edited, withImage, author: author?.id, limit };
+    api.search(request).then(res => {
       if (my !== searchSeq.current) return;
       setResults(res);
       setSearching(false);
@@ -342,7 +380,7 @@ export default function App() {
       setSearching(false);
       toast.error('Search failed', { description: e.message });
     });
-  }, [info, query, searchMode, game, edited, withImage, author, limit]);
+  }, [info, isMine, query, searchMode, game, edited, withImage, author, limit]);
 
   const refreshLists = () => api.lists().then(setLists);
   useEffect(() => { refreshLists(); }, []);
@@ -412,6 +450,15 @@ export default function App() {
     }
   }
 
+  async function changePicture(column, shouldRemove) {
+    try {
+      const question = await (shouldRemove ? api.removeQuestionImage(current.uid, column) : api.pickQuestionImage(current.uid, column));
+      if (question) setCurrent(question);
+    } catch (e) {
+      toast.error('Picture not saved', { description: e.message.replace(/^Error invoking remote method '[^']+': (Error: )?/, '') });
+    }
+  }
+
   function move(delta) {
     if (!hits.length) return;
     const i = hits.findIndex(h => h.uid === sel);
@@ -434,7 +481,7 @@ export default function App() {
         setSel(question.uid);
         setSavedAt(new Date());
         setInfo(await api.info());
-        toast.success('Question added', { description: 'Pick "My questions" in the game filter to see all of yours.' });
+        toast.success('Question added');
         return;
       }
       const { changed: wrote, question } = await api.save(current.uid, changed);
@@ -471,7 +518,7 @@ export default function App() {
   }
 
   onKey.current = e => {
-    if (view !== 'search') return;
+    if (!isBrowsing) return;
     const key = e.key.toLowerCase();
     if (e.ctrlKey && key === 's') {
       e.preventDefault();
@@ -527,6 +574,7 @@ export default function App() {
         <Tabs value={view} onValueChange={setView}>
           <TabsList>
             <TabsTrigger value="search" className="px-2.5"><SearchIcon />Questions</TabsTrigger>
+            <TabsTrigger value="mine" className="px-2.5"><NotebookPenIcon />My questions</TabsTrigger>
             <TabsTrigger value="lists" className="px-2.5"><ListIcon />Lists</TabsTrigger>
             <TabsTrigger value="game" className="px-2.5"><TimerIcon />Game</TabsTrigger>
           </TabsList>
@@ -538,6 +586,7 @@ export default function App() {
             <Switch id="night-mode" checked={nightMode} onCheckedChange={setNightMode} />
           </div>
         )}
+        {isMine && <Button variant="outline" className="ml-auto" onClick={startNewQuestion}><PlusIcon />New question</Button>}
         {view === 'search' && <>
         <InputGroup className="min-w-40 flex-1 basis-40">
           <InputGroupAddon><SearchIcon /></InputGroupAddon>
@@ -605,14 +654,13 @@ export default function App() {
         </Tooltip>
       </header>
 
-      <div className={cn('min-h-0 flex-1', view !== 'search' && 'hidden')}>
+      <div className={cn('min-h-0 flex-1', !isBrowsing && 'hidden')}>
       <ResizablePanelGroup orientation="horizontal" className="h-full"
         defaultLayout={layout.defaultLayout} onLayoutChanged={layout.onLayoutChanged}>
         <ResizablePanel id="results" defaultSize="42" minSize={340}>
           <div className="flex h-full flex-col">
-            <div className="flex h-9 shrink-0 items-center gap-2 border-b bg-muted/30 pr-4 pl-2 text-xs text-muted-foreground">
-              <Button variant="outline" size="xs" className="shrink-0" onClick={startNewQuestion}><PlusIcon />New question</Button>
-              {author && (
+            <div className="flex h-9 shrink-0 items-center gap-2 border-b bg-muted/30 px-4 text-xs text-muted-foreground">
+              {author && !isMine && (
                 <Badge variant="secondary" className="h-6 shrink-0 gap-1 pr-0.5 text-foreground">
                   <UserIcon />{author.fullname.trim()}
                   <button type="button" aria-label="Clear author filter" onClick={() => filter(setAuthor)(null)}
@@ -632,7 +680,17 @@ export default function App() {
             </div>
             <div className="min-h-0 flex-1 overflow-y-auto">
               {hits.map(h => <Hit key={h.uid} h={h} selected={h.uid === sel} hideAnswer={hideAnswers} onOpen={open} />)}
-              {results && !hits.length && (
+              {results && !hits.length && isMine && (
+                <Empty className="h-full">
+                  <EmptyHeader>
+                    <EmptyMedia variant="icon"><NotebookPenIcon /></EmptyMedia>
+                    <EmptyTitle>No questions of your own yet</EmptyTitle>
+                    <EmptyDescription>Write one with New question. They show up in search and lists like every other question.</EmptyDescription>
+                  </EmptyHeader>
+                  <EmptyContent><Button variant="outline" size="sm" onClick={startNewQuestion}><PlusIcon />New question</Button></EmptyContent>
+                </Empty>
+              )}
+              {results && !hits.length && !isMine && (
                 <Empty className="h-full">
                   <EmptyHeader>
                     <EmptyMedia variant="icon"><SearchXIcon /></EmptyMedia>
@@ -662,6 +720,7 @@ export default function App() {
             <Editor q={current} draft={draft} setDraft={setDraft} dirtyKeys={dirtyKeys} saving={saving} savedAt={savedAt}
               concealed={hideAnswers && !revealed} onReveal={() => setRevealed(true)} onAuthor={filter(setAuthor)}
               onSave={save} onDiscard={() => setDraft(draftOf(current))} onDelete={deleteCurrent} onZoom={setZoom}
+              onPickPicture={column => changePicture(column, false)} onRemovePicture={column => changePicture(column, true)}
               listControl={<AddToListButton lists={lists} listIdsOfQuestion={listIdsOfCurrent} onToggle={toggleCurrentInList}
                 onCreateNew={() => setIsCreatingListForCurrent(true)} />} />
           ) : (
@@ -669,7 +728,7 @@ export default function App() {
               <EmptyHeader>
                 <EmptyMedia variant="icon"><FileTextIcon /></EmptyMedia>
                 <EmptyTitle>No question open</EmptyTitle>
-                <EmptyDescription>Search, then pick a question to edit it, or add your own with New question.</EmptyDescription>
+                <EmptyDescription>{isMine ? 'Pick one of your questions, or write a new one.' : 'Search, then pick a question to edit it.'}</EmptyDescription>
               </EmptyHeader>
               <EmptyContent><Shortcuts /></EmptyContent>
             </Empty>

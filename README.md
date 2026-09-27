@@ -12,12 +12,15 @@ game from the app. Bring your own questions or use the bundled question bank.
 
 - **Party mode**: players join by scanning a QR code, with nothing to install. The TV shows each question with
   its pictures, a countdown with sound for the last 10 seconds, the answer with everyone's result, and the
-  leaderboard. Typed answers are checked by a local AI model, and the host can overrule any verdict.
+  leaderboard. Typed answers are checked by a local AI model, or marked by the host when AI search is off,
+  and the host can overrule any verdict.
 - **Any TV**: a TV window on a second screen, Miracast, or the web browser of a Samsung Smart TV.
 - **Host controls**: points for right and wrong answers, pause, autoplay, several rounds with or without
   keeping the scores, and no question shown twice in one party.
-- **Your own questions**: write them in the app, collect them in lists and play a list in order.
-- **Game helper and solo play**: a timer for the host, or play alone with the AI checking your answers.
+- **Your own questions**: write them on the *My questions* page, add a handout picture and an answer picture,
+  collect them in lists and play a list in order.
+- **Game helper and solo play**: a timer for the host, or play alone and mark your answers yourself or let the
+  AI check them.
 - **Question bank**: search by keyword or by meaning, ignoring case, diacritics and small typos, and edit
   any question. Works offline. Night mode included.
 
@@ -28,7 +31,8 @@ game from the app. Bring your own questions or use the bundled question bank.
 | ![Host console](docs/screenshots/party-host.png) | ![TV question](docs/screenshots/tv-question.png) | ![Phone question](docs/screenshots/phone-question.png) |
 | ![Host reveal](docs/screenshots/party-reveal.png) | ![TV reveal](docs/screenshots/tv-reveal.png) | ![Phone reveal](docs/screenshots/phone-reveal.png) |
 
-1. Open **Settings** and turn on AI search (it checks the answers).
+1. Optional: open **Settings** and turn on AI search to check the answers automatically. Without it, you mark
+   each answer.
 2. In the **Game** tab pick **Party**, then **Open party**. The TV window opens with the join code.
 3. Put the TV window on the TV: drag it there and press F11, or use **TV → Show on Samsung TV…** or
    **TV → Cast with Miracast…**.

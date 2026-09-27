@@ -34,6 +34,7 @@ const localDateTime = sqliteUtc => new Date(`${sqliteUtc.replace(' ', 'T')}Z`).t
 function checkerNote(answer) {
   if (!answer.given_answer.trim()) return 'No answer given.';
   if (answer.similarity === 1) return `Matches “${answer.closest_answer}”.`;
+  if (answer.similarity == null && answer.ai_verdict === 'unsure') return answer.decided_by_player ? 'Marked by you.' : 'Compare it with the answer and mark it yourself.';
   if (answer.similarity == null) return 'Does not match the answer.';
   const note = `AI: ${Math.round(answer.similarity * 100)}% similar to “${answer.closest_answer}”.`;
   return outcomeOf(answer) === 'unsure' ? `${note} Mark it yourself.` : note;

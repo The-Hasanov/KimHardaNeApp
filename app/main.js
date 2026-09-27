@@ -1,5 +1,5 @@
 'use strict';
-const { app, BrowserWindow, ipcMain, nativeTheme, screen, shell } = require('electron');
+const { app, BrowserWindow, dialog, ipcMain, nativeTheme, screen, shell } = require('electron');
 const { autoUpdater } = require('electron-updater');
 const { execFile } = require('node:child_process');
 const fs = require('node:fs');
@@ -233,10 +233,10 @@ app.whenReady().then(() => {
   handle('reorder-list', (listId, uidsInOrder) => store.reorderList(listId, uidsInOrder));
   handle('list-questions', listId => store.listQuestions(listId));
   handle('list-ids-containing', uid => store.listIdsContaining(uid));
+  const judgeNow = (question, given) => judgeAnswer(question, given, isAiReady() ? texts => ai.embed(texts, 'query') : null);
   handle('start-play-game', settings => store.startPlayGame(settings));
   handle('submit-play-answer', async (gameId, { position, uid, givenAnswer, secondsUsed }) => {
-    if (!isAiReady()) throw new Error('AI search is not ready');
-    const judged = await judgeAnswer(store.get(uid), givenAnswer, texts => ai.embed(texts, 'query'));
+    const judged = await judgeNow(store.get(uid), givenAnswer);
     return store.savePlayAnswer(gameId, { position, uid, givenAnswer, secondsUsed, ...judged });
   });
   handle('set-play-answer-correct', (gameId, position, isCorrect) => store.setPlayAnswerCorrect(gameId, position, isCorrect));
@@ -244,7 +244,6 @@ app.whenReady().then(() => {
   handle('delete-play-game', gameId => store.deletePlayGame(gameId));
   handle('play-games', () => store.playGames());
   handle('play-game-answers', gameId => store.playGameAnswers(gameId));
-  const judgeWithAi = (question, given) => judgeAnswer(question, given, texts => ai.embed(texts, 'query'));
   const closeParty = async () => {
     closePartyDisplay();
     await party?.close();
@@ -257,9 +256,8 @@ app.whenReady().then(() => {
     return party.game.hostView();
   };
   handle('party-open', async () => {
-    if (!isAiReady()) throw new Error('AI search is not ready');
     await closeParty();
-    party = await openParty({ judge: judgeWithAi, onChange: sendPartyState });
+    party = await openParty({ judge: judgeNow, onChange: sendPartyState });
     openPartyDisplay(win, party.game.port);
     return party.game.hostView();
   });
@@ -297,6 +295,13 @@ app.whenReady().then(() => {
     return store.get(row.uid);
   });
   handle('delete-question', uid => store.deleteQuestion(uid));
+  handle('pick-question-image', async (uid, column) => {
+    const { canceled, filePaths } = await dialog.showOpenDialog(win, {
+      title: 'Add a picture', properties: ['openFile'], filters: [{ name: 'Pictures', extensions: ['png', 'jpg', 'jpeg', 'gif', 'webp'] }],
+    });
+    return canceled ? null : store.setOwnImage(uid, column, filePaths[0]);
+  });
+  handle('remove-question-image', (uid, column) => store.setOwnImage(uid, column, null));
   handle('save', async (uid, fields) => {
     const row = store.save(uid, fields);
     if (row && isAiReady()) await ai.embedRows(store, [row]);

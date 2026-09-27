@@ -232,6 +232,7 @@ function render(next) {
   if (next.phase === 'reveal') {
     const reveal = next.reveal;
     const verdict = reveal.isCorrect == null ? el('div', { class: 'verdict bad' }, 'No answer')
+      : reveal.isPending ? el('div', { class: 'verdict' }, '? The host is checking')
       : el('div', { class: `verdict ${reveal.isCorrect ? 'good' : 'bad'}` }, reveal.isCorrect ? '✓ Correct' : '✗ Wrong', el('span', { class: 'muted', style: 'font-size:18px;margin-left:10px' }, pointsLabel(reveal.points)));
     return show(topBar(), el('div', { class: 'card' },
       verdict,

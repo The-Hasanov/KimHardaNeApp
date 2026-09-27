@@ -290,6 +290,7 @@ class PartyGame {
       reveal: this.phase === 'reveal' ? {
         answer: question.answer, acceptedAnswers: question.accepted_answers, comment: question.comment,
         hasAnswerImage: !!question.source_media_src, isCorrect: myAnswer ? !!myAnswer.isCorrect : null, points: this.pointsFor(myAnswer),
+        isPending: !!myAnswer && myAnswer.verdict === 'unsure' && !myAnswer.decidedByHost,
       } : null,
       leaderboard: showsLeaderboard ? leaderboard.slice(0, 10).map(({ name, score, rank }) => ({ name, score, rank })) : null,
     };

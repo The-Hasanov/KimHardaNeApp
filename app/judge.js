@@ -39,6 +39,7 @@ function matchesAsText(given, candidate) {
 
 async function judgeAnswer(question, given, embedTexts) {
   if (!compact(given)) return { verdict: 'wrong', similarity: null, closestAnswer: null, method: null };
+  if (!embedTexts) return { verdict: 'unsure', similarity: null, closestAnswer: null, method: 'host' };
   const candidates = answerCandidates(question);
   const textMatch = candidates.find(candidate => matchesAsText(given, candidate));
   if (textMatch) return { verdict: 'correct', similarity: 1, closestAnswer: textMatch, method: 'text' };

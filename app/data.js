@@ -2,7 +2,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const { DatabaseSync } = require('node:sqlite');
-const { LISTS_SCHEMA, PLAY_SCHEMA, EMBEDDINGS_SCHEMA } = require('./store');
+const { LISTS_SCHEMA, PLAY_SCHEMA, EMBEDDINGS_SCHEMA, OWN_IMAGE_PREFIX } = require('./store');
 
 const columns = (db, schema, table) => db.prepare(`PRAGMA ${schema}.table_info(${table})`).all().map(c => c.name);
 const shared = (db, table) => {
@@ -55,6 +55,7 @@ function carryEdits(fresh, old) {
       if (!columns(db, 'main', 'questions').includes('edited_at')) db.exec('ALTER TABLE main.questions ADD COLUMN edited_at TEXT');
       carried = copy(db, 'questions', 'edited_at IS NOT NULL');
     }
+    if (columns(db, 'old', 'images').length && columns(db, 'main', 'images').length) copy(db, 'images', `url LIKE '${OWN_IMAGE_PREFIX}%'`, 'INSERT OR IGNORE');
     db.exec('COMMIT');
     return { carried, newer };
   } finally {

@@ -224,3 +224,15 @@ test('without autoplay the answer stays up until the host moves on', async () =>
   game.backToLobby({ keepScores: true });
   assert.deepEqual([...game.shownUids], ['q1']);
 });
+
+test('phones wait for the host while an answer is not decided yet', async () => {
+  const game = new PartyGame({ judge: async () => ({ verdict: 'unsure', similarity: null, closestAnswer: null }) });
+  const aysel = game.join('Aysel');
+  game.startRound(ROUND);
+  game.submitAnswer(aysel.token, 'Bakı');
+  await game.closeAnswers();
+  assert.deepEqual([game.playerView(aysel).reveal.isPending, game.playerView(aysel).reveal.isCorrect], [true, false]);
+  game.setCorrect(aysel.id, 0, true);
+  assert.deepEqual([game.playerView(aysel).reveal.isPending, game.playerView(aysel).reveal.isCorrect], [false, true]);
+  game.finish();
+});

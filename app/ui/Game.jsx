@@ -54,8 +54,8 @@ function NumberField({ id, label, value, min, max, step = 1, onChange }) {
 
 const MODE_DESCRIPTIONS = {
   host: summary => `Host mode: ${summary} and a timer. Answers stay hidden until you end the game.`,
-  play: summary => `Play mode: answer ${summary} yourself against the clock. AI search checks each answer, and you can overrule it.`,
-  party: summary => `Party mode: players join from their phones by scanning a QR code, then answer ${summary} on their own screens. AI search checks the answers; scores add up over rounds.`,
+  play: summary => `Play mode: answer ${summary} yourself against the clock, then mark each answer correct or wrong, or let AI search check it.`,
+  party: summary => `Party mode: players join from their phones by scanning a QR code, then answer ${summary} on their own screens. You mark the answers, or AI search checks them; scores add up over rounds.`,
 };
 const TIMING_HELP = {
   host: "Between questions the next question's number fills the screen; Space skips the wait. Auto-start starts each question's timer as soon as the question appears.",
@@ -142,12 +142,12 @@ function GameSetup({ mode, onModeChange, isAiReady, onOpenSettings, onStart, ...
       {needsAi && !isAiReady && (
         <div className="flex flex-wrap items-center gap-3 rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm">
           <SparklesIcon className="size-4 shrink-0" />
-          <span className="flex-1">{mode === 'party' ? 'Party' : 'Play'} mode checks answers with AI search. Turn it on in Settings first.</span>
+          <span className="flex-1">AI search is off, so {mode === 'party' ? 'you mark every answer' : 'you mark each of your answers'} correct or wrong. Turn it on in Settings to check answers automatically.</span>
           <Button size="sm" variant="outline" onClick={onOpenSettings}><SettingsIcon />Open Settings</Button>
         </div>
       )}
       <RoundSettings mode={mode} {...roundSettings} action={
-        <Button size="lg" onClick={onStart} disabled={!questions?.length || (needsAi && !isAiReady)}>
+        <Button size="lg" onClick={onStart} disabled={!questions?.length}>
           {mode === 'party' ? <><UsersIcon />Open party</> : <><PlayIcon />Start game</>}
         </Button>
       } />

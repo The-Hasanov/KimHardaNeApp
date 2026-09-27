@@ -29,6 +29,9 @@ const POOL = 500;
 const OWN_PACKAGE_ID = 0;
 const OWN_GAME_ID = 0;
 const OWN_NAME = 'My questions';
+const OWN_IMAGE_PREFIX = 'own-image:';
+const IMAGE_COLUMNS = ['rekvizit_url', 'source_media_url'];
+const IMAGE_TYPES = { '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.gif': 'image/gif', '.webp': 'image/webp' };
 const TUNING = { combineWith: 'AND', prefix: true, fuzzy: 0.2, boost: { answer: 2, text: 1.5 }, rrfK: 10, aiWeight: 0.5 };
 
 const fold = s => s.toLowerCase().normalize('NFD').replace(/\p{M}/gu, '').replace(/ə/g, 'e').replace(/ı/g, 'i');
@@ -264,6 +267,28 @@ class Store {
     this.has[this.rows.length] = 0;
   }
 
+  setOwnImage(uid, column, file = null) {
+    const i = this.pos.get(uid);
+    if (i === undefined || this.rows[i].package_id !== OWN_PACKAGE_ID) throw new Error('Pictures can be added to your own questions only');
+    if (!IMAGE_COLUMNS.includes(column)) throw new Error(`unknown picture ${column}`);
+    let url = null;
+    if (file) {
+      const extension = path.extname(file).toLowerCase();
+      if (!IMAGE_TYPES[extension]) throw new Error('Pick a PNG, JPEG, GIF or WebP picture');
+      const bytes = fs.readFileSync(file);
+      const sha256 = crypto.createHash('sha256').update(bytes).digest('hex');
+      const relative = `images/own/${sha256}${extension}`;
+      fs.mkdirSync(path.join(this.roots[0], 'images', 'own'), { recursive: true });
+      fs.writeFileSync(path.join(this.roots[0], relative), bytes);
+      url = OWN_IMAGE_PREFIX + sha256 + extension;
+      this.db.prepare(`INSERT OR REPLACE INTO images (url, status, path, bytes, content_type, sha256, fetched_at)
+        VALUES (?, 'ok', ?, ?, ?, ?, datetime('now'))`).run(url, relative, bytes.length, IMAGE_TYPES[extension], sha256);
+    }
+    this.db.prepare(`UPDATE questions SET ${column} = ?, edited_at = datetime('now') WHERE uid = ?`).run(url, uid);
+    this.rows[i] = this.db.prepare(`SELECT ${LIST_COLS} FROM questions WHERE uid = ?`).get(uid);
+    return this.get(uid);
+  }
+
   randomPlayableQuestions(gameId, count, excludedUids = []) {
     return this.db.prepare(`SELECT uid FROM questions WHERE game_id = ? AND kind = 'question' AND COALESCE(group_size, 1) <= 1
       AND length(text) > 20 AND trim(COALESCE(answer, '')) NOT IN ('', '-') AND uid NOT IN (SELECT value FROM json_each(?))
@@ -368,4 +393,4 @@ class Store {
   }
 }
 
-module.exports = { Store, OWN_PACKAGE_ID, TUNING, LISTS_SCHEMA, PLAY_SCHEMA, EMBEDDINGS_SCHEMA, fold, passage, embeddable, hashOf, DIM };
+module.exports = { Store, OWN_PACKAGE_ID, OWN_IMAGE_PREFIX, TUNING, LISTS_SCHEMA, PLAY_SCHEMA, EMBEDDINGS_SCHEMA, fold, passage, embeddable, hashOf, DIM };

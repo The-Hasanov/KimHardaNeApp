@@ -4,6 +4,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
+const { fileURLToPath } = require('node:url');
 const { DatabaseSync } = require('node:sqlite');
 const { Store, fold, DIM } = require('./store');
 
@@ -15,6 +16,7 @@ function tempDb() {
     theme_name TEXT, theme_round INTEGER, group_size INTEGER, group_index INTEGER, text TEXT, answer TEXT, comment TEXT,
     accepted_answers TEXT, note_before TEXT, rekvizit_text TEXT, rekvizit_url TEXT, source_media_url TEXT, sources TEXT,
     authors TEXT, raw_value TEXT, raw_parent TEXT)`);
+  db.exec('CREATE TABLE images (url TEXT PRIMARY KEY, status TEXT, path TEXT, bytes INTEGER, content_type TEXT, sha256 TEXT, error TEXT, fetched_at TEXT)');
   const add = db.prepare('INSERT INTO questions (package_id, kind, value_id, uid, ordinal, game_id, game_name, text, answer, sources) VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
   add.run('question', 1, '1:question:1', 1, 1, 'NHN', 'Azərbaycanın paytaxtı hansı şəhərdir?', 'Bakı', '["https://a.az"]');
   add.run('question', 2, '1:question:2', 2, 1, 'NHN', 'Futbol klubu "Qarabağ" hansı şəhəri təmsil edir?', 'Ağdam', null);
@@ -99,8 +101,7 @@ test('images: a downloaded copy is served from disk, otherwise the remote URL', 
   db.exec(`UPDATE questions SET rekvizit_url = '${remote('b')}' WHERE uid = '1:question:2'`);
   const s = new Store(file);
   assert.equal(s.get('1:question:1').rekvizit_src, remote('a'));
-  db.exec('CREATE TABLE images (url TEXT PRIMARY KEY, status TEXT, path TEXT)');
-  db.exec(`INSERT INTO images VALUES ('${remote('a')}', 'ok', 'images/aa/a.png'), ('${remote('b')}', 'ok', 'images/bb/gone.png')`);
+  db.exec(`INSERT INTO images (url, status, path) VALUES ('${remote('a')}', 'ok', 'images/aa/a.png'), ('${remote('b')}', 'ok', 'images/bb/gone.png')`);
   fs.mkdirSync(path.join(path.dirname(file), 'images', 'aa'), { recursive: true });
   fs.writeFileSync(path.join(path.dirname(file), 'images', 'aa', 'a.png'), 'png');
   assert.match(s.get('1:question:1').rekvizit_src, /^file:\/\/\/.*\/images\/aa\/a\.png$/);
@@ -209,4 +210,20 @@ test('your own questions are searchable under My questions, kept as edits, and d
   assert.equal(s.search({ q: 'anything', mode: 'ai' }, vec(4)).hits[0].uid, river.uid);
   const lake = s.createQuestion({ text: 'Ən böyük göl hansıdır?', answer: 'Sarısu' });
   assert.equal(s.search({ q: 'sarisu', mode: 'keyword' }).hits[0].uid, lake.uid);
+});
+
+test('pictures on your own questions are saved next to the database, shown from there and removable', () => {
+  const s = store();
+  const own = s.createQuestion({ text: 'Bu hansı şəhərdir?', answer: 'Şəki' });
+  const picture = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'quiz-picture-')), 'Handout.PNG');
+  fs.writeFileSync(picture, 'png bytes');
+  const shown = s.setOwnImage(own.uid, 'rekvizit_url', picture);
+  assert.match(shown.rekvizit_src, /^file:.*\/images\/own\/[0-9a-f]{64}\.png$/);
+  assert.equal(fs.readFileSync(fileURLToPath(shown.rekvizit_src), 'utf8'), 'png bytes');
+  assert.ok(s.search({ withImage: true }).hits.some(h => h.uid === own.uid));
+  assert.equal(s.setOwnImage(own.uid, 'source_media_url', picture).source_media_src, shown.rekvizit_src);
+  assert.equal(s.setOwnImage(own.uid, 'rekvizit_url', null).rekvizit_src, null);
+  assert.throws(() => s.setOwnImage('1:question:1', 'rekvizit_url', picture), /own questions/);
+  assert.throws(() => s.setOwnImage(own.uid, 'text', picture), /unknown picture/);
+  assert.throws(() => s.setOwnImage(own.uid, 'rekvizit_url', 'notes.txt'), /PNG, JPEG/);
 });
