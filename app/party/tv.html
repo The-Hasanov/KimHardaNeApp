@@ -1,0 +1,363 @@
+<!doctype html>
+<html lang="az">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Nə? Harada? Nə zaman? · TV</title>
+<style>
+* { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; overflow: hidden; background: #0a0a0a; color: #fafafa; }
+body { font-family: "Segoe UI", SamsungOne, "Tizen Sans", Roboto, Arial, sans-serif; font-size: 1.8vw; line-height: 1.35; cursor: default; -webkit-user-select: none; user-select: none; }
+#app { height: 100%; display: -webkit-flex; display: flex; -webkit-flex-direction: column; flex-direction: column; }
+.muted { color: #a3a3a3; }
+.good { color: #4ade80; }
+.bad { color: #f87171; }
+.warn { color: #fbbf24; }
+.numbers { -webkit-font-feature-settings: "tnum"; font-feature-settings: "tnum"; }
+.title { font-size: 3vw; font-weight: 600; margin: 0; }
+.stack > * + * { margin-top: 1.4vw; }
+.center { -webkit-flex: 1; flex: 1; display: -webkit-flex; display: flex; -webkit-flex-direction: column; flex-direction: column; -webkit-align-items: center; align-items: center; -webkit-justify-content: center; justify-content: center; text-align: center; padding: 3vw; }
+.center > * + * { margin-top: 1vw; }
+.big-number { font-size: 30vh; font-weight: 700; line-height: 1; }
+.lobby { -webkit-flex: 1; flex: 1; display: -webkit-flex; display: flex; -webkit-align-items: center; align-items: center; padding: 4vw; }
+.lobby .qr { -webkit-flex: none; flex: none; text-align: center; margin-right: 4vw; }
+.lobby .qr img { display: block; width: 38vw; max-width: 60vh; height: auto; background: #fff; border-radius: 1vw; padding: 1vw; }
+.lobby .qr .address { font-family: Consolas, "Courier New", monospace; font-size: 2.4vw; font-weight: 600; margin-top: 1.5vw; }
+.lobby .side { -webkit-flex: 1; flex: 1; min-width: 0; }
+.chip { display: inline-block; border: 1px solid #262626; border-radius: 99px; padding: .3em .9em; margin: 0 .6vw .6vw 0; white-space: nowrap; }
+.board { list-style: none; margin: 0; padding: 0; }
+.board li { display: -webkit-flex; display: flex; -webkit-align-items: center; align-items: center; background: #171717; border-radius: .8vw; padding: .6vw 1.4vw; margin-bottom: .6vw; }
+.board li.first { background: #3a2a07; }
+.board .rank { width: 2.5em; text-align: right; font-weight: 700; color: #a3a3a3; margin-right: 1em; }
+.board .name { -webkit-flex: 1; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; }
+.board .round { font-size: .7em; color: #a3a3a3; margin-right: 1.5em; }
+.board .score { width: 3em; text-align: right; font-weight: 700; }
+.standings { -webkit-flex: 1; flex: 1; display: -webkit-flex; display: flex; -webkit-flex-direction: column; flex-direction: column; -webkit-justify-content: center; justify-content: center; width: 70vw; margin: 0 auto; }
+.standings .title { margin-bottom: 1.5vw; }
+.top { display: -webkit-flex; display: flex; -webkit-align-items: center; align-items: center; height: 9vw; padding: 1vw 3vw 0; }
+.top > * + * { margin-left: 2vw; }
+.clock { margin-left: auto !important; font-size: 4.5vw; font-weight: 700; line-height: 1; }
+.clock .label { font-size: .45em; color: #a3a3a3; margin-right: .8em; }
+.clock.final { font-size: 8vw; }
+.clock.pulse { -webkit-animation: pulse .6s ease-out; animation: pulse .6s ease-out; }
+@-webkit-keyframes pulse { from { -webkit-transform: scale(1.35); } to { -webkit-transform: scale(1); } }
+@keyframes pulse { from { transform: scale(1.35); } to { transform: scale(1); } }
+.progress { height: .5vw; margin: 1.2vw 3vw 0; background: #262626; border-radius: 1vw; overflow: hidden; }
+.progress div { height: 100%; width: 0; background: #fafafa; -webkit-transition: width .2s linear; transition: width .2s linear; }
+.progress.low div { background: #fbbf24; }
+.question { -webkit-flex: 1; flex: 1; min-height: 0; overflow: hidden; display: -webkit-flex; display: flex; -webkit-align-items: flex-start; align-items: flex-start; padding: 2vw 5vw; }
+.question .words { -webkit-flex: 1; flex: 1; min-width: 0; margin: auto 0; }
+.question .words > * + * { margin-top: 1.6vw; }
+.question .handout { -webkit-flex: none; flex: none; max-width: 42vw; margin: auto 0 auto 3vw; }
+.question .handout .image { max-height: 68vh; }
+.question .text { font-size: 3.2vw; font-weight: 500; line-height: 1.35; white-space: pre-line; margin: 0; }
+.note { border: 1px solid rgba(251, 191, 36, .4); background: rgba(251, 191, 36, .1); border-radius: .8vw; padding: .8vw 1.2vw; }
+.image { display: block; max-width: 100%; max-height: 45vh; border-radius: .8vw; border: 1px solid #262626; }
+.caption { font-size: .8em; color: #a3a3a3; text-transform: uppercase; letter-spacing: .05em; }
+.pre { white-space: pre-line; }
+.credits { font-size: .75em; color: #a3a3a3; }
+.reveal { -webkit-flex: 1; flex: 1; min-height: 0; display: -webkit-flex; display: flex; padding: 3vw; }
+.reveal .main { -webkit-flex: 1; flex: 1; min-width: 0; overflow: hidden; display: -webkit-flex; display: flex; -webkit-flex-direction: column; flex-direction: column; margin-right: 3vw; }
+.reveal .main > * + * { margin-top: 1.2vw; }
+.reveal .side { width: 30vw; }
+.reveal .answer { font-size: 5vw; font-weight: 700; line-height: 1.15; margin: 0; }
+.reveal .comment { display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; white-space: pre-line; }
+.reveal .image { max-height: 30vh; }
+.reveal .chips { margin-top: auto !important; }
+.hint { position: fixed; bottom: 1.5vw; right: 2vw; font-size: 1.2vw; color: #737373; }
+.sound-hint { position: fixed; top: 1.5vw; left: 50%; -webkit-transform: translateX(-50%); transform: translateX(-50%); background: #fbbf24; color: #0a0a0a; font-weight: 600; border-radius: 99px; padding: .5vw 1.6vw; }
+html.light, html.light body { background: #ffffff; color: #0a0a0a; }
+.light .muted, .light .board .rank, .light .board .round, .light .clock .label, .light .caption, .light .credits { color: #737373; }
+.light .good { color: #16a34a; }
+.light .bad { color: #dc2626; }
+.light .warn { color: #d97706; }
+.light .chip, .light .image { border-color: #e5e5e5; }
+.light .board li { background: #f5f5f5; }
+.light .board li.first { background: #fdf0d5; }
+.light .progress { background: #e5e5e5; }
+.light .progress div { background: #171717; }
+.light .progress.low div { background: #d97706; }
+.light .lobby .qr img { border: 1px solid #e5e5e5; }
+.light .hint { color: #a3a3a3; }
+</style>
+</head>
+<body>
+<div id="app"></div>
+<script>
+var app = document.getElementById('app');
+var state = null;
+var deadline = null;
+var renderedKey = null;
+var clockElement = null;
+var progressElement = null;
+var answeredElement = null;
+var isTelevision = /SMART-TV|Tizen|Web0S/i.test(navigator.userAgent);
+var FINAL_SECONDS = 10;
+var audio = null;
+var countedSecond = null;
+var previousPhase = null;
+var hasChimed = false;
+var soundHint = null;
+
+function showSoundHint(isBlocked) {
+  if (isBlocked && !soundHint) {
+    soundHint = el('div', 'sound-hint', 'Press OK on the remote to turn on sound');
+    document.body.appendChild(soundHint);
+  } else if (!isBlocked && soundHint) {
+    document.body.removeChild(soundHint);
+    soundHint = null;
+  }
+}
+
+function beep(frequencyHz, durationMs, delayMs) {
+  var AudioContextOfBrowser = window.AudioContext || window.webkitAudioContext;
+  if (!AudioContextOfBrowser) return;
+  audio = audio || new AudioContextOfBrowser();
+  var startsAt = audio.currentTime + (delayMs || 0) / 1000;
+  var oscillator = audio.createOscillator();
+  var volume = audio.createGain();
+  oscillator.frequency.value = frequencyHz;
+  volume.gain.value = 0.25;
+  oscillator.connect(volume);
+  volume.connect(audio.destination);
+  oscillator.start(startsAt);
+  oscillator.stop(startsAt + durationMs / 1000);
+  showSoundHint(audio.state === 'suspended');
+}
+
+function chime() {
+  beep(523, 180, 0);
+  beep(784, 260, 180);
+}
+
+function append(node, child) {
+  if (child == null || child === false) return;
+  if (Object.prototype.toString.call(child) === '[object Array]') return child.forEach(function (item) { append(node, item); });
+  node.appendChild(typeof child === 'object' ? child : document.createTextNode(String(child)));
+}
+
+function el(tag, className) {
+  var node = document.createElement(tag);
+  if (className) node.className = className;
+  for (var i = 2; i < arguments.length; i++) append(node, arguments[i]);
+  return node;
+}
+
+function image(className, src, alt) {
+  var node = el('img', className);
+  node.src = src;
+  node.alt = alt;
+  return node;
+}
+
+function show(children) {
+  app.innerHTML = '';
+  append(app, children);
+  if (isTelevision && !document.webkitFullscreenElement) append(app, el('div', 'hint', 'Press OK on the remote for full screen'));
+}
+
+function withLineBreaks(text) {
+  return (text || '').split('/-/').join('\n');
+}
+
+function clock(ms) {
+  var seconds = Math.ceil(ms / 1000);
+  var rest = seconds % 60;
+  return Math.floor(seconds / 60) + ':' + (rest < 10 ? '0' : '') + rest;
+}
+
+function pointsLabel(points) {
+  return points > 0 ? '+' + points : points < 0 ? '−' + -points : '0';
+}
+
+function hostOf(url) {
+  return url.replace(/^http:\/\//, '').replace(/\/$/, '');
+}
+
+function leaderboard(entries, showsRoundScore) {
+  if (!entries.length) return el('p', 'muted', 'No players yet.');
+  return el('ol', 'board numbers', entries.map(function (entry) {
+    return el('li', entry.rank === 1 ? 'first' : '',
+      el('span', 'rank', entry.rank),
+      el('span', 'name', entry.name),
+      showsRoundScore && el('span', 'round', pointsLabel(entry.roundScore) + ' this round'),
+      el('span', 'score', entry.score));
+  }));
+}
+
+function lobbyScreen() {
+  var joinUrl = state.urls[0] && state.urls[0].url;
+  var showsScores = state.phase === 'lobby' && state.round > 0;
+  return el('div', 'lobby',
+    el('div', 'qr', joinUrl ? [image('', '/tv/join-qr.svg', 'Join code'), el('div', 'address', hostOf(joinUrl))] : el('p', '', 'No network connection')),
+    el('div', 'side stack',
+      el('h1', 'title', 'Nə? Harada? Nə zaman?'),
+      el('p', 'muted', 'Scan the code with your phone to join. Same Wi-Fi.'),
+      showsScores
+        ? el('div', 'stack', el('div', '', 'Scores after round ' + state.round), leaderboard(state.leaderboard.slice(0, 8), false))
+        : el('div', 'stack', el('div', '', state.players.length + ' joined'), el('div', '', state.players.map(function (player) { return el('span', 'chip', player.name); })))));
+}
+
+function standingsScreen() {
+  var isRoundUnderway = state.round > 0 && state.phase !== 'lobby';
+  return el('div', 'standings',
+    el('h1', 'title', 'Leaderboard ', isRoundUnderway && el('span', 'muted', '· round ' + state.round + ' · after question ' + (state.index + 1) + ' of ' + state.total)),
+    leaderboard(state.leaderboard.slice(0, 12), isRoundUnderway));
+}
+
+function waitingScreen() {
+  return el('div', 'center', el('div', 'muted', 'Question'), el('div', 'big-number numbers', state.index + 1), el('div', 'muted', 'of ' + state.total));
+}
+
+function credits(question) {
+  var authors = (question.authors || []).map(function (author) { return author.fullname.trim(); }).join(', ');
+  return [question.package_name || question.tournament_name, authors].filter(Boolean).join(' · ');
+}
+
+function questionScreen() {
+  var question = state.question;
+  clockElement = el('span', 'clock numbers');
+  progressElement = el('div', 'progress', el('div'));
+  answeredElement = el('span', 'muted');
+  return [
+    el('div', 'top', el('span', 'muted', 'Round ' + state.round + ' · Question ' + (state.index + 1) + ' of ' + state.total), answeredElement, clockElement),
+    progressElement,
+    el('div', 'question',
+      el('div', 'words',
+        question.note_before && el('div', 'note', 'Before the question: ' + question.note_before),
+        el('p', 'text', withLineBreaks(question.text)),
+        question.rekvizit_text && el('div', 'stack', el('div', 'caption', 'Handout'), el('div', 'pre', question.rekvizit_text)),
+        el('div', 'credits', credits(question))),
+      question.rekvizit_src && el('div', 'handout stack', el('div', 'caption', 'Handout'), image('image', question.rekvizit_src, 'Handout'))),
+  ];
+}
+
+function outcomeOf(answer) {
+  if (answer.isCorrect) return el('span', 'good', '✓ ');
+  if (answer.verdict === 'unsure' && !answer.decidedByHost) return el('span', 'warn', '? ');
+  return el('span', 'bad', '✗ ');
+}
+
+function revealScreen() {
+  var question = state.question;
+  return el('div', 'reveal',
+    el('div', 'main',
+      el('div', 'muted', 'Question ' + (state.index + 1) + ' · the answer'),
+      el('p', 'answer', question.answer),
+      question.accepted_answers && el('div', '', el('span', 'muted', 'Also accepted: '), question.accepted_answers),
+      question.comment && el('div', 'comment muted', question.comment),
+      question.source_media_src && image('image', question.source_media_src, 'Answer'),
+      el('div', 'chips', state.answers.map(function (answer) {
+        return el('span', 'chip', outcomeOf(answer), answer.name, el('span', 'muted numbers', ' ' + pointsLabel(answer.points)));
+      }))),
+    el('div', 'side stack', el('div', 'muted', 'Leaderboard'), leaderboard(state.leaderboard.slice(0, 10), false)));
+}
+
+function roundResultsScreen() {
+  return el('div', 'standings', el('h1', 'title', 'Round ' + state.round + ' results'), leaderboard(state.leaderboard.slice(0, 10), true));
+}
+
+function shownScreen() {
+  if (!state) return 'none';
+  if (state.screen !== 'game') return state.screen;
+  return state.phase === 'judging' ? 'question' : state.phase;
+}
+
+function updateLiveParts() {
+  if (answeredElement) {
+    var answered = state.players.filter(function (player) { return player.hasAnswered; }).length;
+    answeredElement.textContent = answered + ' of ' + state.players.length + ' answered';
+  }
+  tick();
+}
+
+function render(next) {
+  state = next && next.phase !== 'closed' ? next : null;
+  document.documentElement.className = state && state.isNightMode === false ? 'light' : '';
+  deadline = state && state.remainingMs != null && !state.isPaused ? Date.now() + state.remainingMs : null;
+  var screen = shownScreen();
+  var key = screen === 'question' ? 'question:' + state.round + ':' + state.index : screen === 'none' ? 'none' : JSON.stringify(state);
+  if (state && !hasChimed) {
+    hasChimed = true;
+    chime();
+  }
+  if (previousPhase === 'question' && state && state.phase === 'judging') beep(440, 700);
+  previousPhase = state && state.phase;
+  if (key === renderedKey) return updateLiveParts();
+  renderedKey = key;
+  countedSecond = null;
+  clockElement = progressElement = answeredElement = null;
+  if (screen === 'none') show(el('div', 'center', el('h1', 'title', 'Nə? Harada? Nə zaman?'), el('p', 'muted', 'Waiting for the host…')));
+  else if (screen === 'lobby' || screen === 'join') show(lobbyScreen());
+  else if (screen === 'leaderboard') show(standingsScreen());
+  else if (screen === 'waiting') show(waitingScreen());
+  else if (screen === 'question') show(questionScreen());
+  else if (screen === 'reveal') show(revealScreen());
+  else if (screen === 'finished') show(roundResultsScreen());
+  updateLiveParts();
+}
+
+function tick() {
+  if (!clockElement || !state) return;
+  if (state.phase === 'judging') {
+    clockElement.innerHTML = '';
+    append(clockElement, el('span', 'label', 'Checking answers…'));
+    progressElement.firstChild.style.width = '0';
+    return;
+  }
+  var left = state.isPaused ? state.remainingMs : deadline == null ? 0 : Math.max(0, deadline - Date.now());
+  var second = Math.ceil(left / 1000);
+  var isFinal = !state.isPaused && left > 0 && second <= FINAL_SECONDS;
+  var isLow = !state.isPaused && left <= FINAL_SECONDS * 1000;
+  clockElement.innerHTML = '';
+  append(clockElement, [state.isPaused && el('span', 'label', 'Paused'), isFinal ? String(second) : clock(left)]);
+  var className = 'clock numbers' + (isLow ? ' warn' : '') + (isFinal ? ' final' : '');
+  if (isFinal && second !== countedSecond) {
+    countedSecond = second;
+    beep(second <= 3 ? 880 : 660, 150);
+    clockElement.className = className;
+    void clockElement.offsetWidth;
+    className += ' pulse';
+  } else if (isFinal) {
+    className += ' pulse';
+  }
+  clockElement.className = className;
+  progressElement.className = 'progress' + (isLow ? ' low' : '');
+  progressElement.firstChild.style.width = Math.min(100, left / (state.rules.secondsPerQuestion * 10)) + '%';
+}
+
+function enterFullScreen() {
+  var root = document.documentElement;
+  var request = root.requestFullscreen || root.webkitRequestFullscreen;
+  if (request && !document.webkitFullscreenElement) request.call(root);
+}
+
+function wakeSound() {
+  if (!audio || !audio.resume || audio.state !== 'suspended') return;
+  audio.resume().then(function () {
+    showSoundHint(false);
+    chime();
+  });
+}
+
+document.addEventListener('keydown', function (event) {
+  wakeSound();
+  if (event.keyCode === 13) enterFullScreen();
+});
+document.addEventListener('click', function () {
+  wakeSound();
+  enterFullScreen();
+});
+document.addEventListener('webkitfullscreenchange', function () {
+  renderedKey = null;
+  render(state);
+});
+
+setInterval(tick, 200);
+new EventSource('/tv/events').onmessage = function (message) {
+  render(JSON.parse(message.data));
+};
+render(null);
+</script>
+</body>
+</html>

@@ -1,0 +1,268 @@
+<!doctype html>
+<html lang="az">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<title>Nə? Harada? Nə zaman?</title>
+<style>
+:root {
+  --bg: #ffffff; --fg: #0a0a0a; --muted: #737373; --card: #f5f5f5; --border: #e5e5e5;
+  --primary: #171717; --primary-fg: #fafafa; --good: #16a34a; --bad: #dc2626; --warn: #d97706;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0a0a0a; --fg: #fafafa; --muted: #a3a3a3; --card: #171717; --border: #262626;
+    --primary: #fafafa; --primary-fg: #171717; --good: #4ade80; --bad: #f87171; --warn: #fbbf24;
+  }
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; background: var(--bg); color: var(--fg); }
+body { font: 16px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; -webkit-text-size-adjust: 100%; }
+main { max-width: 640px; margin: 0 auto; padding: 16px 16px calc(24px + env(safe-area-inset-bottom)); min-height: 100dvh; display: flex; flex-direction: column; gap: 16px; }
+.bar { display: flex; align-items: center; justify-content: space-between; gap: 12px; font-size: 14px; color: var(--muted); }
+.bar strong { color: var(--fg); }
+.center { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; gap: 8px; }
+h1 { font-size: 24px; line-height: 1.25; margin: 0; }
+.muted { color: var(--muted); }
+.big-number { font-size: 120px; font-weight: 700; line-height: 1; font-variant-numeric: tabular-nums; }
+.question { font-size: 20px; line-height: 1.45; font-weight: 500; white-space: pre-line; margin: 0; }
+.note { border: 1px solid color-mix(in srgb, var(--warn) 40%, transparent); background: color-mix(in srgb, var(--warn) 12%, transparent); border-radius: 10px; padding: 10px 12px; font-size: 14px; }
+.handout { width: 100%; border-radius: 10px; border: 1px solid var(--border); }
+.pre { white-space: pre-line; }
+.card { border: 1px solid var(--border); border-radius: 12px; padding: 14px; display: flex; flex-direction: column; gap: 8px; }
+form { display: flex; flex-direction: column; gap: 10px; }
+input { font: inherit; font-size: 18px; width: 100%; padding: 12px 14px; border-radius: 10px; border: 1px solid var(--border); background: var(--bg); color: var(--fg); }
+input:focus { outline: 2px solid var(--primary); outline-offset: 1px; }
+button { font: inherit; font-weight: 600; padding: 12px 16px; border-radius: 10px; border: 0; background: var(--primary); color: var(--primary-fg); cursor: pointer; }
+button:disabled { opacity: .5; }
+.error { color: var(--bad); font-size: 14px; min-height: 1.5em; margin: 0; }
+.sent { color: var(--good); font-size: 14px; margin: 0; }
+.timer { font-size: 22px; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--fg); }
+.timer.low { color: var(--warn); }
+.verdict { font-size: 32px; font-weight: 700; }
+.verdict.good { color: var(--good); }
+.verdict.bad { color: var(--bad); }
+.answer { font-size: 22px; font-weight: 700; margin: 0; }
+ol.board { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+ol.board li { display: flex; gap: 10px; align-items: center; padding: 10px 12px; border-radius: 10px; background: var(--card); }
+ol.board li.me { outline: 2px solid var(--primary); }
+ol.board .rank { width: 28px; font-weight: 700; color: var(--muted); font-variant-numeric: tabular-nums; }
+ol.board .name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+ol.board .score { font-weight: 700; font-variant-numeric: tabular-nums; }
+</style>
+</head>
+<body>
+<main id="app"></main>
+<script>
+const app = document.getElementById('app');
+const STORAGE_KEY = 'party-player';
+let session = readSession();
+let events = null;
+let state = null;
+let deadline = null;
+let renderedScreen = null;
+let timerElement = null;
+
+function readSession() {
+  try {
+    return JSON.parse(localStorage.getItem(STORAGE_KEY));
+  } catch {
+    return null;
+  }
+}
+
+function saveSession(value) {
+  session = value;
+  try {
+    if (value) localStorage.setItem(STORAGE_KEY, JSON.stringify(value));
+    else localStorage.removeItem(STORAGE_KEY);
+  } catch {}
+}
+
+function el(tag, props, ...children) {
+  const node = document.createElement(tag);
+  for (const [key, value] of Object.entries(props ?? {})) {
+    if (key === 'class') node.className = value;
+    else if (key.startsWith('on')) node.addEventListener(key.slice(2), value);
+    else node[key] = value;
+  }
+  for (const child of children.flat()) if (child != null && child !== false) node.append(child);
+  return node;
+}
+
+const withLineBreaks = text => (text ?? '').replaceAll('/-/', '\n');
+const clock = ms => {
+  const seconds = Math.ceil(ms / 1000);
+  return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
+};
+const pointsLabel = points => (points > 0 ? `+${points}` : points < 0 ? `−${-points}` : '0');
+const rulesText = () => `Correct ${pointsLabel(state.rules.pointsForCorrect)} · Wrong ${pointsLabel(state.rules.pointsForWrong)} · No answer 0`;
+const imageUrl = (route) => `${route}?token=${encodeURIComponent(session.token)}&question=${state.index}`;
+
+function show(...children) {
+  app.replaceChildren(...children.flat().filter(Boolean));
+}
+
+function showJoin(errorText = '') {
+  renderedScreen = 'join';
+  const name = el('input', { placeholder: 'Your name', maxLength: 24, autocomplete: 'nickname', required: true, value: session?.name ?? '' });
+  const error = el('p', { class: 'error' }, errorText);
+  const button = el('button', { type: 'submit' }, 'Join the game');
+  const join = async event => {
+    event.preventDefault();
+    button.disabled = true;
+    error.textContent = '';
+    try {
+      const response = await fetch('/join', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: name.value }) });
+      const body = await response.json();
+      if (!response.ok) throw new Error(body.error);
+      saveSession({ token: body.token, partyId: body.partyId, name: name.value.trim() });
+      connect();
+    } catch (e) {
+      error.textContent = e.message || 'Could not join';
+      button.disabled = false;
+    }
+  };
+  show(el('div', { class: 'center' },
+    el('h1', {}, 'Nə? Harada? Nə zaman?'),
+    el('p', { class: 'muted' }, 'Type your name to join the game.'),
+    el('form', { onsubmit: join, style: 'width:100%' }, name, button, error)));
+  name.focus();
+}
+
+function connect() {
+  events?.close();
+  events = new EventSource(`/events?token=${encodeURIComponent(session.token)}`);
+  events.onmessage = message => render(JSON.parse(message.data));
+  events.onerror = () => {
+    if (events.readyState === EventSource.CLOSED && renderedScreen !== 'closed') {
+      saveSession(null);
+      showJoin();
+    }
+  };
+}
+
+function leaderboard(entries) {
+  return el('ol', { class: 'board' }, entries.map(entry => el('li', { class: entry.name === state.me.name ? 'me' : '' },
+    el('span', { class: 'rank' }, `${entry.rank}.`), el('span', { class: 'name' }, entry.name), el('span', { class: 'score' }, entry.score))));
+}
+
+function topBar() {
+  timerElement = el('span', { class: 'timer' });
+  return el('div', { class: 'bar' },
+    el('span', {}, `Round ${state.round} · Question `, el('strong', {}, state.index + 1), ` of ${state.total}`),
+    el('span', {}, `${state.me.name} · `, el('strong', {}, state.me.score)),
+    timerElement);
+}
+
+function questionBlock() {
+  const question = state.question;
+  return [
+    question.noteBefore && el('div', { class: 'note' }, question.noteBefore),
+    el('p', { class: 'question' }, withLineBreaks(question.text)),
+    question.hasHandoutImage && el('img', { class: 'handout', src: imageUrl('/handout'), alt: 'Handout' }),
+    question.handoutText && el('p', { class: 'pre' }, question.handoutText),
+  ];
+}
+
+function answerForm() {
+  const input = el('input', { placeholder: 'Your answer', maxLength: 200, autocomplete: 'off', autocapitalize: 'off', spellcheck: false, value: state.myAnswer ?? '' });
+  const status = el('p', { class: 'sent', id: 'answer-status' });
+  const button = el('button', { type: 'submit' }, 'Send answer');
+  const send = async event => {
+    event.preventDefault();
+    button.disabled = true;
+    try {
+      const response = await fetch('/answer', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token: session.token, answer: input.value }) });
+      const body = await response.json();
+      if (!response.ok) throw new Error(body.error);
+      input.blur();
+    } catch (e) {
+      status.textContent = e.message || 'Could not send';
+    }
+    button.disabled = false;
+  };
+  return el('form', { onsubmit: send }, input, button, status);
+}
+
+function updateAnswerStatus() {
+  const status = document.getElementById('answer-status');
+  if (status && state.myAnswer != null) status.textContent = `Sent: “${state.myAnswer || '—'}”. You can change it until time is up.`;
+}
+
+function render(next) {
+  state = next;
+  deadline = next.remainingMs == null || next.isPaused ? null : Date.now() + next.remainingMs;
+  if (next.phase === 'closed' || next.phase === 'kicked') {
+    renderedScreen = 'closed';
+    events.close();
+    saveSession(null);
+    return show(el('div', { class: 'center' },
+      el('h1', {}, next.phase === 'kicked' ? 'You were removed from the game' : 'The host closed the game'),
+      el('p', { class: 'muted' }, 'Thanks for playing!')));
+  }
+  const screen = `${next.phase}:${next.index}`;
+  if (screen === renderedScreen && next.phase === 'question') return updateAnswerStatus();
+  renderedScreen = screen;
+  if (next.phase === 'lobby' && next.round > 0) {
+    return show(el('div', { class: 'center', style: 'flex:0;padding-top:24px' },
+      el('h1', {}, `Round ${next.round} is over`),
+      el('p', { class: 'muted' }, `Your score: ${next.me.score} · place ${next.me.rank} of ${next.playerCount}. Waiting for the next round…`)),
+      leaderboard(next.leaderboard));
+  }
+  if (next.phase === 'lobby') {
+    return show(el('div', { class: 'center' },
+      el('h1', {}, `You're in, ${next.me.name}!`),
+      el('p', { class: 'muted' }, `Waiting for the host to start… ${next.playerCount} ${next.playerCount === 1 ? 'player' : 'players'} joined.`)));
+  }
+  if (next.phase === 'waiting') {
+    return show(topBar(), el('div', { class: 'center' },
+      el('p', { class: 'muted' }, 'Question'), el('div', { class: 'big-number' }, next.index + 1), el('p', { class: 'muted' }, `of ${next.total}`)));
+  }
+  if (next.phase === 'question') {
+    show(topBar(), questionBlock(), answerForm(), el('p', { class: 'muted', style: 'margin:0;font-size:14px' }, rulesText()));
+    return updateAnswerStatus();
+  }
+  if (next.phase === 'judging') {
+    return show(topBar(), questionBlock(), el('div', { class: 'card' },
+      el('strong', {}, "Time's up! Checking answers…"),
+      el('span', { class: 'muted' }, `Your answer: ${next.myAnswer || '—'}`)));
+  }
+  if (next.phase === 'reveal') {
+    const reveal = next.reveal;
+    const verdict = reveal.isCorrect == null ? el('div', { class: 'verdict bad' }, 'No answer')
+      : el('div', { class: `verdict ${reveal.isCorrect ? 'good' : 'bad'}` }, reveal.isCorrect ? '✓ Correct' : '✗ Wrong', el('span', { class: 'muted', style: 'font-size:18px;margin-left:10px' }, pointsLabel(reveal.points)));
+    return show(topBar(), el('div', { class: 'card' },
+      verdict,
+      next.myAnswer != null && el('span', { class: 'muted' }, `Your answer: ${next.myAnswer || '—'}`),
+      el('p', { class: 'answer' }, reveal.answer),
+      reveal.acceptedAnswers && el('span', {}, el('span', { class: 'muted' }, 'Also accepted: '), reveal.acceptedAnswers),
+      reveal.comment && el('p', { class: 'pre muted', style: 'margin:0;font-size:14px' }, reveal.comment),
+      reveal.hasAnswerImage && el('img', { class: 'handout', src: imageUrl('/answer-image'), alt: 'Answer' })),
+      el('p', { class: 'muted', style: 'margin:0' }, `Your score: ${next.me.score} · place ${next.me.rank} of ${next.playerCount}`),
+      leaderboard(next.leaderboard));
+  }
+  if (next.phase === 'finished') {
+    return show(el('div', { class: 'center', style: 'flex:0;padding-top:24px' },
+      el('h1', {}, `Round ${next.round} results`),
+      el('p', { class: 'muted' }, `This round ${pointsLabel(next.me.roundScore)} · total ${next.me.score} · place ${next.me.rank} of ${next.playerCount}`)),
+      leaderboard(next.leaderboard),
+      el('p', { class: 'muted', style: 'text-align:center' }, 'Waiting for the host…'));
+  }
+}
+
+setInterval(() => {
+  if (!timerElement || !timerElement.isConnected) return;
+  if (state?.isPaused && state.remainingMs != null) return (timerElement.textContent = `Paused ${clock(state.remainingMs)}`);
+  if (deadline == null) return (timerElement.textContent = '');
+  const left = Math.max(0, deadline - Date.now());
+  timerElement.textContent = clock(left);
+  timerElement.classList.toggle('low', left <= 10000);
+}, 200);
+
+if (session?.token) connect();
+else showJoin();
+</script>
+</body>
+</html>

@@ -1,0 +1,162 @@
+300 queries: 60 recall, 60 paraphrase, 60 ascii, 60 typo, 60 answer; dev/test split by target
+
+## Keyword (dev)
+config                                                     rec para asc typo ans  macro  h@1 h@10   (MRR@10 %)
+kw AND fuzzy=0 prefix=true boost=current                    80    0   80    0   98    52    51   52
+kw AND fuzzy=0 prefix=true boost=none                       80    0   80    0   88    50    49   51
+kw AND fuzzy=0 prefix=true boost=answer3                    80    0   80    0  100    52    52   52
+kw AND fuzzy=0 prefix=false boost=current                   40    0   40    0   96    35    35   36
+kw AND fuzzy=0 prefix=false boost=none                      40    0   40    0   88    34    33   35
+kw AND fuzzy=0 prefix=false boost=answer3                   40    0   40    0  100    36    36   36
+kw AND fuzzy=0.2 prefix=true boost=current                  87    3   87   43   96    63    63   64
+kw AND fuzzy=0.2 prefix=true boost=none                     87    3   87   43   86    61    60   63
+kw AND fuzzy=0.2 prefix=true boost=answer3                  87    3   87   43  100    64    64   64
+kw AND fuzzy=0.2 prefix=false boost=current                 57    3   57   33   96    49    49   50
+kw AND fuzzy=0.2 prefix=false boost=none                    57    3   57   33   86    47    46   49
+kw AND fuzzy=0.2 prefix=false boost=answer3                 55    3   55   33  100    49    49   50
+kw OR fuzzy=0 prefix=true boost=current                     93   16   93   88   98    78    75   83
+kw OR fuzzy=0 prefix=true boost=none                        93   15   93   88   88    75    72   81
+kw OR fuzzy=0 prefix=true boost=answer3                     91   12   91   84  100    76    72   81
+kw OR fuzzy=0 prefix=false boost=current                    74   12   74   70   96    65    58   75
+kw OR fuzzy=0 prefix=false boost=none                       77    9   77   70   88    64    58   74
+kw OR fuzzy=0 prefix=false boost=answer3                    73    7   73   60  100    62    56   73
+kw OR fuzzy=0.2 prefix=true boost=current                   93   19   93   90   96    78    75   83
+kw OR fuzzy=0.2 prefix=true boost=none                      93   18   93   90   86    76    71   82
+kw OR fuzzy=0.2 prefix=true boost=answer3                   91   16   91   87  100    77    73   82
+kw OR fuzzy=0.2 prefix=false boost=current                  84   21   84   79   96    73    66   83
+kw OR fuzzy=0.2 prefix=false boost=none                     85   16   85   78   86    70    62   83
+kw OR fuzzy=0.2 prefix=false boost=answer3                  81   14   81   75  100    70    64   81
+best keyword on dev: kw OR fuzzy=0.2 prefix=true boost=current
+
+## multilingual-e5-small (query embed 4 ms)
+config                                                     rec para asc typo ans  macro  h@1 h@10   (MRR@10 %)
+ai multilingual-e5-small                                    72    2   53   56   63    49    40   67
+hy multilingual-e5-small default k=10 w=0.5                 95    5   89   81   94    73    70   79
+hy multilingual-e5-small default k=10 w=1                   95    5   89   81   94    73    70   79
+hy multilingual-e5-small default k=10 w=2                   89    2   74   69   78    63    57   76
+hy multilingual-e5-small default k=30 w=0.5                 95    5   89   81   92    72    69   79
+hy multilingual-e5-small default k=30 w=1                   95    5   89   81   90    72    69   79
+hy multilingual-e5-small default k=30 w=2                   92    2   74   69   82    64    59   75
+hy multilingual-e5-small default k=60 w=0.5                 95    5   89   81   90    72    69   79
+hy multilingual-e5-small default k=60 w=1                   95    5   89   81   89    72    69   79
+hy multilingual-e5-small default k=60 w=2                   92    2   79   77   82    66    62   75
+hy multilingual-e5-small bestkw k=10 w=0.5                  92   18   94   89   94    77    73   84
+hy multilingual-e5-small bestkw k=10 w=1                    89   15   93   89   90    75    70   85
+hy multilingual-e5-small bestkw k=10 w=2                    88    8   78   76   76    65    59   79
+hy multilingual-e5-small bestkw k=30 w=0.5                  91   18   93   88   91    76    71   85
+hy multilingual-e5-small bestkw k=30 w=1                    89   20   92   85   87    75    69   85
+hy multilingual-e5-small bestkw k=30 w=2                    88   14   78   75   80    67    61   78
+hy multilingual-e5-small bestkw k=60 w=0.5                  91   19   92   85   88    75    69   85
+hy multilingual-e5-small bestkw k=60 w=1                    88   18   88   85   86    73    67   83
+hy multilingual-e5-small bestkw k=60 w=2                    88   16   81   80   80    69    63   80
+
+## multilingual-e5-small+comment (query embed 0 ms)
+config                                                     rec para asc typo ans  macro  h@1 h@10   (MRR@10 %)
+ai multilingual-e5-small+comment                            77   13   63   58   72    57    49   69
+hy multilingual-e5-small+comment default k=10 w=0.5         95   15   94   80   94    76    72   81
+hy multilingual-e5-small+comment default k=10 w=1           95   15   94   80   91    75    71   81
+hy multilingual-e5-small+comment default k=10 w=2           85   15   73   68   83    65    59   77
+hy multilingual-e5-small+comment default k=30 w=0.5         95   15   94   80   89    75    70   81
+hy multilingual-e5-small+comment default k=30 w=1           95   15   94   80   89    75    70   81
+hy multilingual-e5-small+comment default k=30 w=2           86   15   75   68   86    66    61   75
+hy multilingual-e5-small+comment default k=60 w=0.5         95   15   94   80   89    75    70   81
+hy multilingual-e5-small+comment default k=60 w=1           95   15   94   80   89    74    70   81
+hy multilingual-e5-small+comment default k=60 w=2           89   15   81   73   86    69    65   76
+hy multilingual-e5-small+comment bestkw k=10 w=0.5          91   21   91   89   93    77    72   84
+hy multilingual-e5-small+comment bestkw k=10 w=1            88   22   91   82   88    74    67   85
+hy multilingual-e5-small+comment bestkw k=10 w=2            82   20   73   72   82    66    61   77
+hy multilingual-e5-small+comment bestkw k=30 w=0.5          89   22   88   84   88    74    67   84
+hy multilingual-e5-small+comment bestkw k=30 w=1            87   20   86   82   86    72    65   84
+hy multilingual-e5-small+comment bestkw k=30 w=2            84   20   78   71   83    67    63   77
+hy multilingual-e5-small+comment bestkw k=60 w=0.5          88   21   84   83   86    73    65   85
+hy multilingual-e5-small+comment bestkw k=60 w=1            86   20   84   79   85    71    65   82
+hy multilingual-e5-small+comment bestkw k=60 w=2            84   20   81   73   83    68    64   77
+
+## multilingual-e5-base (query embed 5 ms)
+config                                                     rec para asc typo ans  macro  h@1 h@10   (MRR@10 %)
+ai multilingual-e5-base                                     73   10   54   54   57    50    41   66
+hy multilingual-e5-base default k=10 w=0.5                  93   13   88   78   91    73    69   79
+hy multilingual-e5-base default k=10 w=1                    93   13   88   78   89    72    69   79
+hy multilingual-e5-base default k=10 w=2                    88   11   67   66   74    61    56   70
+hy multilingual-e5-base default k=30 w=0.5                  93   13   88   78   89    72    69   79
+hy multilingual-e5-base default k=30 w=1                    93   13   88   78   87    72    68   79
+hy multilingual-e5-base default k=30 w=2                    88   13   71   68   76    63    59   69
+hy multilingual-e5-base default k=60 w=0.5                  93   13   88   78   84    71    67   79
+hy multilingual-e5-base default k=60 w=1                    93   13   88   78   85    71    68   79
+hy multilingual-e5-base default k=60 w=2                    90   13   71   68   77    64    61   69
+hy multilingual-e5-base bestkw k=10 w=0.5                   91   21   92   92   91    77    73   84
+hy multilingual-e5-base bestkw k=10 w=1                     88   22   90   88   85    75    69   85
+hy multilingual-e5-base bestkw k=10 w=2                     85   16   69   73   76    64    59   73
+hy multilingual-e5-base bestkw k=30 w=0.5                   91   26   89   88   89    77    71   85
+hy multilingual-e5-base bestkw k=30 w=1                     87   23   87   84   82    73    67   84
+hy multilingual-e5-base bestkw k=30 w=2                     86   18   73   74   77    66    62   72
+hy multilingual-e5-base bestkw k=60 w=0.5                   90   25   88   86   82    74    68   85
+hy multilingual-e5-base bestkw k=60 w=1                     87   21   85   81   81    71    65   83
+hy multilingual-e5-base bestkw k=60 w=2                     86   18   74   75   79    66    63   74
+
+## bge-m3 (query embed 12 ms)
+config                                                     rec para asc typo ans  macro  h@1 h@10   (MRR@10 %)
+ai bge-m3                                                   93   30   78   84   81    73    67   87
+hy bge-m3 default k=10 w=0.5                                98   33   97   90   98    83    80   91
+hy bge-m3 default k=10 w=1                                  98   33   97   90   94    83    79   91
+hy bge-m3 default k=10 w=2                                  98   31   91   86   92    80    75   89
+hy bge-m3 default k=30 w=0.5                                98   33   97   90   95    83    79   91
+hy bge-m3 default k=30 w=1                                  98   33   97   90   94    83    79   91
+hy bge-m3 default k=30 w=2                                  98   33   91   89   93    81    77   89
+hy bge-m3 default k=60 w=0.5                                98   33   97   90   95    83    79   91
+hy bge-m3 default k=60 w=1                                  98   33   97   90   93    82    79   90
+hy bge-m3 default k=60 w=2                                  98   33   94   90   93    82    78   89
+hy bge-m3 bestkw k=10 w=0.5                                 92   24   93   92   98    80    77   86
+hy bge-m3 bestkw k=10 w=1                                   92   27   95   94   94    80    76   90
+hy bge-m3 bestkw k=10 w=2                                   92   30   86   87   92    77    71   89
+hy bge-m3 bestkw k=30 w=0.5                                 91   27   95   93   95    80    77   87
+hy bge-m3 bestkw k=30 w=1                                   92   28   95   93   94    80    76   90
+hy bge-m3 bestkw k=30 w=2                                   92   29   86   88   93    78    71   91
+hy bge-m3 bestkw k=60 w=0.5                                 91   28   95   93   95    80    77   87
+hy bge-m3 bestkw k=60 w=1                                   92   27   94   93   93    80    75   87
+hy bge-m3 bestkw k=60 w=2                                   92   29   89   88   93    78    72   90
+
+## Test split (held out)
+config                                                     rec para asc typo ans  macro  h@1 h@10   (MRR@10 %)
+before tuning: hy e5-small default k=60 w=1                 97   15   94   75   75    71    67   79
+shipped now: hy bge-m3 default k=10 w=0.5                  100   47   97   88   89    84    79   92
+best keyword: kw OR fuzzy=0.2 prefix=true boost=current     98   19   98   92   94    80    77   86
+ai only: ai e5-small                                        71   15   56   55   42    48    41   62
+best hybrid: hy e5-small bestkw k=10 w=0.5                  97   22   97   97   83    79    74   87
+ai only: ai e5-small+comment                                73   16   57   62   46    51    43   65
+best hybrid: hy e5-small+comment bestkw k=10 w=0.5          97   23   97   92   91    80    75   87
+ai only: ai e5-base                                         74   19   47   59   36    47    39   65
+best hybrid: hy e5-base bestkw k=10 w=0.5                   96   21   98   98   86    80    76   86
+ai only: ai bge-m3                                          88   47   68   85   76    73    67   84
+best hybrid: hy bge-m3 default k=10 w=0.5                  100   47   97   88   89    84    79   92
+BEST on dev: hy bge-m3 default k=10 w=0.5                  100   47   97   88   89    84    79   92
+
+best overall = hy bge-m3 default k=10 w=0.5 {"combineWith":"AND","fuzzy":0.2,"prefix":true,"boost":{"answer":2,"text":1.5},"rrfK":10,"aiWeight":0.5}
+
+misses of best config (26):
+  [paraphrase] multfilm qəhrəmanlarının əlində az barmaq olması
+  [paraphrase] arıqlamaq haqqında kitab oxuyan komik pul itirir
+  [paraphrase] not adlarının kilsə mahnısından yaranması
+  [paraphrase] Balkan ölkəsinin damalı emblemi haqqında rəvayət
+  [paraphrase] serialda gizli həqiqətlərin kiçik qapalı yerdə açılması
+  [paraphrase] elektrik stulunda edam olunan ilk məhkum
+  [paraphrase] reqqi ulduzunun vəfat etdiyi gün
+  [paraphrase] tayvanlı rejissorun çəkdiyi avtomobil yarışı filmləri
+  [paraphrase] adını qədim tayfadan alan türk şəhəri
+  [paraphrase] okean üzərində itkin düşən qadın pilot
+  [paraphrase] pyesdə personaj şeirindəki qafiyəni müdafiə edir
+  [typo] Rasim Qaraca Həmid Heirsçi
+  [paraphrase] Servantesin romanı əsasında bəstəkarın gənclik operası
+  [paraphrase] robotlar fotoşəkil çəkdirərkən nə deyir
+  [paraphrase] Amerika inqilabı dövründə casus şəbəkəsinin kodu
+  [paraphrase] əlin iradədən asılı olmadan hərəkət etdiyi nevroloji pozuntu
+  [paraphrase] Kembric kollecinin məşhur alimlərinin sayı
+  [typo] Şamda Mum manhısı
+  [paraphrase] pirat bayrağının adının mənşəyi
+  [paraphrase] şimal xalqlarının dəniz heyvanlarını ovlaması
+  [paraphrase] Qədim Roma tarixi haqqında britaniyalı alimin əsəri
+  [paraphrase] məşhur ispan rəssamın əsərlərinin qiyməti
+  [paraphrase] özünü qırxmayanları qırxan adam paradoksu
+  [paraphrase] Sinqapurdakı tikanlı meyvəyə bənzəyən teatr binası
+  [paraphrase] çex avtomobil markasının loqosunun mənşəyi
+  [paraphrase] fransız yazıçının qeyd dəftərində adların gizlədilməsi
