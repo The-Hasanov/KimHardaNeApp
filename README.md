@@ -1,3 +1,5 @@
+<img src="app/icon.png" alt="" width="96" align="right">
+
 # KimHardaNeApp
 
 A Windows desktop app for Azerbaijani quiz questions from [3sual.az](https://3sual.az/): search about 68,000
@@ -10,7 +12,8 @@ phones.
 
 - **Search** by keyword, by meaning (a local AI model, no API key) or both. It ignores case and diacritics,
   so `baki` finds `Bakı`, and it forgives small typos.
-- **Edit** questions, answers, comments and sources. Your edits survive data refreshes and app updates.
+- **Edit** questions, answers, comments and sources, or **add your own questions** (*New question*). Your
+  edits and questions survive data refreshes and app updates.
 - **Lists** of questions, played in the order you choose.
 - **Game** helper for the host: 10 random questions with a timer, or play them yourself with the AI
   checking your answers.

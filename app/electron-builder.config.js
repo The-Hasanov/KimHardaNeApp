@@ -25,7 +25,7 @@ module.exports = {
     { from: 'bundle/3sual.sqlite', to: 'data/3sual.sqlite' },
     { from: 'bundle/images', to: 'data/images' },
   ],
-  win: { target: [{ target: 'nsis', arch: ['x64'] }] },
+  win: { icon: 'icon.png', target: [{ target: 'nsis', arch: ['x64'] }] },
   nsis: { oneClick: true, perMachine: false },
   publish: updateUrl ? [{ provider: 'generic', url: updateUrl }] : null,
 };

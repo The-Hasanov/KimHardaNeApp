@@ -26,6 +26,9 @@ CREATE TABLE IF NOT EXISTS list_questions (
   list_id INTEGER NOT NULL, uid TEXT NOT NULL, position INTEGER NOT NULL, added_at TEXT NOT NULL,
   PRIMARY KEY (list_id, uid));`;
 const POOL = 500;
+const OWN_PACKAGE_ID = 0;
+const OWN_GAME_ID = 0;
+const OWN_NAME = 'My questions';
 const TUNING = { combineWith: 'AND', prefix: true, fuzzy: 0.2, boost: { answer: 2, text: 1.5 }, rrfK: 10, aiWeight: 0.5 };
 
 const fold = s => s.toLowerCase().normalize('NFD').replace(/\p{M}/gu, '').replace(/ə/g, 'e').replace(/ı/g, 'i');
@@ -225,6 +228,42 @@ class Store {
     return row;
   }
 
+  createQuestion(fields) {
+    if (!String(fields.text ?? '').trim() || !String(fields.answer ?? '').trim()) throw new Error('A question needs its text and answer');
+    const valueId = this.db.prepare('SELECT max(COALESCE(MAX(value_id) + 1, 0), ?) AS id FROM questions WHERE package_id = ?').get(Date.now(), OWN_PACKAGE_ID).id;
+    const uid = `${OWN_PACKAGE_ID}:question:${valueId}`;
+    this.db.prepare(`INSERT INTO questions (package_id, kind, value_id, uid, origin, ordinal, game_id, game_name)
+      VALUES (?, 'question', ?, ?, 'own', ?, ?, ?)`).run(OWN_PACKAGE_ID, valueId, uid, valueId, OWN_GAME_ID, OWN_NAME);
+    const i = this.rows.push(this.db.prepare(`SELECT ${LIST_COLS} FROM questions WHERE uid = ?`).get(uid)) - 1;
+    this.pos.set(uid, i);
+    this.index?.add(this.rows[i]);
+    if (this.vecs && this.has.length < this.rows.length) {
+      const vecs = new Float32Array(this.rows.length * this.dim);
+      vecs.set(this.vecs);
+      const has = new Uint8Array(this.rows.length);
+      has.set(this.has);
+      Object.assign(this, { vecs, has });
+    }
+    return this.save(uid, fields);
+  }
+
+  deleteQuestion(uid) {
+    const i = this.pos.get(uid);
+    if (i === undefined || this.rows[i].package_id !== OWN_PACKAGE_ID) throw new Error('Only your own questions can be deleted');
+    this.db.exec('BEGIN');
+    for (const table of ['questions', 'embeddings', 'list_questions']) this.db.prepare(`DELETE FROM ${table} WHERE uid = ?`).run(uid);
+    this.db.exec('COMMIT');
+    this.index?.discard(uid);
+    this.rows.splice(i, 1);
+    this.pos = new Map(this.rows.map((r, k) => [r.uid, k]));
+    this.authorCache = null;
+    if (!this.vecs) return;
+    if (this.has[i]) this.vectorCount--;
+    this.vecs.copyWithin(i * this.dim, (i + 1) * this.dim);
+    this.has.copyWithin(i, i + 1);
+    this.has[this.rows.length] = 0;
+  }
+
   randomPlayableQuestions(gameId, count, excludedUids = []) {
     return this.db.prepare(`SELECT uid FROM questions WHERE game_id = ? AND kind = 'question' AND COALESCE(group_size, 1) <= 1
       AND length(text) > 20 AND trim(COALESCE(answer, '')) NOT IN ('', '-') AND uid NOT IN (SELECT value FROM json_each(?))
@@ -329,4 +368,4 @@ class Store {
   }
 }
 
-module.exports = { Store, TUNING, LISTS_SCHEMA, PLAY_SCHEMA, EMBEDDINGS_SCHEMA, fold, passage, embeddable, hashOf, DIM };
+module.exports = { Store, OWN_PACKAGE_ID, TUNING, LISTS_SCHEMA, PLAY_SCHEMA, EMBEDDINGS_SCHEMA, fold, passage, embeddable, hashOf, DIM };

@@ -4,11 +4,11 @@ import { useDefaultLayout } from 'react-resizable-panels';
 import { cn } from 'cn';
 import {
   DownloadIcon, EyeIcon, FileTextIcon, LayersIcon, PencilIcon, RefreshCwIcon, RotateCcwIcon, SaveIcon, SearchIcon,
-  ListIcon, ListPlusIcon, MoonIcon, PlusIcon, SearchXIcon, SettingsIcon, SparklesIcon, SquareIcon, TimerIcon, UserIcon, XIcon, ZapIcon,
+  ListIcon, ListPlusIcon, MoonIcon, PlusIcon, SearchXIcon, SettingsIcon, SparklesIcon, SquareIcon, TimerIcon, Trash2Icon, UserIcon, XIcon, ZapIcon,
 } from 'lucide-react';
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter,
-  AlertDialogHeader, AlertDialogTitle,
+  AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -55,6 +55,8 @@ const REFRESH_MODES = [
 const STAGES = { list: 'Listing packages', packages: 'Downloading packages', audit: 'Checking authors',
   images: 'Downloading images', index: 'Rebuilding search index', embed: 'Computing AI vectors' };
 const PAGE = 100;
+const OWN_PACKAGE_ID = 0;
+const NEW_QUESTION = { uid: null, package_id: OWN_PACKAGE_ID, game_name: 'My questions' };
 
 const fmt = n => n.toLocaleString('en');
 const local = t => t && new Date(t.replace(' ', 'T') + 'Z').toLocaleString();
@@ -135,7 +137,10 @@ function AddToListButton({ lists, listIdsOfQuestion, onToggle, onCreateNew }) {
   );
 }
 
-function Editor({ q, draft, setDraft, dirtyKeys, saving, savedAt, concealed, onReveal, onAuthor, onSave, onDiscard, onZoom, listControl }) {
+function Editor({ q, draft, setDraft, dirtyKeys, saving, savedAt, concealed, onReveal, onAuthor, onSave, onDiscard, onDelete, onZoom, listControl }) {
+  const isOwn = q.package_id === OWN_PACKAGE_ID;
+  const isNew = !q.uid;
+  const canCreate = !!(draft.text.trim() && draft.answer.trim());
   const path = (q.phase_path ?? []).map(p => p.name).filter(Boolean).join(' › ');
   const authors = (q.authors ?? []).map((a, i) => (
     <Fragment key={a.id ?? i}>
@@ -162,10 +167,12 @@ function Editor({ q, draft, setDraft, dirtyKeys, saving, savedAt, concealed, onR
             <div className="flex items-center gap-2">
               <Badge variant="secondary">{q.game_name}</Badge>
               {q.edited_at && <Badge variant="outline" className={EDITED}><PencilIcon />edited</Badge>}
-              {listControl}
+              {!isNew && listControl}
             </div>
             <h2 className="text-lg leading-snug font-semibold">
-              {q.package_name ?? q.tournament_name ?? 'Package'} <span className="font-normal text-muted-foreground">#{q.package_id}</span>
+              {isOwn ? (isNew ? 'New question' : 'My question') : <>
+                {q.package_name ?? q.tournament_name ?? 'Package'} <span className="font-normal text-muted-foreground">#{q.package_id}</span>
+              </>}
             </h2>
             <dl className="grid grid-cols-[max-content_1fr] gap-x-4 gap-y-1 text-sm">
               {meta.map(([k, v]) => (
@@ -214,13 +221,31 @@ function Editor({ q, draft, setDraft, dirtyKeys, saving, savedAt, concealed, onR
         </div>
       </div>
       <div className="flex shrink-0 items-center gap-2 border-t px-6 py-3">
-        <Button onClick={onSave} disabled={!dirtyKeys.length || saving}>{saving ? <Spinner /> : <SaveIcon />}Save</Button>
+        <Button onClick={onSave} disabled={!dirtyKeys.length || saving || (isNew && !canCreate)}>{saving ? <Spinner /> : <SaveIcon />}Save</Button>
         <Button variant="ghost" onClick={onDiscard} disabled={!dirtyKeys.length || saving}><RotateCcwIcon />Discard</Button>
         <span className={cn('ml-2 text-xs text-muted-foreground', dirtyKeys.length && 'text-amber-700 dark:text-amber-400')}>
-          {dirtyKeys.length ? `${plural(dirtyKeys.length, 'unsaved change')}`
+          {isNew ? (canCreate ? 'Not saved yet' : 'Write the question and its answer, then save')
+            : dirtyKeys.length ? `${plural(dirtyKeys.length, 'unsaved change')}`
             : savedAt ? `Saved at ${savedAt.toLocaleTimeString()}` : 'No changes'}
         </span>
         <KbdGroup className="ml-auto"><Kbd>Ctrl</Kbd><Kbd>S</Kbd></KbdGroup>
+        {isOwn && !isNew && (
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <Button variant="ghost" className="text-destructive hover:text-destructive"><Trash2Icon />Delete</Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Delete this question?</AlertDialogTitle>
+                <AlertDialogDescription>It disappears from search and from your lists. This cannot be undone.</AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Keep it</AlertDialogCancel>
+                <AlertDialogAction variant="destructive" onClick={onDelete}>Delete</AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+        )}
       </div>
     </div>
   );
@@ -363,6 +388,30 @@ export default function App() {
     setRevealed(false);
   }
 
+  async function startNewQuestion() {
+    if (dirty && !(await confirmDiscard())) return;
+    openSeq.current++;
+    setSel(null);
+    setCurrent(NEW_QUESTION);
+    setDraft(draftOf(NEW_QUESTION));
+    setSavedAt(null);
+    setRevealed(true);
+    setTimeout(() => document.getElementById('f-text')?.focus());
+  }
+
+  async function deleteCurrent() {
+    try {
+      await api.deleteQuestion(current.uid);
+      setCurrent(null);
+      setSel(null);
+      setInfo(await api.info());
+      refreshLists();
+      toast.success('Question deleted');
+    } catch (e) {
+      toast.error('Delete failed', { description: e.message });
+    }
+  }
+
   function move(delta) {
     if (!hits.length) return;
     const i = hits.findIndex(h => h.uid === sel);
@@ -375,8 +424,19 @@ export default function App() {
   async function save() {
     if (!dirty || saving) return;
     const changed = Object.fromEntries(FIELDS.map(([k]) => [k, draft[k]]).filter(([k, v]) => v !== valueOf(current, k)));
+    if (!current.uid && !(draft.text.trim() && draft.answer.trim())) return toast.error('Write the question and its answer first');
     setSaving(true);
     try {
+      if (!current.uid) {
+        const question = await api.createQuestion(changed);
+        setCurrent(question);
+        setDraft(draftOf(question));
+        setSel(question.uid);
+        setSavedAt(new Date());
+        setInfo(await api.info());
+        toast.success('Question added', { description: 'Pick "My questions" in the game filter to see all of yours.' });
+        return;
+      }
       const { changed: wrote, question } = await api.save(current.uid, changed);
       setCurrent(question);
       setDraft(draftOf(question));
@@ -550,7 +610,8 @@ export default function App() {
         defaultLayout={layout.defaultLayout} onLayoutChanged={layout.onLayoutChanged}>
         <ResizablePanel id="results" defaultSize="42" minSize={340}>
           <div className="flex h-full flex-col">
-            <div className="flex h-9 shrink-0 items-center gap-2 border-b bg-muted/30 px-4 text-xs text-muted-foreground">
+            <div className="flex h-9 shrink-0 items-center gap-2 border-b bg-muted/30 pr-4 pl-2 text-xs text-muted-foreground">
+              <Button variant="outline" size="xs" className="shrink-0" onClick={startNewQuestion}><PlusIcon />New question</Button>
               {author && (
                 <Badge variant="secondary" className="h-6 shrink-0 gap-1 pr-0.5 text-foreground">
                   <UserIcon />{author.fullname.trim()}
@@ -600,7 +661,7 @@ export default function App() {
           {current ? (
             <Editor q={current} draft={draft} setDraft={setDraft} dirtyKeys={dirtyKeys} saving={saving} savedAt={savedAt}
               concealed={hideAnswers && !revealed} onReveal={() => setRevealed(true)} onAuthor={filter(setAuthor)}
-              onSave={save} onDiscard={() => setDraft(draftOf(current))} onZoom={setZoom}
+              onSave={save} onDiscard={() => setDraft(draftOf(current))} onDelete={deleteCurrent} onZoom={setZoom}
               listControl={<AddToListButton lists={lists} listIdsOfQuestion={listIdsOfCurrent} onToggle={toggleCurrentInList}
                 onCreateNew={() => setIsCreatingListForCurrent(true)} />} />
           ) : (
@@ -608,7 +669,7 @@ export default function App() {
               <EmptyHeader>
                 <EmptyMedia variant="icon"><FileTextIcon /></EmptyMedia>
                 <EmptyTitle>No question open</EmptyTitle>
-                <EmptyDescription>Search, then pick a question to edit it.</EmptyDescription>
+                <EmptyDescription>Search, then pick a question to edit it, or add your own with New question.</EmptyDescription>
               </EmptyHeader>
               <EmptyContent><Shortcuts /></EmptyContent>
             </Empty>

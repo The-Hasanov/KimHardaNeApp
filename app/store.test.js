@@ -10,7 +10,7 @@ const { Store, fold, DIM } = require('./store');
 function tempDb() {
   const file = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'quiz-')), 'q.sqlite');
   const db = new DatabaseSync(file);
-  db.exec(`CREATE TABLE questions (package_id INTEGER, kind TEXT, value_id INTEGER, uid TEXT UNIQUE, ordinal INTEGER,
+  db.exec(`CREATE TABLE questions (package_id INTEGER, kind TEXT, value_id INTEGER, uid TEXT UNIQUE, origin TEXT, ordinal INTEGER,
     package_name TEXT, package_played TEXT, tournament_name TEXT, game_id INTEGER, game_name TEXT, phase_path TEXT,
     theme_name TEXT, theme_round INTEGER, group_size INTEGER, group_index INTEGER, text TEXT, answer TEXT, comment TEXT,
     accepted_answers TEXT, note_before TEXT, rekvizit_text TEXT, rekvizit_url TEXT, source_media_url TEXT, sources TEXT,
@@ -188,4 +188,25 @@ test('play games save answers, overrides and scores; empty games are not kept', 
   assert.deepEqual(s.playGames().map(g => g.id), [gameId]);
   s.deletePlayGame(gameId);
   assert.deepEqual(s.playGames(), []);
+});
+
+test('your own questions are searchable under My questions, kept as edits, and deletable without shifting other vectors', () => {
+  const s = store(true);
+  assert.throws(() => s.createQuestion({ text: 'Only the text' }), /text and answer/);
+  const mountain = s.createQuestion({ text: 'Ən hündür dağ hansıdır?', answer: 'Şahdağ', sources: 'https://x.az' });
+  const river = s.createQuestion({ text: 'Ən uzun çay hansıdır?', answer: 'Kür' });
+  assert.ok(mountain.edited_at);
+  assert.deepEqual(s.get(mountain.uid).sources, ['https://x.az']);
+  assert.deepEqual(s.search({ q: 'sahdag', mode: 'keyword' }).hits.map(h => h.uid), [mountain.uid]);
+  assert.deepEqual(s.games().map(g => [g.id, g.name, g.n]), [[0, 'My questions', 2], [1, 'NHN', 3], [3, 'Fərdi Oyun', 1]]);
+  s.putVectors([mountain, river], [vec(3), vec(4)]);
+  const listId = s.createList('Mine');
+  s.addToList(listId, mountain.uid);
+  assert.throws(() => s.deleteQuestion('1:question:1'), /own questions/);
+  s.deleteQuestion(mountain.uid);
+  assert.deepEqual([s.get(mountain.uid), s.search({ q: 'sahdag', mode: 'keyword' }).hits.length, s.listQuestions(listId).length], [null, 0, 0]);
+  assert.equal(s.vectorCount, 4);
+  assert.equal(s.search({ q: 'anything', mode: 'ai' }, vec(4)).hits[0].uid, river.uid);
+  const lake = s.createQuestion({ text: 'Ən böyük göl hansıdır?', answer: 'Sarısu' });
+  assert.equal(s.search({ q: 'sarisu', mode: 'keyword' }).hits[0].uid, lake.uid);
 });

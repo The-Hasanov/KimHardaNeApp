@@ -98,6 +98,11 @@ npm test         # offline tests for the scraper, search, ranking, edits, data u
   Saving writes only the fields that changed. It sets `questions.edited_at` and re-embeds the question.
   `crawl --refresh` keeps edited rows. The site's original values are still in `packages.raw_json`, and
   the export includes `edited_at`.
+- **Your own questions**: *New question* (above the results) opens an empty editor; a question needs its text
+  and answer. They are stored in the same `questions` table (`package_id` 0, `origin` `own`), so search, lists,
+  games and parties treat them like any other question, and *My questions* in the game filter shows them all.
+  Like edits, they survive refreshes and version updates, and `npm run dist` leaves them out of the installer.
+  Only your own questions can be deleted.
 - **Images** are shown from `data/images/` when `scraper.js images` has fetched them, otherwise from the site.
 - **Refresh data** (header button) runs the scraper inside the app and brings the open database up to date.
   *Quick* (~2 min) lists every package, fetches the ones not stored yet and runs the author check. *Full*

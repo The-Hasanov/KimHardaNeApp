@@ -47,6 +47,8 @@ contextBridge.exposeInMainWorld('api', {
   partyCastSamsung: address => ipcRenderer.invoke('party-cast-samsung', address),
   onParty: cb => ipcRenderer.on('party', (_e, state) => cb(state)),
   save: (uid, fields) => ipcRenderer.invoke('save', uid, fields),
+  createQuestion: fields => ipcRenderer.invoke('create-question', fields),
+  deleteQuestion: uid => ipcRenderer.invoke('delete-question', uid),
   onUpdate: cb => ipcRenderer.on('update', (_e, status) => cb(status)),
   installUpdate: () => ipcRenderer.invoke('install-update'),
   refresh: mode => ipcRenderer.invoke('refresh', mode),

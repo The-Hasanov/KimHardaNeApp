@@ -96,6 +96,7 @@ async function turnOffAi(win) {
   setAiStatus(win, { state: 'off' });
 }
 
+const APP_ICON = path.join(__dirname, 'icon.png');
 const TV_WINDOW_SIZE = { width: 1280, height: 720 };
 
 const centeredOn = display => ({
@@ -109,7 +110,7 @@ function openPartyDisplay(mainWindow, port) {
   const mainDisplayId = screen.getDisplayMatching(mainWindow.getBounds()).id;
   const television = screen.getAllDisplays().find(display => display.id !== mainDisplayId);
   partyDisplay = new BrowserWindow({
-    title: 'KimHardaNeApp · TV screen', backgroundColor: '#0a0a0a',
+    title: 'KimHardaNeApp · TV screen', icon: APP_ICON, backgroundColor: '#0a0a0a',
     ...(television ? centeredOn(television) : TV_WINDOW_SIZE),
   });
   partyDisplay.removeMenu();
@@ -194,7 +195,7 @@ async function refresh(win, mode, signal) {
 
 app.whenReady().then(() => {
   const win = new BrowserWindow({
-    width: 1400, height: 900, title: `KimHardaNeApp ${app.getVersion()}`,
+    width: 1400, height: 900, title: `KimHardaNeApp ${app.getVersion()}`, icon: APP_ICON,
     backgroundColor: nativeTheme.shouldUseDarkColors ? '#0a0a0a' : '#ffffff',
     webPreferences: { preload: path.join(__dirname, 'preload.js') },
   });
@@ -290,6 +291,12 @@ app.whenReady().then(() => {
     if (partyDisplay && !partyDisplay.isDestroyed()) partyDisplay.webContents.setAudioMuted(true);
   });
   screen.on('display-added', (_event, display) => movePartyDisplayTo(display));
+  handle('create-question', async fields => {
+    const row = store.createQuestion(fields);
+    if (isAiReady()) await ai.embedRows(store, [row]);
+    return store.get(row.uid);
+  });
+  handle('delete-question', uid => store.deleteQuestion(uid));
   handle('save', async (uid, fields) => {
     const row = store.save(uid, fields);
     if (row && isAiReady()) await ai.embedRows(store, [row]);
