@@ -1,7 +1,8 @@
 # KimHardaNeApp: how the app works
 
-An Electron app for searching and editing the questions in `data/3sual.sqlite`. It needs Node 22+ and
-works offline once the model and images are downloaded.
+An Electron app for hosting quiz games and keeping a question bank. The bank is `data/3sual.sqlite`, built
+by the scraper from 3sual.az, plus your own questions. It needs Node 22+ and works offline once the model and
+images are downloaded.
 
 ```bash
 cd app

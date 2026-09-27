@@ -2,7 +2,7 @@
 const updateUrl = process.env.UPDATE_URL;
 
 module.exports = {
-  appId: 'az.3sual.editor',
+  appId: 'az.kimhardaneapp',
   productName: 'KimHardaNeApp',
   directories: { output: 'dist' },
   files: [
