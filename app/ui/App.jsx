@@ -145,7 +145,6 @@ function AddToListButton({ lists, listIdsOfQuestion, onToggle, onCreateNew }) {
 }
 
 function OwnPictures({ q, concealed, onReveal, onZoom, onPick, onRemove }) {
-  if (!q.uid) return <p className="text-sm text-muted-foreground">Save the question to add pictures.</p>;
   return (
     <div className="grid gap-4 sm:grid-cols-2">
       {PICTURES.map(([column, srcKey, label, hint]) => {
@@ -453,8 +452,10 @@ export default function App() {
   }
 
   async function changePicture(column, shouldRemove) {
+    const uid = current.uid ?? (await save())?.uid;
+    if (!uid) return;
     try {
-      const question = await (shouldRemove ? api.removeQuestionImage(current.uid, column) : api.pickQuestionImage(current.uid, column));
+      const question = await (shouldRemove ? api.removeQuestionImage(uid, column) : api.pickQuestionImage(uid, column));
       if (question) setCurrent(question);
     } catch (e) {
       toast.error('Picture not saved', { description: e.message.replace(/^Error invoking remote method '[^']+': (Error: )?/, '') });
@@ -471,9 +472,10 @@ export default function App() {
   }
 
   async function save() {
-    if (!dirty || saving) return;
-    const changed = Object.fromEntries(FIELDS.map(([k]) => [k, draft[k]]).filter(([k, v]) => v !== valueOf(current, k)));
+    if (saving) return;
     if (!current.uid && !(draft.text.trim() && draft.answer.trim())) return toast.error('Write the question and its answer first');
+    if (!dirty) return;
+    const changed = Object.fromEntries(FIELDS.map(([k]) => [k, draft[k]]).filter(([k, v]) => v !== valueOf(current, k)));
     setSaving(true);
     try {
       if (!current.uid) {
@@ -484,7 +486,7 @@ export default function App() {
         setSavedAt(new Date());
         setInfo(await api.info());
         toast.success('Question added');
-        return;
+        return question;
       }
       const { changed: wrote, question } = await api.save(current.uid, changed);
       setCurrent(question);
