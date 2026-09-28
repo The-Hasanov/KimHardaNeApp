@@ -13,7 +13,7 @@
     "test": "node --test",
     "bench": "node bench.js run",
     "dist": "vite build && node build-data.js && electron-builder --config electron-builder.config.js --win --publish never",
-    "dist:mac": "vite build && node build-data.js && electron-builder --config electron-builder.config.js --mac --publish never"
+    "dist:mac": "vite build && node build-data.js && APPLE_KEYCHAIN_PROFILE=${APPLE_KEYCHAIN_PROFILE:-kimhardane} electron-builder --config electron-builder.config.js --mac --publish never"
   },
   "dependencies": {
     "@huggingface/transformers": "^4.3.0",

@@ -28,8 +28,9 @@ module.exports = {
     { from: 'bundle/images', to: 'data/images' },
   ],
   win: { icon: 'icon.png', target: [{ target: 'nsis', arch: ['x64'] }] },
-  // ponytail: arm64 only (onnxruntime-node ships no darwin/x64 binary); unsigned, so no auto-update on Mac
-  mac: { icon: 'icon.png', category: 'public.app-category.education', target: [{ target: 'dmg', arch: ['arm64'] }] },
+  // ponytail: arm64 only (onnxruntime-node ships no darwin/x64 binary); no auto-update on Mac yet
+  // Signs with the Developer ID certificate in the Keychain and notarizes with the notarytool profile in APPLE_KEYCHAIN_PROFILE.
+  mac: { icon: 'icon.png', category: 'public.app-category.education', notarize: true, signIgnore: ['/Contents/Resources/data/'], target: [{ target: 'dmg', arch: ['arm64'] }] },
   nsis: { oneClick: true, perMachine: false },
   publish: updateUrl ? [{ provider: 'generic', url: updateUrl }] : null,
 };
