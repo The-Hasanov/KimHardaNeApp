@@ -583,10 +583,32 @@ function PlayersInLobby({ players, onKick }) {
   );
 }
 
+const timesLabel = count => (count === 1 ? 'first time' : count === 2 ? 'second time' : `${count} times`);
+
+function useAwayToasts(party) {
+  const seen = useRef({ question: null, counts: new Map() });
+  useEffect(() => {
+    const question = `${party.id}:${party.round}:${party.index}`;
+    if (seen.current.question !== question) seen.current = { question, counts: new Map() };
+    for (const player of party.players) {
+      const before = seen.current.counts.get(player.id) ?? 0;
+      seen.current.counts.set(player.id, player.timesAway);
+      if (party.phase !== 'question' || player.timesAway <= before) continue;
+      toast.warning(`${player.name} left the game screen`, {
+        id: `away:${question}:${player.id}`,
+        description: `Switched to another tab or app, ${timesLabel(player.timesAway)} this question.`,
+        icon: <TriangleAlertIcon className="size-4 text-amber-500" />,
+        duration: 4000,
+      });
+    }
+  }, [party]);
+}
+
 export default function PartyScreen({ party, isVisible, lobbySettings, onBackToLobby, onClose }) {
   const [isConfirmingClose, setIsConfirmingClose] = useState(false);
   const [playerToKick, setPlayerToKick] = useState(null);
   const [isWritingMessage, setIsWritingMessage] = useState(false);
+  useAwayToasts(party);
   const kick = player => (party.phase === 'lobby' && party.round === 0 ? api.partyKick(player.id) : setPlayerToKick(player));
   const handleKeyDown = useRef(null);
   const deadline = useMemo(() => (party.remainingMs == null || party.isPaused ? null : Date.now() + party.remainingMs), [party]);
