@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { KeyRoundIcon, LockIcon, SearchIcon, Trash2Icon, UserRoundIcon } from 'lucide-react';
+import { KeyRoundIcon, LockIcon, Trash2Icon, UserRoundIcon } from 'lucide-react';
 import { toast } from 'sonner';
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter,
@@ -7,12 +7,10 @@ import {
 } from '@/components/ui/alert-dialog';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 
 const { api } = window;
-const SEARCH_FROM_COUNT = 8;
 
 const dayLabel = sqliteTime => {
   const date = new Date(`${sqliteTime.replace(' ', 'T')}Z`);
@@ -50,7 +48,6 @@ function DeleteProfileDialog({ profile, onOpenChange, onDelete }) {
 
 export default function Profiles() {
   const [profiles, setProfiles] = useState(null);
-  const [query, setQuery] = useState('');
   const [profileToDelete, setProfileToDelete] = useState(null);
   useEffect(() => {
     api.partyProfiles().then(setProfiles);
@@ -64,7 +61,6 @@ export default function Profiles() {
     toast.success(`${profile.name}'s profile is deleted`);
   };
   if (!profiles) return null;
-  const shown = profiles.filter(profile => profile.name.toLowerCase().includes(query.trim().toLowerCase()));
   return (
     <div className="mx-auto max-w-3xl space-y-5 px-6 py-8">
       <div className="space-y-1">
@@ -74,12 +70,6 @@ export default function Profiles() {
           Players set or change their PIN in Settings on their own phone.
         </p>
       </div>
-      {profiles.length >= SEARCH_FROM_COUNT && (
-        <div className="relative">
-          <SearchIcon className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
-          <Input className="pl-8" placeholder="Find a player" value={query} onChange={e => setQuery(e.target.value)} />
-        </div>
-      )}
       {profiles.length ? (
         <div className="overflow-hidden rounded-lg border">
           <table className="w-full text-sm">
@@ -93,7 +83,7 @@ export default function Profiles() {
               </tr>
             </thead>
             <tbody className="divide-y">
-              {shown.map(profile => (
+              {profiles.map(profile => (
                 <tr key={profile.name}>
                   <td className="max-w-56 truncate px-3 py-2 font-medium">{profile.name}</td>
                   <td className="px-3 py-2">
@@ -118,9 +108,6 @@ export default function Profiles() {
                   </td>
                 </tr>
               ))}
-              {!shown.length && (
-                <tr><td colSpan={5} className="px-3 py-6 text-center text-muted-foreground">No player named “{query.trim()}”.</td></tr>
-              )}
             </tbody>
           </table>
         </div>

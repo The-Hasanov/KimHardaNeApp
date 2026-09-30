@@ -8,21 +8,18 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
-import { Select, SelectContent, SelectItem, SelectSeparator, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
-import { NumberField } from './gameShared';
+import { MIN_SECONDS_TO_CHECK_ANSWERS, NumberField, QuestionSourceSelect, withoutIpcPrefix } from './gameShared';
 import { PointSystemSelect, roundProblemOf } from './PointSystems';
 
 const { api } = window;
-const RANDOM_SOURCE = 'random';
 const MAX_ROUNDS = 20;
-const MIN_SECONDS_TO_CHECK_ANSWERS = 15;
 const DEFAULT_SECONDS_ON_ANSWER = 10;
 export const NEW_ROUND = {
   listId: null, randomCount: 10, includeOwn: false, secondsPerQuestion: 60, secondsBetweenQuestions: 0, revealAtEnd: false, secondsOnAnswer: 0, pointSystemId: null,
 };
 
-export const cleanError = e => e.message.replace(/^Error invoking remote method '[^']+': (Error: )?/, '');
 export const pointSystemOf = (round, pointSystems) => pointSystems?.find(system => system.id === round.pointSystemId) ?? pointSystems?.[0] ?? null;
 const listOf = (round, lists) => (round.listId == null ? null : lists.find(list => list.id === round.listId));
 
@@ -53,22 +50,7 @@ function RoundEditor({ index, round, lists, pointSystems, onChange }) {
   const set = changes => onChange({ ...round, ...changes });
   return (
     <div className="flex flex-wrap items-end gap-x-6 gap-y-4 border-t px-4 py-4">
-      <div className="grid gap-2">
-        <Label htmlFor={id('questions')}>Questions</Label>
-        <Select value={round.listId == null ? RANDOM_SOURCE : String(round.listId)}
-          onValueChange={value => set({ listId: value === RANDOM_SOURCE ? null : Number(value) })}>
-          <SelectTrigger id={id('questions')} className="w-56"><SelectValue placeholder="A deleted list" /></SelectTrigger>
-          <SelectContent position="popper">
-            <SelectItem value={RANDOM_SOURCE}>Random questions</SelectItem>
-            {lists.length > 0 && <SelectSeparator />}
-            {lists.map(list => (
-              <SelectItem key={list.id} value={String(list.id)} disabled={!list.count}>
-                {list.name}<span className="text-muted-foreground tabular-nums">{list.count}</span>
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
+      <QuestionSourceSelect id={id('questions')} lists={lists} listId={round.listId} onListIdChange={listId => set({ listId })} className="w-56" />
       {round.listId == null && <>
         <NumberField id={id('count')} label="How many" value={round.randomCount} min={1} max={50} onChange={randomCount => set({ randomCount })} />
         <div className="flex h-8 items-center gap-2">
@@ -124,7 +106,7 @@ function SaveTemplateDialog({ isOpen, onOpenChange, rounds, templates, suggested
       onOpenChange(false);
       toast.success(`${name.trim()} is saved`, { description: `${rounds.length} ${rounds.length === 1 ? 'round' : 'rounds'}. Find it under Templates.` });
     } catch (e) {
-      setError(cleanError(e));
+      setError(withoutIpcPrefix(e));
     }
   };
   return (

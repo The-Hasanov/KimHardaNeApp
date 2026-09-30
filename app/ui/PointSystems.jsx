@@ -14,23 +14,11 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { NumberField } from './gameShared';
+import { NumberField, pointsLabel, withoutIpcPrefix } from './gameShared';
 
 const { api } = window;
 const MAX_POOL_VALUES = 8;
 const POINTS = { min: -1000, max: 1000 };
-const NEW_POINT_SYSTEM = {
-  name: '',
-  mode: 'simple',
-  simple: { correct: 1, wrong: 0, unanswered: 0 },
-  pool: [{ points: 10, wrong: 0, unanswered: 0, uses: null }, { points: 20, wrong: -10, unanswered: 0, uses: null }, { points: 30, wrong: -20, unanswered: -10, uses: null }],
-  streak: { isOn: false, from: 3, bonus: 1, isGrowing: false },
-  allOrNothing: { isOn: false, unansweredCountsAsWrong: true },
-  perfectBonus: { isOn: false, points: 5 },
-  risk: { isOn: false, correct: 2, wrong: -2, limit: null },
-};
-
-export const signed = points => (points > 0 ? `+${points}` : points < 0 ? `−${-points}` : '0');
 
 export function roundProblemOf(system, questionCount) {
   if (!system || system.mode !== 'pool' || system.pool.some(entry => entry.uses == null)) return null;
@@ -100,7 +88,7 @@ function streakExample(draft) {
   const { from, bonus, isGrowing } = draft.streak;
   const length = from + 2;
   const bonuses = Array.from({ length }, (_, i) => (i + 1 >= from ? bonus * (isGrowing ? i + 2 - from : 1) : 0));
-  if (base == null) return `Correct answers ${from} to ${length} in a row add ${bonuses.slice(from - 1).map(signed).join(', ')} on top of the picked points. A wrong or missing answer starts the count again.`;
+  if (base == null) return `Correct answers ${from} to ${length} in a row add ${bonuses.slice(from - 1).map(pointsLabel).join(', ')} on top of the picked points. A wrong or missing answer starts the count again.`;
   const points = bonuses.map(extra => base + extra);
   return `${length} correct in a row: ${points.join(', ')} = ${points.reduce((sum, value) => sum + value, 0)}. A wrong or missing answer starts the count again.`;
 }
@@ -111,7 +99,7 @@ function allOrNothingExample(draft) {
 }
 
 function perfectBonusExample(draft) {
-  const bonus = signed(draft.perfectBonus.points);
+  const bonus = pointsLabel(draft.perfectBonus.points);
   if (draft.mode === 'pool') return `A round with every answer right gets the picked points ${bonus}.`;
   const earned = 5 * draft.simple.correct;
   return `5 questions, all correct: ${earned} ${bonus} = ${earned + draft.perfectBonus.points}. One wrong${draft.allOrNothing.isOn && !draft.allOrNothing.unansweredCountsAsWrong ? '' : ' or missing'} answer and there is no bonus.`;
@@ -166,7 +154,7 @@ function PointSystemEditor({ system, onOpenChange, onSaved }) {
       onSaved(pointSystems, id);
       toast.success(`${draft.name.trim()} is saved`);
     } catch (e) {
-      setError(e.message.replace(/^Error invoking remote method '[^']+': (Error: )?/, ''));
+      setError(withoutIpcPrefix(e));
     }
   };
   return (
@@ -234,8 +222,8 @@ function PointSystemEditor({ system, onOpenChange, onSaved }) {
             <NumberField id="risk-wrong" label="Risked wrong" value={draft.risk.wrong} {...POINTS} onChange={wrong => set('risk', { wrong })} />
             <NumberField id="risk-limit" label="Risks per round" value={draft.risk.limit} min={1} max={99} placeholder="Any" isOptional onChange={limit => set('risk', { limit })} />
             <Example>
-              Correct {signed(draft.simple.correct)}, risked correct {signed(draft.risk.correct)} · wrong {signed(draft.simple.wrong)}, risked wrong {signed(draft.risk.wrong)} ·
-              no answer {signed(draft.simple.unanswered)}. {draft.risk.limit ? `Each player can risk ${draft.risk.limit} ${draft.risk.limit === 1 ? 'time' : 'times'} per round.` : 'No limit per round.'}
+              Correct {pointsLabel(draft.simple.correct)}, risked correct {pointsLabel(draft.risk.correct)} · wrong {pointsLabel(draft.simple.wrong)}, risked wrong {pointsLabel(draft.risk.wrong)} ·
+              no answer {pointsLabel(draft.simple.unanswered)}. {draft.risk.limit ? `Each player can risk ${draft.risk.limit} ${draft.risk.limit === 1 ? 'time' : 'times'} per round.` : 'No limit per round.'}
             </Example>
           </ExtraCard>
         </div>
@@ -257,7 +245,7 @@ export default function PointSystems() {
       setPointSystems(await api.deletePointSystem(system.id));
       toast.success(`${system.name} is deleted`);
     } catch (e) {
-      toast.error(`Could not delete ${system.name}`, { description: e.message.replace(/^Error invoking remote method '[^']+': (Error: )?/, '') });
+      toast.error(`Could not delete ${system.name}`, { description: withoutIpcPrefix(e) });
     }
   };
   const editable = ({ summary, updated_at, usedBy, ...system }) => system;
@@ -269,7 +257,7 @@ export default function PointSystems() {
           <h1 className="text-2xl font-semibold">Point systems</h1>
           <p className="text-muted-foreground">Save the ways you like to score, then pick one for each party round.</p>
         </div>
-        <Button onClick={() => setEditing({ ...NEW_POINT_SYSTEM })}><PlusIcon />New point system</Button>
+        <Button onClick={async () => setEditing(await api.newPointSystem())}><PlusIcon />New point system</Button>
       </div>
       <ul className="grid gap-3 sm:grid-cols-2">
         {pointSystems.map(system => (

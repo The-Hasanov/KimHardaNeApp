@@ -102,4 +102,4 @@ class PlayerProfiles {
   }
 }
 
-module.exports = { PlayerProfiles, ProfileError, memoryProfileStorage, nameKeyOf, DEFAULT_PREFERENCES, MAX_PIN_TRIES, PIN_LOCK_MS };
+module.exports = { PlayerProfiles, MAX_PIN_TRIES, PIN_LOCK_MS };

@@ -7,7 +7,8 @@ import {
 } from '@/components/ui/alert-dialog';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { cleanError, roundProblem, roundSummary } from './RoundPlan';
+import { withoutIpcPrefix } from './gameShared';
+import { roundProblem, roundSummary } from './RoundPlan';
 
 const { api } = window;
 
@@ -18,7 +19,7 @@ export default function Templates({ templates, onTemplatesChange, lists, pointSy
       onTemplatesChange(await api.deleteGameTemplate(template.id));
       toast.success(`${template.name} is deleted`);
     } catch (e) {
-      toast.error(`Could not delete ${template.name}`, { description: cleanError(e) });
+      toast.error(`Could not delete ${template.name}`, { description: withoutIpcPrefix(e) });
     }
   };
   if (!templates || !pointSystems) return null;

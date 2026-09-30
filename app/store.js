@@ -496,10 +496,6 @@ class Store {
       .map(({ settings, ...row }) => ({ ...JSON.parse(settings), ...row }));
   }
 
-  pointSystem(id) {
-    return this.pointSystems().find(system => system.id === id) ?? null;
-  }
-
   savePointSystem({ id = null, name, ...settings }) {
     const clash = this.db.prepare('SELECT id FROM point_systems WHERE name = ? AND id IS NOT ?').get(name, id);
     if (clash) throw new Error(`A point system named “${name}” already exists`);

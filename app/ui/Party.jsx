@@ -23,7 +23,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Toggle } from '@/components/ui/toggle';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import {
-  KEY_HINT_ON_PRIMARY_BUTTON, QuestionOnScreen, WARNING_AT_SECONDS_LEFT, formatClock, useCountdown, withLineBreaks,
+  KEY_HINT_ON_PRIMARY_BUTTON, QuestionOnScreen, pointsLabel, withoutIpcPrefix, WARNING_AT_SECONDS_LEFT, formatClock, useCountdown, withLineBreaks,
 } from './gameShared';
 import { toast } from 'sonner';
 import { CorrectAnswer } from './Play';
@@ -34,7 +34,6 @@ const PHASES_IN_ROUND = ['waiting', 'question', 'judging', 'reveal'];
 
 const secondsLabel = seconds => (seconds == null ? '—' : `${seconds.toFixed(1)} s`);
 const answerSeconds = answer => (answer?.ms == null || !answer.given ? null : answer.ms / 1000);
-const pointsLabel = points => (points > 0 ? `+${points}` : points < 0 ? `−${-points}` : '0');
 const hostOf = url => url.replace(/^http:\/\//, '').replace(/\/$/, '');
 const isWaitingToReveal = party => party.phase === 'judging' && party.rules.revealAtEnd && party.answers.every(answer => answer.isCorrect !== undefined);
 const outcomeOf = answer => (answer.isCorrect ? 'correct' : answer.verdict === 'unsure' && !answer.decidedByHost ? 'unsure' : 'wrong');
@@ -407,7 +406,6 @@ function QuestionForHost({ party, onKick }) {
   );
 }
 
-const withoutIpcPrefix = error => error.message.replace(/^Error invoking remote method '[^']+': (Error: )?/, '');
 
 function SamsungTvDialog({ isOpen, onOpenChange }) {
   const [tvs, setTvs] = useState(null);

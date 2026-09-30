@@ -2,8 +2,33 @@ import { useEffect, useRef, useState } from 'react';
 import { cn } from 'cn';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectSeparator, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 export const WARNING_AT_SECONDS_LEFT = 10;
+export const MIN_SECONDS_TO_CHECK_ANSWERS = 15;
+export const withoutIpcPrefix = error => error.message.replace(/^Error invoking remote method '[^']+': (Error: )?/, '');
+export const pointsLabel = points => (points > 0 ? `+${points}` : points < 0 ? `−${-points}` : '0');
+const RANDOM_SOURCE = 'random';
+
+export function QuestionSourceSelect({ id, lists, listId, onListIdChange, className = 'w-64' }) {
+  return (
+    <div className="grid gap-2">
+      <Label htmlFor={id}>Questions</Label>
+      <Select value={listId == null ? RANDOM_SOURCE : String(listId)} onValueChange={value => onListIdChange(value === RANDOM_SOURCE ? null : Number(value))}>
+        <SelectTrigger id={id} className={className}><SelectValue placeholder="A deleted list" /></SelectTrigger>
+        <SelectContent position="popper">
+          <SelectItem value={RANDOM_SOURCE}>Random questions</SelectItem>
+          {lists.length > 0 && <SelectSeparator />}
+          {lists.map(list => (
+            <SelectItem key={list.id} value={String(list.id)} disabled={!list.count}>
+              {list.name}<span className="text-muted-foreground tabular-nums">{list.count}</span>
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </div>
+  );
+}
 
 export function NumberField({ id, label, value, min, max, step = 1, onChange, isOptional = false, placeholder, className = 'w-28' }) {
   const shown = value == null ? '' : String(value);

@@ -11,23 +11,21 @@ import {
 } from '@/components/ui/alert-dialog';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Kbd } from '@/components/ui/kbd';
 import { Label } from '@/components/ui/label';
 import { Progress } from '@/components/ui/progress';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
-import { Select, SelectContent, SelectItem, SelectSeparator, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Spinner } from '@/components/ui/spinner';
 import { Switch } from '@/components/ui/switch';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
-  KEY_HINT_ON_PRIMARY_BUTTON, Media, NextQuestionNumber, NumberField, QuestionOnScreen, WARNING_AT_SECONDS_LEFT, formatClock, playTenSecondsLeftTone,
-  playTimeUpTone, withLineBreaks,
+  KEY_HINT_ON_PRIMARY_BUTTON, MIN_SECONDS_TO_CHECK_ANSWERS, Media, NextQuestionNumber, NumberField, QuestionSourceSelect, QuestionOnScreen, WARNING_AT_SECONDS_LEFT, formatClock, playTenSecondsLeftTone,
+  playTimeUpTone, withLineBreaks, withoutIpcPrefix,
 } from './gameShared';
 import PartyScreen, { AllTimeLeaderboard } from './Party';
 import Profiles from './Profiles';
 import PointSystems, { usePointSystems } from './PointSystems';
-import RoundPlan, { NEW_ROUND, cleanError, pointSystemOf, roundProblem } from './RoundPlan';
+import RoundPlan, { NEW_ROUND, pointSystemOf, roundProblem } from './RoundPlan';
 import Templates from './Templates';
 import { PlayHistory, PlayResults, PlayRound } from './Play';
 
@@ -35,9 +33,7 @@ const { api } = window;
 const DEFAULT_RANDOM_COUNT = 10;
 const MAX_RANDOM_COUNT = 50;
 const DEFAULT_SECONDS_PER_QUESTION = 60;
-const RANDOM_SOURCE = 'random';
 const MAX_SECONDS_BETWEEN_QUESTIONS = 120;
-const MIN_SECONDS_TO_CHECK_ANSWERS = 15;
 const RANDOM_GAME_TITLE = 'Random · Nə? Harada? Nə zaman?';
 
 const MODE_DESCRIPTIONS = {
@@ -55,22 +51,7 @@ function RoundSettings({ mode, questions, lists, listId, onListIdChange, onNewSe
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-end gap-3">
-        <div className="grid gap-2">
-          <Label>Questions</Label>
-          <Select value={listId == null ? RANDOM_SOURCE : String(listId)}
-            onValueChange={value => onListIdChange(value === RANDOM_SOURCE ? null : Number(value))}>
-            <SelectTrigger className="w-64"><SelectValue /></SelectTrigger>
-            <SelectContent position="popper">
-              <SelectItem value={RANDOM_SOURCE}>Random questions</SelectItem>
-              {lists.length > 0 && <SelectSeparator />}
-              {lists.map(list => (
-                <SelectItem key={list.id} value={String(list.id)} disabled={!list.count}>
-                  {list.name}<span className="text-muted-foreground tabular-nums">{list.count}</span>
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
+        <QuestionSourceSelect id="question-source" lists={lists} listId={listId} onListIdChange={onListIdChange} />
         {!chosenList && <>
           <NumberField id="random-question-count" label="How many" value={settings.randomCount} min={1} max={MAX_RANDOM_COUNT}
             onChange={randomCount => onSettingsChange({ randomCount })} />
@@ -240,9 +221,9 @@ export default function Game({ isVisible, lists, listId, onListIdChange, isAiRea
     loading.then(setQuestions, e => toast.error('Could not load questions', { description: e.message }));
   };
   useEffect(() => {
-    if (!isVisible || !['setup', 'party'].includes(phase)) return;
+    if (!isVisible || phase !== 'setup' || mode === 'party') return;
     if (listId != null || !questions || listIdOfQuestions.current !== listId) pickQuestions();
-  }, [isVisible, listId]);
+  }, [isVisible, listId, mode]);
 
   const resetTimer = () => {
     setTimerEndsAt(null);
@@ -350,7 +331,7 @@ export default function Game({ isVisible, lists, listId, onListIdChange, isAiRea
         secondsOnAnswer: round.secondsOnAnswer, revealAtEnd: round.revealAtEnd,
       });
     } catch (e) {
-      toast.error('Could not start the round', { description: cleanError(e) });
+      toast.error('Could not start the round', { description: withoutIpcPrefix(e) });
     }
     setIsStartingRound(false);
   };
@@ -360,10 +341,8 @@ export default function Game({ isVisible, lists, listId, onListIdChange, isAiRea
     changeMode('party');
     setSection('play');
   };
-  const partyBackToLobby = async keepScores => {
-    await api.partyBackToLobby(keepScores);
-    pickQuestions();
-  };
+  const partyBackToLobby = keepScores => api.partyBackToLobby(keepScores);
+
   const closeParty = async () => {
     await api.partyClose();
     setPartyState(null);

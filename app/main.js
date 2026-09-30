@@ -270,7 +270,7 @@ app.whenReady().then(() => {
     return party.game.hostView();
   });
   handle('party-start-round', withParty((game, { uids, pointSystemId, ...rules }) => game.startRound({
-    questions: uids.map(uid => store.get(uid)).filter(Boolean), ...rules, pointSystem: store.pointSystem(pointSystemId) ?? undefined,
+    questions: uids.map(uid => store.get(uid)).filter(Boolean), ...rules, pointSystem: store.pointSystems().find(system => system.id === pointSystemId),
   })));
   handle('party-skip-wait', withParty(game => game.skipWait()));
   handle('party-pause', withParty(game => game.pause()));
@@ -295,6 +295,7 @@ app.whenReady().then(() => {
     return store.pointSystems().map(system => ({ ...system, summary: summaryOf(normalizePointSystem(system)), usedBy: store.templatesUsingPointSystem(system.id) }));
   };
   handle('point-systems', pointSystemsWithSummary);
+  handle('new-point-system', () => ({ ...normalizePointSystem(CLASSIC_POINT_SYSTEM), name: '' }));
   handle('save-point-system', system => {
     const id = store.savePointSystem({ id: system.id ?? null, ...normalizePointSystem(system) });
     return { id, pointSystems: pointSystemsWithSummary() };

@@ -48,6 +48,7 @@ contextBridge.exposeInMainWorld('api', {
   partyResults: () => ipcRenderer.invoke('party-results'),
   resetPartyResults: () => ipcRenderer.invoke('reset-party-results'),
   pointSystems: () => ipcRenderer.invoke('point-systems'),
+  newPointSystem: () => ipcRenderer.invoke('new-point-system'),
   gameTemplates: () => ipcRenderer.invoke('game-templates'),
   saveGameTemplate: template => ipcRenderer.invoke('save-game-template', template),
   deleteGameTemplate: id => ipcRenderer.invoke('delete-game-template', id),

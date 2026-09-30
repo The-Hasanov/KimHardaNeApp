@@ -143,6 +143,4 @@ function scoreRound(system, entries, { isComplete = false } = {}) {
   return { perQuestion, perfectBonus, isBroken, total: isBroken ? 0 : earned + perfectBonus };
 }
 
-module.exports = {
-  CLASSIC_POINT_SYSTEM, POINT_LIMIT, MAX_POOL_VALUES, normalizePointSystem, summaryOf, roundProblem, usesLeft, pickFor, risksLeft, basePoints, scoreRound,
-};
+module.exports = { CLASSIC_POINT_SYSTEM, normalizePointSystem, summaryOf, roundProblem, usesLeft, pickFor, risksLeft, scoreRound };
