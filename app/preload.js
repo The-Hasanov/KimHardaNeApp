@@ -81,7 +81,13 @@ contextBridge.exposeInMainWorld('api', {
   removeQuestionImage: (uid, column) => ipcRenderer.invoke('remove-question-image', uid, column),
   onUpdate: cb => ipcRenderer.on('update', (_e, status) => cb(status)),
   installUpdate: () => ipcRenderer.invoke('install-update'),
-  refresh: mode => ipcRenderer.invoke('refresh', mode),
-  cancelRefresh: () => ipcRenderer.invoke('cancel-refresh'),
-  onRefresh: cb => ipcRenderer.on('refresh', (_e, progress) => cb(progress)),
+  dataSources: () => ipcRenderer.invoke('data-sources'),
+  updateDataSource: (id, mode) => ipcRenderer.invoke('update-data-source', id, mode),
+  stopDataSource: () => ipcRenderer.invoke('stop-data-source'),
+  deleteDataSource: id => ipcRenderer.invoke('delete-data-source', id),
+  onDataSourceProgress: cb => {
+    const listener = (_e, progress) => cb(progress);
+    ipcRenderer.on('data-source-progress', listener);
+    return () => ipcRenderer.removeListener('data-source-progress', listener);
+  },
 });

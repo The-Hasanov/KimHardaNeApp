@@ -5,9 +5,9 @@ const { execFile } = require('node:child_process');
 const fs = require('node:fs');
 const path = require('node:path');
 const { Store, OWN_PACKAGE_ID } = require('./store');
-const { installData } = require('./data');
+const { openLibraryFile, prepareLibrary } = require('./data');
+const { DATA_SOURCES, dataSourceById, describe } = require('./sources');
 const ai = require('./ai');
-const scraper = require('./scraper');
 const { judgeAnswer } = require('./judge');
 const { openParty } = require('./party');
 const { PlayerProfiles } = require('./profiles');
@@ -21,26 +21,25 @@ const USER_DATA_BEFORE_RENAME = path.join(app.getPath('appData'), '3sual Editor'
 if (!app.commandLine.hasSwitch('user-data-dir') && fs.existsSync(USER_DATA_BEFORE_RENAME)) app.setPath('userData', USER_DATA_BEFORE_RENAME);
 let store;
 let imageRoots;
-let refreshing = null;
+let dataSourceJob = null;
 let aiStatus = { state: 'off' };
 let aiJob = null;
 let party = null;
 let partyDisplay = null;
-let dataUpdate = null;
 
 function openStore() {
   if (!app.isPackaged) {
     const file = process.env.QUIZ_DB || path.join(__dirname, '..', 'data', '3sual.sqlite');
+    fs.mkdirSync(path.dirname(path.resolve(file)), { recursive: true });
+    prepareLibrary(file);
     imageRoots = [path.dirname(path.resolve(file))];
     if (process.env.QUIZ_MODELS) ai.configure({ modelsDir: process.env.QUIZ_MODELS });
     return new Store(file, { imagesRoot: imageRoots });
   }
-  const res = process.resourcesPath;
   ai.configure({ modelsDir: path.join(app.getPath('userData'), 'models') });
-  const r = installData({ bundled: path.join(res, 'data', '3sual.sqlite'), dir: path.join(app.getPath('userData'), 'data'), version: app.getVersion() });
-  if (r.replaced && r.from) dataUpdate = { from: r.from, carried: r.carried, newer: r.newer };
-  imageRoots = [path.dirname(r.db), path.join(res, 'data')];
-  return new Store(r.db, { imagesRoot: imageRoots });
+  const file = openLibraryFile(path.join(app.getPath('userData'), 'data'));
+  imageRoots = [path.dirname(file)];
+  return new Store(file, { imagesRoot: imageRoots });
 }
 
 const settingsFile = () => path.join(app.getPath('userData'), 'settings.json');
@@ -151,30 +150,13 @@ function checkForUpdates(win) {
   autoUpdater.checkForUpdates().catch(() => {});
 }
 
-const dataDate = () => {
-  try {
-    return store.db.prepare(`SELECT MAX(d) AS d FROM (SELECT MAX(finished_at) AS d FROM runs WHERE status = 'finished'
-      UNION ALL SELECT MAX(fetched_at) FROM packages WHERE status != 'failed')`).get().d;
-  } catch {
-    return null;
-  }
-};
+const dataSources = () => DATA_SOURCES.map(source => describe(source, store.db, imageRoots));
 
-async function refresh(win, mode, signal) {
-  const progress = p => win.webContents.send('refresh', p);
-  const count = sql => store.db.prepare(sql).get().n;
-  const db = scraper.prepareDb(store.db);
-  const before = { rows: count('SELECT COUNT(*) AS n FROM questions'), packages: count("SELECT COUNT(*) AS n FROM packages WHERE status != 'failed'") };
-  const last = db.prepare('SELECT status, started_at FROM runs ORDER BY id DESC LIMIT 1').get();
-  const resume = !!last && last.status !== 'finished' && Date.now() - Date.parse(last.started_at) < 864e5;
-  const client = new scraper.Client({ signal });
-  let crawled, images = null, error = null;
-  try {
-    crawled = await scraper.crawl(db, { client, refresh: mode === 'full', newRun: !resume, audit: 'counts', progress });
-    if (crawled.status === 'finished') images = await scraper.downloadImages(db, client, imageRoots, { progress });
-  } catch (e) {
-    if (!(e instanceof scraper.Interrupted)) error = e.message;
-  }
+async function updateDataSource(win, source, mode, signal) {
+  const progress = p => win.webContents.send('data-source-progress', { sourceId: source.id, ...p });
+  const count = () => store.db.prepare('SELECT COUNT(*) AS n FROM questions').get().n;
+  const before = count();
+  const result = await source.download(store.db, { mode, signal, roots: imageRoots, progress });
   progress({ stage: 'index' });
   await new Promise(r => setTimeout(r, 50));
   store.reload();
@@ -183,18 +165,13 @@ async function refresh(win, mode, signal) {
     try {
       await ai.embedRows(store, stale, (done, total) => {
         progress({ stage: 'embed', done, total });
-        if (signal.aborted || !isAiReady()) throw new scraper.Interrupted();
+        if (signal.aborted || !isAiReady()) throw new Error('stopped');
       });
     } catch (e) {
-      if (!(e instanceof scraper.Interrupted)) error ??= e.message;
+      if (!signal.aborted && isAiReady()) result.error ??= e.message;
     }
   }
-  const report = crawled?.report;
-  return { mode, cancelled: signal.aborted, error, complete: !!report?.complete && !!images?.complete,
-    rows: store.rows.length, newRows: store.rows.length - before.rows,
-    newPackages: count("SELECT COUNT(*) AS n FROM packages WHERE status != 'failed'") - before.packages,
-    images: images?.fetched_this_run ?? 0, failures: (report?.errors ?? 0) + (images?.failed ?? 0),
-    vectors: store.vectorCount, dataDate: dataDate() };
+  return { ...result, cancelled: signal.aborted, newRows: count() - before };
 }
 
 app.whenReady().then(() => {
@@ -206,6 +183,10 @@ app.whenReady().then(() => {
   win.removeMenu();
   win.on('page-title-updated', e => e.preventDefault());
   win.on('close', closePartyDisplay);
+  win.webContents.setWindowOpenHandler(({ url }) => {
+    if (/^https:\/\//i.test(url)) shell.openExternal(url);
+    return { action: 'deny' };
+  });
   win.loadFile('renderer/index.html');
 
   const ready = new Promise(resolve => setTimeout(resolve, 100)).then(() => {
@@ -215,7 +196,7 @@ app.whenReady().then(() => {
   });
   const handle = (channel, fn) => ipcMain.handle(channel, async (_e, ...args) => { await ready; return fn(...args); });
 
-  handle('info', () => ({ version: app.getVersion(), rows: store.rows.length, ownCount: store.rows.filter(row => row.package_id === OWN_PACKAGE_ID).length, games: store.games(), dataUpdate, dataDate: dataDate() }));
+  handle('info', () => ({ version: app.getVersion(), rows: store.rows.length, ownCount: store.rows.filter(row => row.package_id === OWN_PACKAGE_ID).length, games: store.games() }));
   handle('ai-status', () => aiStatus);
   handle('set-ai-search', async isOn => {
     writeSettings({ aiSearch: isOn });
@@ -405,22 +386,30 @@ app.whenReady().then(() => {
     if (row && isAiReady()) await ai.embedRows(store, [row]);
     return { changed: !!row, question: store.get(uid) };
   });
-  handle('refresh', async mode => {
-    if (refreshing) return { error: 'A refresh is already running' };
-    refreshing = new AbortController();
+  handle('data-sources', dataSources);
+  handle('update-data-source', async (id, mode) => {
+    if (dataSourceJob) throw new Error('A data source is already downloading');
+    const source = dataSourceById(id);
+    dataSourceJob = new AbortController();
     try {
-      return await refresh(win, mode, refreshing.signal);
+      return { ...(await updateDataSource(win, source, mode, dataSourceJob.signal)), dataSources: dataSources() };
     } finally {
-      refreshing = null;
+      dataSourceJob = null;
     }
   });
-  ipcMain.handle('cancel-refresh', () => refreshing?.abort());
+  ipcMain.handle('stop-data-source', () => dataSourceJob?.abort());
+  handle('delete-data-source', id => {
+    if (dataSourceJob) throw new Error('Wait until the download stops');
+    dataSourceById(id).remove(store.db, imageRoots);
+    store.reload();
+    return dataSources();
+  });
   ipcMain.handle('install-update', () => autoUpdater.quitAndInstall(false, true));
   checkForUpdates(win);
 });
 
 app.on('will-quit', () => {
-  refreshing?.abort();
+  dataSourceJob?.abort();
   aiJob?.controller.abort();
   party?.close();
   store?.db.close();

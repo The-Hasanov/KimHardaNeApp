@@ -4,7 +4,7 @@
 
 A Windows app for hosting quiz nights in the style of *Nə? Harada? Nə zaman?* (What? Where? When?). Players
 answer in the web browser of any phone, tablet or computer, the TV shows the questions, a countdown and the leaderboard, and the host runs the
-game from the app. Bring your own questions or use the bundled question bank.
+game from the app. Bring your own questions or install a question bank from *Data sources* in Settings.
 
 ![A question on the TV](docs/screenshots/tv-question.png)
 
@@ -70,17 +70,18 @@ first launch choose **System Settings → Privacy & Security → Open Anyway**.
 Windows Firewall asks once whether KimHardaNeApp may accept connections on private networks. Allow it, or
 phones cannot join a party.
 
-## Question bank
+## Question banks
 
-The installer comes with about 68,000 Azerbaijani questions from [3sual.az](https://3sual.az/), collected
-from its public API by the included scraper (*Refresh data* in Settings fetches new ones). The questions
-belong to their authors and to 3sual.az. Your own questions and edits are kept apart from refreshes and
-updates.
+The app ships without questions. *Settings → Data sources* lists the question banks it can download from, each
+with *Install*, *Refresh* and *Delete*. For now there is one: about 68,000 Azerbaijani questions from
+[3sual.az](https://3sual.az/), collected from its public API by the included scraper (about an hour to install,
+one request per second). The questions belong to their authors and to 3sual.az. Your own questions, edits, lists
+and party data are kept apart from installs, refreshes, deletes and updates.
 
 ## Build from source
 
-The question database is not in this repository. The scraper builds it (about 20 minutes, one request per
-second).
+The question database is not in this repository. Install 3sual.az from *Settings → Data sources*, or build it
+with the scraper (about 20 minutes, one request per second).
 
 ```bash
 cd app
@@ -108,5 +109,5 @@ node bench/judge.js 1000  # benchmark the answer check
 
 ## License
 
-The code is under the [MIT License](LICENSE). The bundled questions are not: they belong to their authors
+The code is under the [MIT License](LICENSE). The downloaded questions are not: they belong to their authors
 and 3sual.az.

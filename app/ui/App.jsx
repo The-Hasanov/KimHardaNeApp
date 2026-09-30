@@ -3,7 +3,7 @@ import { toast } from 'sonner';
 import { useDefaultLayout } from 'react-resizable-panels';
 import { cn } from 'cn';
 import {
-  DownloadIcon, EyeIcon, FileDownIcon, FileUpIcon, FileTextIcon, ImagePlusIcon, PencilIcon, RotateCcwIcon, SaveIcon, SearchIcon,
+  DatabaseIcon, DownloadIcon, EyeIcon, FileDownIcon, FileUpIcon, FileTextIcon, ImagePlusIcon, PencilIcon, RotateCcwIcon, SaveIcon, SearchIcon,
   ListIcon, ListPlusIcon, MoonIcon, NotebookPenIcon, PlusIcon, SearchXIcon, SettingsIcon, SparklesIcon, TimerIcon, Trash2Icon, UserIcon, XIcon,
 } from 'lucide-react';
 import {
@@ -33,6 +33,7 @@ import {
 import Game from './Game';
 import Lists, { ListNameDialog } from './Lists';
 import SettingsDialog, { describeAiWork } from './Settings';
+import { useDataSources } from './DataSources';
 import { setNightMode, useNightMode } from './theme';
 import { Media, withoutIpcPrefix } from './gameShared';
 import { exportedMessage, importDetails, questionCountLabel, runTransfer } from './transferMessages';
@@ -47,8 +48,6 @@ const MODES = [
   ['keyword', 'Keyword', 'Exact words (BM25), tolerant of small typos'],
   ['ai', 'AI', 'Similar meaning, even without shared words'],
 ];
-const STAGES = { list: 'Listing packages', packages: 'Downloading packages', audit: 'Checking authors',
-  images: 'Downloading images', index: 'Rebuilding search index', embed: 'Computing AI vectors' };
 const PAGE = 100;
 const VIEWS = [['search', SearchIcon, 'Search'], ['mine', NotebookPenIcon, 'Custom'], ['lists', ListIcon, 'Lists'], ['game', TimerIcon, 'Game']];
 const OWN_PACKAGE_ID = 0;
@@ -293,6 +292,7 @@ export default function App() {
   const [mode, setMode] = useState('hybrid');
   const [aiStatus, setAiStatus] = useState({ state: 'off' });
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [settingsTab, setSettingsTab] = useState('general');
   const [game, setGame] = useState('all');
   const [edited, setEdited] = useState(false);
   const [withImage, setWithImage] = useState(false);
@@ -314,9 +314,6 @@ export default function App() {
   const [draft, setDraft] = useState({});
   const [saving, setSaving] = useState(false);
   const [savedAt, setSavedAt] = useState(null);
-  const [progress, setProgress] = useState(null);
-  const [stopping, setStopping] = useState(false);
-  const [refreshMode, setRefreshMode] = useState('quick');
   const [ask, setAsk] = useState(null);
   const [zoom, setZoom] = useState(null);
   const [update, setUpdate] = useState(null);
@@ -337,19 +334,19 @@ export default function App() {
   const isBrowsing = view === 'search' || isMine;
   const aiWork = describeAiWork(aiStatus);
   const changeAiSearch = isOn => api.setAiSearch(isOn).then(setAiStatus);
+  const dataSources = useDataSources(() => {
+    api.info().then(setInfo);
+    refreshLists();
+  });
+  const openSettings = tab => {
+    setSettingsTab(tab);
+    setIsSettingsOpen(true);
+  };
 
   useEffect(() => {
-    api.info().then(i => {
-      setInfo(i);
-      if (i.dataUpdate) {
-        const { from, carried, newer } = i.dataUpdate;
-        const kept = [carried && `your ${plural(carried, 'edited question')}`, newer && `${plural(newer, 'package')} you refreshed later`].filter(Boolean);
-        toast.info(`Data updated from v${from}`, { description: kept.length ? `Kept ${kept.join(' and ')}.` : undefined, duration: 15000 });
-      }
-    }, e => setLoadError(e.message));
+    api.info().then(setInfo, e => setLoadError(e.message));
     api.onAi(setAiStatus);
     api.aiStatus().then(setAiStatus);
-    api.onRefresh(setProgress);
     api.onUpdate(u => {
       setUpdate(prev => ({ ...prev, ...u }));
       if (u.state === 'ready') toast.info(`Update ${u.version} is ready`, { duration: Infinity, action: { label: 'Restart', onClick: () => onKey.current.restart() } });
@@ -511,24 +508,6 @@ export default function App() {
     }
   }
 
-  async function startRefresh() {
-    setProgress({ stage: 'start' });
-    const r = await api.refresh(refreshMode).catch(e => ({ error: e.message }));
-    setProgress(null);
-    setStopping(false);
-    const sign = n => (n > 0 ? '+' : '') + fmt(n);
-    const done = r.newRows == null ? '' : `${plural(r.newPackages, 'new package')}, ${sign(r.newRows)} questions, ${plural(r.images, 'image')}`;
-    if (r.error) toast.error('Refresh failed', { description: r.error + (done && ` (${done})`), duration: 20000 });
-    else if (r.cancelled) toast.info('Refresh stopped', { description: `${done}. Refresh again within a day to continue where it stopped.`, duration: 10000 });
-    else toast.success('Data refreshed', { description: done + (r.failures ? `, ${plural(r.failures, 'failure')}` : ''), duration: 10000 });
-    setInfo(await api.info());
-  }
-
-  function stopRefresh() {
-    setStopping(true);
-    api.cancelRefresh();
-  }
-
   onKey.current = e => {
     const viewAtKey = e.ctrlKey && !e.altKey && VIEWS[Number(e.key) - 1];
     if (viewAtKey) {
@@ -574,8 +553,6 @@ export default function App() {
     isSearching && searchMode !== 'keyword' && (results.ai ? 'AI ranked' : 'AI unavailable, keyword only'),
     `showing ${fmt(hits.length)}`, `${results.ms} ms`,
   ].filter(Boolean).join(' · ');
-  const stage = progress && (stopping ? 'Stopping…'
-    : `${STAGES[progress.stage] ?? 'Starting refresh'}${progress.total ? ` ${fmt(progress.done)}/${fmt(progress.total)}` : '…'}`);
   const resetSearch = () => {
     setQ('');
     setQuery('');
@@ -632,7 +609,7 @@ export default function App() {
             ) : <KbdGroup><Kbd>Ctrl</Kbd><Kbd>K</Kbd></KbdGroup>}
           </InputGroupAddon>
         </InputGroup>
-        <Select value={searchMode} onValueChange={v => (v === 'keyword' || isAiReady ? filter(setMode)(v) : setIsSettingsOpen(true))}>
+        <Select value={searchMode} onValueChange={v => (v === 'keyword' || isAiReady ? filter(setMode)(v) : openSettings('general'))}>
           <SelectTrigger className="w-28" aria-label="Ranking"><SelectValue /></SelectTrigger>
           <SelectContent position="popper">
             {MODES.map(([value, label, hint]) => (
@@ -664,7 +641,7 @@ export default function App() {
         <Tooltip>
           <TooltipTrigger asChild>
             <Button variant="ghost" size="icon" aria-label="Settings" className={cn(view === 'lists' && 'ml-auto')}
-              onClick={() => setIsSettingsOpen(true)}><SettingsIcon /></Button>
+              onClick={() => openSettings(settingsTab)}><SettingsIcon /></Button>
           </TooltipTrigger>
           <TooltipContent>Settings</TooltipContent>
         </Tooltip>
@@ -706,7 +683,20 @@ export default function App() {
                   <EmptyContent><Button variant="outline" size="sm" onClick={startNewQuestion}><PlusIcon />New question</Button></EmptyContent>
                 </Empty>
               )}
-              {results && !hits.length && !isMine && (
+              {results && !hits.length && !isMine && info.rows === 0 && (
+                <Empty className="h-full">
+                  <EmptyHeader>
+                    <EmptyMedia variant="icon"><DatabaseIcon /></EmptyMedia>
+                    <EmptyTitle>No questions yet</EmptyTitle>
+                    <EmptyDescription>Install a question bank from Data sources, or write your own questions in Custom.</EmptyDescription>
+                  </EmptyHeader>
+                  <EmptyContent className="flex-row justify-center">
+                    <Button size="sm" onClick={() => openSettings('data-sources')}><DatabaseIcon />Open data sources</Button>
+                    <Button variant="outline" size="sm" onClick={() => setView('mine')}><NotebookPenIcon />Write a question</Button>
+                  </EmptyContent>
+                </Empty>
+              )}
+              {results && !hits.length && !isMine && info.rows > 0 && (
                 <Empty className="h-full">
                   <EmptyHeader>
                     <EmptyMedia variant="icon"><SearchXIcon /></EmptyMedia>
@@ -758,32 +748,30 @@ export default function App() {
       </div>
       <div className={cn('min-h-0 flex-1', view !== 'game' && 'hidden')}>
         <Game key={gameSession} isVisible={view === 'game'} lists={lists} listId={gameListId} onListIdChange={setGameListId}
-          isAiReady={isAiReady} onOpenSettings={() => setIsSettingsOpen(true)} />
+          isAiReady={isAiReady} onOpenSettings={() => openSettings('general')} />
       </div>
-      <SettingsDialog open={isSettingsOpen} onOpenChange={setIsSettingsOpen} aiStatus={aiStatus} onAiSearchChange={changeAiSearch}
-        refresh={{ stage, isRunning: !!progress, isStopping: stopping, percent: progress?.total ? (progress.done / progress.total) * 100 : null,
-          mode: refreshMode, dataDate: info?.dataDate, onModeChange: setRefreshMode, onStart: startRefresh, onStop: stopRefresh }} />
+      <SettingsDialog open={isSettingsOpen} onOpenChange={setIsSettingsOpen} tab={settingsTab} onTabChange={setSettingsTab}
+        aiStatus={aiStatus} onAiSearchChange={changeAiSearch} dataSources={dataSources} />
       <ListNameDialog open={isCreatingListForCurrent} title="New list" confirmLabel="Create and add"
         onOpenChange={setIsCreatingListForCurrent} onSubmit={createListWithCurrent} />
 
       <footer className="flex h-8 shrink-0 items-center gap-4 border-t bg-muted/30 px-3 text-xs text-muted-foreground">
         <span className="truncate">
           {[`v${info.version}`, `${fmt(info.rows)} questions`,
-            isAiReady ? `${fmt(aiStatus.vectors)} AI vectors` : { off: 'AI search off', error: 'AI search failed' }[aiStatus.state],
-            info.dataDate && `data checked ${info.dataDate.slice(0, 10)}`].filter(Boolean).join(' · ')}
+            isAiReady ? `${fmt(aiStatus.vectors)} AI vectors` : { off: 'AI search off', error: 'AI search failed' }[aiStatus.state]].filter(Boolean).join(' · ')}
         </span>
         <div className="ml-auto flex shrink-0 items-center gap-3">
           {aiWork && (
-            <button type="button" className="flex items-center gap-2 text-foreground" onClick={() => setIsSettingsOpen(true)}>
+            <button type="button" className="flex items-center gap-2 text-foreground" onClick={() => openSettings('general')}>
               {aiWork.percent == null ? <Spinner className="size-3.5" /> : <SparklesIcon className="size-3.5" />}{aiWork.text}
               {aiWork.percent != null && <Progress value={aiWork.percent} className="w-32" />}
             </button>
           )}
-          {progress && (
-            <span className="flex items-center gap-2 text-foreground">
-              <Spinner className="size-3.5" />{stage}
-              {progress.total > 0 && <Progress value={(progress.done / progress.total) * 100} className="w-32" />}
-            </span>
+          {dataSources.job && (
+            <button type="button" className="flex items-center gap-2 text-foreground" onClick={() => openSettings('data-sources')}>
+              <Spinner className="size-3.5" />{dataSources.runningName}: {dataSources.stage}
+              {dataSources.percent != null && <Progress value={dataSources.percent} className="w-32" />}
+            </button>
           )}
           {update?.state === 'downloading' && (
             <span className="flex items-center gap-1.5"><DownloadIcon className="size-3.5" />Downloading update {update.version} · {update.percent}%</span>

@@ -1,8 +1,9 @@
 # KimHardaNeApp: how the app works
 
-An Electron app for hosting quiz games and keeping a question bank. The bank is `data/3sual.sqlite`, built
-by the scraper from 3sual.az, plus your own questions. It needs Node 22+ and works offline once the model and
-images are downloaded.
+An Electron app for hosting quiz games and keeping a question bank. It ships without questions: the bank is
+your own questions plus the data sources you install in *Settings → Data sources* (for now 3sual.az, built by
+the scraper). In development the database is `data/3sual.sqlite`, created empty when missing. It needs Node 22+
+and works offline once the model and images are downloaded.
 
 ```bash
 cd app
@@ -11,7 +12,7 @@ npm install
 npm run embed    # optional: downloads bge-m3 (~570 MB) to app/models and embeds all questions (~30 min on CPU)
 npm start        # builds the UI and opens the app (Electron fetches its binary on first start)
                  # QUIZ_DB=path overrides the database, QUIZ_MODELS=dir the model folder
-npm test         # offline tests for the scraper, search, ranking, edits, data updates and local images
+npm test         # offline tests for the scraper, data sources, search, ranking, edits and local images
 ```
 
 - **Interface**: React with [shadcn/ui](https://ui.shadcn.com) components and Tailwind, in `ui/`. Vite bundles it
@@ -192,18 +193,31 @@ the party header turns them off and on for everyone. Windows
   here are used as they are, your own questions already here are reused, and every other question, custom or from a
   question bank this computer lacks, is added to your own questions first. A message sums up what was added.
 - **Images** are shown from `data/images/` when `scraper.js images` has fetched them, otherwise from the site.
-- **Refresh data** (in Settings, the gear icon top right) runs the scraper inside the app and brings the open database up to date.
+- **Data sources** (in Settings, the gear icon top right, on the *Data sources* tab) lists the question banks the
+  app can download from. `app/sources.js` keeps them in `DATA_SOURCES`; each source has a name, website,
+  description and install time, and three functions: `status` (state, question count, your edits, pictures saved
+  on this computer, when it was last checked), `download` (install or refresh) and `remove`. A new scraper is added
+  as one more entry there; the page, the progress bar and the IPC calls (`data-sources`, `update-data-source`,
+  `stop-data-source`, `delete-data-source`) work for every source. One source downloads at a time.
+  Each source shows as a card: *Not installed* with **Install**, *Not finished* (a stopped install) with
+  **Continue install**, or *Installed* with **Refresh** (Quick or Full) and **Delete**. While it downloads, the
+  card and the status line show the stage and progress, with **Stop download**; the app stays usable. A search
+  with no questions at all offers *Open data sources* and *Write a question*.
+  **3sual.az** runs the scraper inside the app. Installing is a first quick refresh on an empty database: every
+  package, then every picture (about an hour). *Quick* (~2 min) lists every package, fetches the ones not stored
+  yet and runs the author check. *Full* (~20 min) also refetches every stored package, which picks up upstream
+  edits. Both then download new pictures, rebuild the index and embed new or changed questions. Edited questions
+  are never overwritten. Stopping saves progress; the next download continues from there. **Delete** asks first,
+  saying how many questions and edits go, then removes the source's questions, their AI vectors, pictures and the
+  scraper's tables. Your own questions and their media, lists, games, profiles, point systems, templates and the
+  leaderboard stay. Lists keep their places for deleted questions and show them again after a reinstall.
   Every download goes over `https` only (redirects away from it are refused) and has a size limit (64 MB of data per API
   answer, 25 MB per picture). Pictures are fetched only from the question bank's own image address
   (`https://api.3sual.az/images/`): links that your own or imported questions carry are shown as links, never downloaded
   in the background. A downloaded picture is kept only when its bytes really are a JPEG, PNG, GIF, WebP, BMP or SVG
-  image, and it is stored under a hashed name with an extension from that list.
-  *Quick* (~2 min) lists every package, fetches the ones not stored yet and runs the author check. *Full*
-  (~20 min) also refetches every stored package, which picks up upstream edits. Both then download new
-  images, rebuild the index and embed new or changed questions. Search and editing keep working meanwhile, and
-  edited questions are never overwritten. *Stop refresh* saves progress, and the next refresh within a day
-  resumes it. The status line shows when the data was last checked. The installed app saves new images
-  next to its database in `%APPDATA%\KimHardaNeApp\data\images`.
+  image, and it is stored under a hashed name with an extension from that list. Pictures not saved yet are shown
+  from the site; the card counts them. The installed app keeps the database and pictures in
+  `%APPDATA%\KimHardaNeApp\data` (`kimhardane.sqlite`, `images/`).
 - **Cost:** about 6 s to open. A search takes about 110 ms (0.5 s for the first one while the model warms
   up). Memory use is about 1 GB with AI search on (index, 280 MB of vectors and the model), much less with it off.
 
@@ -211,32 +225,26 @@ the party header turns them off and on for everyone. Windows
 
 ```bash
 cd app
-npm run dist                                          # dist/KimHardaNeApp Setup <version>.exe (~365 MB)
+npm run dist                                          # dist/KimHardaNeApp Setup <version>.exe
 UPDATE_URL=https://your.host/3sual/ npm run dist      # same, plus in-app auto-update from that folder
 npm run dist:mac                                      # dist/KimHardaNeApp-<version>-arm64.dmg, Apple silicon only
 ```
 
-`npm run dist` snapshots `data/3sual.sqlite` with `VACUUM INTO`, without the AI vectors and lists. It refuses
-to build if any image is missing. The installer bundles the database and the images, so the installed app works
-offline; only turning on AI search downloads the model. The version comes from `app/package.json` and is
-shown in the title bar and status line.
+The installer ships no questions and no pictures: users install data sources from Settings. Turning on AI search
+downloads the model. The version comes from `app/package.json` and is shown in the title bar and status line.
 
 To keep the installer small, all of it lossless:
 - The AI model (587 MB) and the AI vectors (280 MB) are not shipped. Users who want AI search turn it on in
   Settings and the app builds them.
-- PNGs ship as lossless WebP when that decodes to exactly the same pixels, about 40% smaller. PNGs with
-  colour-profile, gamma, animation or orientation chunks, and all JPEGs and GIFs, ship unchanged.
-  The copies are cached in `app/bundle/images`; `data/images` keeps the originals.
 - The app code is packed into `app.asar`; the native modules (ONNX runtime, sharp) stay unpacked.
 - Only production dependencies ship: no devDependencies, source maps, type declarations or unused
   Transformers.js builds, and only the `en-US` Chromium locale.
 - The UI is minified and tree-shaken by Vite, and the installer uses maximum compression.
 
 **To release a new version:**
-1. Refresh the data: `node scraper.js crawl`, then `images` (both with `--db ../data/3sual.sqlite`).
-2. Bump `"version"` in `app/package.json`.
-3. Run `UPDATE_URL=… npm run dist`.
-4. Upload `KimHardaNeApp Setup <version>.exe`, its `.blockmap` and `latest.yml` to `UPDATE_URL`. Keep the
+1. Bump `"version"` in `app/package.json`.
+2. Run `UPDATE_URL=… npm run dist`.
+3. Upload `KimHardaNeApp Setup <version>.exe`, its `.blockmap` and `latest.yml` to `UPDATE_URL`. Keep the
    older `.blockmap` files there too. The host must support HTTP range requests, as GitHub Releases, S3 and
    nginx all do. Updates then download only the changed blocks, which was 19% in a test with changed data.
    Without range support, the full installer is downloaded.
@@ -244,20 +252,13 @@ To keep the installer small, all of it lossless:
 **What users see:**
 1. At start, an installed app with a feed downloads the new version in the background. It then offers
    *Restart to update*. Quitting the app also installs the update.
-2. On the first start of a new version, the bundled database replaces the working copy in
-   `%APPDATA%\KimHardaNeApp\data`. Questions the user edited are carried over and win over upstream changes.
-   The AI vectors the user built are carried over too; those of changed questions are rebuilt in the background. Packages the user refreshed after the new version's data was
-   collected keep their newer copy, so an update never rolls data back. The replaced database stays as `3sual.previous.sqlite`, and the
-   status line reports the update.
-3. Images live in the install folder, so the installer replaces them. The AI model stays in the user data folder.
-4. The installer is unsigned, so Windows SmartScreen warns on first install. A code-signing certificate
+2. Updates never touch the questions: the database and pictures live in the user data folder. Versions before
+   data sources kept a bundled copy of 3sual.az in `3sual.sqlite`; the first start renames it to
+   `kimhardane.sqlite`, so 3sual.az shows as installed with everything the user had. Its pictures lived in the
+   install folder, so they are shown from the site until the next refresh saves them. The AI model stays in the
+   user data folder.
+3. The installer is unsigned, so Windows SmartScreen warns on first install. A code-signing certificate
    (`CSC_LINK`, `CSC_KEY_PASSWORD`) removes the warning.
-
-Tested end to end on Windows 11 with a local feed:
-1. Installed 1.0.0 and edited a question.
-2. Published 1.0.1 with changed data.
-3. 1.0.0 found the update, downloaded it, and installed it on *Restart to update*.
-4. 1.0.1 started with the new data, kept the edit and made a backup.
 
 ## Search benchmark (`app/bench.js`)
 
