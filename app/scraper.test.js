@@ -174,7 +174,7 @@ test('image download resumes, retries failures and exports paths', needsFixtures
   assert.deepEqual([report.referenced, report.downloaded, report.failed, report.complete], [2, 1, 1, false]);
   const rel = one(db, 'SELECT path FROM images WHERE url=?', rekvizit);
   assert.ok(rel.startsWith('images/') && rel.endsWith('.png'));
-  assert.equal(fs.readFileSync(path.join(root, rel), 'utf8'), `PNG${rekvizit}`);
+  assert.deepEqual(fs.readFileSync(path.join(root, rel)), Buffer.concat([PNG_SIGNATURE, Buffer.from(rekvizit)]));
   const again = new FakeFetch();
   assert.ok((await t.downloadImages(db, again, root, opts)).complete);
   assert.deepEqual(again.calls, [extra]);
