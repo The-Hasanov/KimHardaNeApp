@@ -52,6 +52,11 @@ body { font-family: "Segoe UI", SamsungOne, "Tizen Sans", Roboto, Arial, sans-se
 .podium .place-3 .medal { background: #d08b53; }
 .podium .place-1 .who { font-size: 2.8vw; color: #fbbf24; }
 .celebration .rest { width: 60vw; margin-top: 2vw; font-size: 1.4vw; }
+video.image { width: 100%; background: #000; }
+.audio-card { display: -webkit-flex; display: flex; -webkit-align-items: center; align-items: center; padding: 1.4vw 1.8vw; border-radius: 1vw; background: #171717; border: 1px solid #262626; }
+.audio-card .audio-note { font-size: 4vw; line-height: 1; margin-right: 1.4vw; color: #fbbf24; }
+.audio-card audio { -webkit-flex: 1; flex: 1; width: 100%; }
+.light .audio-card { background: #f5f5f5; border-color: #e5e5e5; }
 .reactions { position: fixed; right: 2vw; bottom: 2vw; width: 24vw; pointer-events: none; z-index: 15; display: -webkit-flex; display: flex; -webkit-flex-direction: column; flex-direction: column; -webkit-align-items: flex-end; align-items: flex-end; }
 .reaction { display: -webkit-flex; display: flex; -webkit-align-items: center; align-items: center; margin-top: .6vw; padding: .4vw 1.1vw .4vw .6vw; border-radius: 99px; background: rgba(38, 38, 38, .92); border: 1px solid #404040; max-width: 100%; -webkit-animation: toast-in .3s ease-out, toast-out .5s ease-in 3.5s forwards; animation: toast-in .3s ease-out, toast-out .5s ease-in 3.5s forwards; }
 .reaction .emoji { font-size: 2.6vw; line-height: 1; margin-right: .6vw; font-family: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", "Twemoji Mozilla", sans-serif; }
@@ -186,6 +191,29 @@ function image(className, src, alt) {
   return node;
 }
 
+var mediaNodes = {};
+
+function media(className, src, kind, alt) {
+  if (kind !== 'video' && kind !== 'audio') return image(className, src, alt);
+  var node = mediaNodes[src];
+  if (!node) {
+    for (var key in mediaNodes) {
+      if (mediaNodes.hasOwnProperty(key)) mediaNodes[key].pause();
+    }
+    mediaNodes = {};
+    node = document.createElement(kind);
+    node.src = src;
+    node.controls = true;
+    node.autoplay = true;
+    node.preload = 'auto';
+    node.setAttribute('playsinline', '');
+    node.className = className + ' ' + kind;
+    mediaNodes[src] = node;
+  }
+  if (kind === 'video') return node;
+  return el('div', 'audio-card', el('div', 'audio-note', '\u266A'), node);
+}
+
 function show(children) {
   app.innerHTML = '';
   append(app, children);
@@ -265,7 +293,7 @@ function questionScreen() {
         el('p', 'text', withLineBreaks(question.text)),
         question.rekvizit_text && el('div', 'stack', el('div', 'caption', 'Handout'), el('div', 'pre', question.rekvizit_text)),
         el('div', 'credits', credits(question))),
-      question.rekvizit_src && el('div', 'handout stack', el('div', 'caption', 'Handout'), image('image', question.rekvizit_src, 'Handout'))),
+      question.rekvizit_src && el('div', 'handout stack', el('div', 'caption', 'Handout'), media('image', question.rekvizit_src, question.rekvizit_kind, 'Handout'))),
   ];
 }
 
@@ -283,7 +311,7 @@ function revealScreen() {
       el('p', 'answer', question.answer),
       question.accepted_answers && el('div', '', el('span', 'muted', 'Also accepted: '), question.accepted_answers),
       question.comment && el('div', 'comment muted', question.comment),
-      question.source_media_src && image('image', question.source_media_src, 'Answer'),
+      question.source_media_src && media('image', question.source_media_src, question.source_media_kind, 'Answer'),
       el('div', 'chips', state.answers.map(function (answer) {
         return el('span', 'chip', outcomeOf(answer), answer.name, el('span', 'muted numbers', ' ' + pointsLabel(answer.points)));
       }))),

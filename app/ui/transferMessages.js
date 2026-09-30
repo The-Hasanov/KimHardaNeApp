@@ -21,5 +21,7 @@ export async function runTransfer(action, onDone) {
   }
 }
 
-export const exportedMessage = ({ count, file }) => ({ title: `Exported ${questions(count)}`, description: file });
+export const exportedMessage = ({ count, mediaCount, file }) => ({
+  title: `Exported ${questions(count)}${mediaCount ? ` and ${mediaCount} media file${mediaCount === 1 ? '' : 's'}` : ''}`, description: file,
+});
 export { questions as questionCountLabel };

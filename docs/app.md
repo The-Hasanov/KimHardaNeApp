@@ -141,14 +141,18 @@ the party header turns them off and on for everyone. Windows
   `crawl --refresh` keeps edited rows. The site's original values are still in `packages.raw_json`, and
   the export includes `edited_at`.
 - **Your own questions**: the *Custom* tab lists them next to the editor, and *New question* there opens an
-  empty editor; a question needs its text and answer. Once saved, it can get a handout picture and an answer
-  picture (PNG, JPEG, GIF or WebP), copied to `images/own/` next to the database and kept through updates. They are stored in the same `questions` table (`package_id` 0, `origin` `own`), so search, lists,
+  empty editor; a question needs its text and answer. Once saved, it can get a handout and an answer medium: a
+  picture (PNG, JPEG, GIF, WebP), a video (MP4, WebM) or an audio file (MP3, M4A, WAV, OGG), up to 300 MB, copied to
+  `images/own/` next to the database and kept through updates. Videos and audio play with controls in the editor, in the
+  Game and Play tabs, on the host's party screen, on the TV (they start by themselves) and on phones (tap to play); the
+  party server streams them in byte ranges so phones and iPhones can seek. They are stored in the same `questions` table (`package_id` 0, `origin` `own`), so search, lists,
   games and parties treat them like any other question, and *My questions* in the game filter finds them in search too.
   Like edits, they survive refreshes and version updates, and `npm run dist` leaves them out of the installer.
   Only your own questions can be deleted.
 - **Import and export**: *Export* on the *Custom* tab saves all your own questions, and *Export* on a list saves that list
-  with its questions in order, to a `.json` file (`transfer.js`) that carries every text field, the sources and the
-  pictures (embedded when they are on this computer, as links otherwise). *Import* on the *Custom* tab adds the file's
+  with its questions in order, to a `.zip` file (`transfer.js`, written and read by `zip.js`): `questions.json` with every
+  text field and the sources, and a `media/` folder with the pictures, videos and audio stored on this computer (media
+  only known by a web link stay links). Import also reads the older `.json` exports. *Import* on the *Custom* tab adds the file's
   questions to your own, skipping ones you already have (same text and answer, ignoring case, diacritics and spacing)
   and question bank questions already in this computer's bank. *Import* on the *Lists* tab (the icon next to *New list*)
   creates a new list from the file, named after it (with a number if the name is taken): question bank questions found

@@ -62,6 +62,8 @@ h1 { font-size: 24px; line-height: 1.25; margin: 0; }
 .question { font-size: 20px; line-height: 1.45; font-weight: 500; white-space: pre-line; margin: 0; }
 .note { border: 1px solid color-mix(in srgb, var(--warn) 40%, transparent); background: color-mix(in srgb, var(--warn) 12%, transparent); border-radius: 10px; padding: 10px 12px; font-size: 14px; }
 .handout { width: 100%; border-radius: 10px; border: 1px solid var(--border); }
+video.handout { background: #000; }
+audio.handout { border: 0; height: 44px; }
 .pre { white-space: pre-line; }
 .card { border: 1px solid var(--border); border-radius: 12px; padding: 14px; display: flex; flex-direction: column; gap: 8px; }
 form { display: flex; flex-direction: column; gap: 10px; }
@@ -712,12 +714,23 @@ function topBar() {
 
 const phaseSeconds = () => ({ waiting: state.rules.secondsBetweenQuestions, question: state.rules.secondsPerQuestion, reveal: state.rules.secondsOnAnswer })[state.phase];
 
+let mediaNodes = new Map();
+
+function media(src, kind, alt) {
+  if (kind !== 'video' && kind !== 'audio') return el('img', { class: 'handout', src, alt });
+  if (!mediaNodes.has(src)) {
+    mediaNodes.forEach(node => node.pause());
+    mediaNodes = new Map([[src, el(kind, { class: `handout ${kind}`, src, controls: true, preload: 'metadata', playsInline: true })]]);
+  }
+  return mediaNodes.get(src);
+}
+
 function questionBlock() {
   const question = state.question;
   return [
     question.noteBefore && el('div', { class: 'note' }, question.noteBefore),
     el('p', { class: 'question' }, withLineBreaks(question.text)),
-    question.hasHandoutImage && el('img', { class: 'handout', src: imageUrl('/handout'), alt: 'Handout' }),
+    question.hasHandoutImage && media(imageUrl('/handout'), question.handoutKind, 'Handout'),
     question.handoutText && el('p', { class: 'pre' }, question.handoutText),
   ];
 }
@@ -836,7 +849,7 @@ function renderScreen(next) {
       el('p', { class: 'answer' }, reveal.answer),
       reveal.acceptedAnswers && el('span', {}, el('span', { class: 'muted' }, 'Also accepted: '), reveal.acceptedAnswers),
       reveal.comment && el('p', { class: 'pre muted', style: 'margin:0;font-size:14px' }, reveal.comment),
-      reveal.hasAnswerImage && el('img', { class: 'handout', src: imageUrl('/answer-image'), alt: 'Answer' })),
+      reveal.hasAnswerImage && media(imageUrl('/answer-image'), reveal.answerKind, 'Answer')),
       el('p', { class: 'muted', style: 'margin:0' }, `Your score: ${next.me.score} · place ${next.me.rank} of ${next.playerCount}`),
       leaderboard(next.leaderboard), skipDock()));
   }

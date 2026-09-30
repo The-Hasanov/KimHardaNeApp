@@ -603,3 +603,27 @@ test('the host app queues reactions: five at a time on the TV, two at a time on 
   assert.equal(onPhone.length, 6 + 6);
   game.close();
 });
+
+test('videos and audio stream to the TV and phones in ranges, so they can seek and play on iPhones', async () => {
+  const video = path.join(fs.mkdtempSync(path.join(require('node:os').tmpdir(), 'quiz-video-')), 'clip.mp4');
+  fs.writeFileSync(video, Buffer.from('0123456789abcdefghij'));
+  const { pathToFileURL } = require('node:url');
+  const questions = [{ ...QUESTIONS[0], rekvizit_src: pathToFileURL(video).href, rekvizit_kind: 'video' }, QUESTIONS[1]];
+  const { game, close } = await openParty({ judge: judgeByText }, { port: 0 });
+  const base = `http://127.0.0.1:${game.port}`;
+  try {
+    const aysel = game.join('Aysel');
+    game.startRound({ ...ROUND, questions });
+    assert.deepEqual([game.tvView().question.rekvizit_kind, game.playerView(aysel).question.handoutKind], ['video', 'video']);
+    const whole = await fetch(`${base}/tv/handout?question=0`);
+    assert.deepEqual([whole.status, whole.headers.get('content-type'), whole.headers.get('accept-ranges'), await whole.text()], [200, 'video/mp4', 'bytes', '0123456789abcdefghij']);
+    const part = await fetch(`${base}/handout?token=${aysel.token}&question=0`, { headers: { Range: 'bytes=5-9' } });
+    assert.deepEqual([part.status, part.headers.get('content-range'), await part.text()], [206, 'bytes 5-9/20', '56789']);
+    const tail = await fetch(`${base}/tv/handout?question=0`, { headers: { Range: 'bytes=-3' } });
+    assert.deepEqual([tail.status, await tail.text()], [206, 'hij']);
+    assert.equal((await fetch(`${base}/tv/handout?question=0`, { headers: { Range: 'bytes=50-' } })).status, 416);
+  } finally {
+    game.finish();
+    await close();
+  }
+});

@@ -7,13 +7,13 @@ const path = require('node:path');
 const { fileURLToPath } = require('node:url');
 const QRCode = require('qrcode');
 const { matchesAsText } = require('./judge');
+const { MEDIA_TYPES } = require('./store');
 
 const PARTY_LIMITS = { players: 100, nameLength: 24, answerLength: 200, messageLength: 300, bodyBytes: 4096 };
 const PREFERRED_PORT = 8765;
 const HEARTBEAT_MS = 20000;
 const PLAYER_PAGE = path.join(__dirname, 'party', 'player.html');
 const TV_PAGE = path.join(__dirname, 'party', 'tv.html');
-const IMAGE_TYPES = { '.webp': 'image/webp', '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.gif': 'image/gif' };
 const VIRTUAL_ADAPTER = /vEthernet|VirtualBox|VMware|WSL|Hyper-V|Loopback|Tailscale|ZeroTier|VPN/i;
 const PHASES_WITH_QUESTION = ['question', 'judging', 'reveal'];
 const TV_SCREENS = ['game', 'leaderboard', 'join'];
@@ -534,10 +534,10 @@ class PartyGame {
       question: question && {
         text: question.text, note_before: question.note_before, rekvizit_text: question.rekvizit_text,
         package_name: question.package_name, tournament_name: question.tournament_name, authors: question.authors,
-        rekvizit_src: question.rekvizit_src && `/tv/handout?question=${this.index}`,
+        rekvizit_src: question.rekvizit_src && `/tv/handout?question=${this.index}`, rekvizit_kind: question.rekvizit_kind ?? 'image',
         ...(isRevealed && {
           answer: question.answer, accepted_answers: question.accepted_answers, comment: question.comment,
-          source_media_src: question.source_media_src && `/tv/answer-image?question=${this.index}`,
+          source_media_src: question.source_media_src && `/tv/answer-image?question=${this.index}`, source_media_kind: question.source_media_kind ?? 'image',
         }),
       },
       answers: isRevealed ? view.answers.map(({ given, similarity, closestAnswer, hostCall, isDirectCall, ...result }) => result) : [],
@@ -560,7 +560,7 @@ class PartyGame {
       },
       me: { name: player.name, score: me?.score ?? 0, roundScore: me?.roundScore ?? 0, rank: me?.rank ?? null, avgSeconds: me?.avgSeconds ?? null },
       question: PHASES_WITH_QUESTION.includes(this.phase) ? {
-        text: question.text, noteBefore: question.note_before, handoutText: question.rekvizit_text, hasHandoutImage: !!question.rekvizit_src,
+        text: question.text, noteBefore: question.note_before, handoutText: question.rekvizit_text, hasHandoutImage: !!question.rekvizit_src, handoutKind: question.rekvizit_kind ?? 'image',
       } : null,
       myAnswer: myAnswer?.given ?? null,
       skip: this.skipStatus(player.id),
@@ -569,7 +569,7 @@ class PartyGame {
       announcement: this.announcement,
       reveal: this.phase === 'reveal' ? {
         answer: question.answer, acceptedAnswers: question.accepted_answers, comment: question.comment,
-        hasAnswerImage: !!question.source_media_src, isCorrect: myAnswer ? !!myAnswer.isCorrect : null, points: this.pointsFor(myAnswer),
+        hasAnswerImage: !!question.source_media_src, answerKind: question.source_media_kind ?? 'image', isCorrect: myAnswer ? !!myAnswer.isCorrect : null, points: this.pointsFor(myAnswer),
         seconds: myAnswer?.ms != null && myAnswer.given ? Math.round(myAnswer.ms / 100) / 10 : null,
         isPending: !!myAnswer && myAnswer.verdict === 'unsure' && !myAnswer.decidedByHost,
       } : null,
@@ -611,14 +611,27 @@ async function readJson(req) {
   }
 }
 
-function sendImage(res, src) {
-  if (!src) throw new PartyError(404, 'No image');
+function sendMedia(req, res, src) {
+  if (!src) throw new PartyError(404, 'No media');
   if (/^https?:/.test(src)) {
     res.writeHead(302, { Location: src });
     return res.end();
   }
   const file = fileURLToPath(src);
-  res.writeHead(200, { 'Content-Type': IMAGE_TYPES[path.extname(file).toLowerCase()] ?? 'application/octet-stream', 'Cache-Control': 'no-store' });
+  const size = fs.statSync(file).size;
+  const headers = { 'Content-Type': MEDIA_TYPES[path.extname(file).toLowerCase()] ?? 'application/octet-stream', 'Cache-Control': 'no-store', 'Accept-Ranges': 'bytes' };
+  const range = /^bytes=(\d*)-(\d*)$/.exec(req.headers.range ?? '');
+  if (range && (range[1] || range[2])) {
+    const start = range[1] ? Number(range[1]) : Math.max(0, size - Number(range[2]));
+    const end = range[1] && range[2] ? Math.min(Number(range[2]), size - 1) : size - 1;
+    if (start >= size || start > end) {
+      res.writeHead(416, { 'Content-Range': `bytes */${size}` });
+      return res.end();
+    }
+    res.writeHead(206, { ...headers, 'Content-Range': `bytes ${start}-${end}/${size}`, 'Content-Length': end - start + 1 });
+    return fs.createReadStream(file, { start, end }).on('error', () => res.destroy()).pipe(res);
+  }
+  res.writeHead(200, { ...headers, 'Content-Length': size });
   fs.createReadStream(file).on('error', () => res.destroy()).pipe(res);
 }
 
@@ -662,12 +675,12 @@ function routeTv(game, req, res, url) {
   }
   if (url.pathname === '/tv/events') return openEventStream(game, req, res, { view: () => game.tvView() });
   if (url.pathname === '/tv/handout') {
-    if (!PHASES_WITH_QUESTION.includes(game.phase)) throw new PartyError(404, 'No image');
-    return sendImage(res, game.questions[game.index].rekvizit_src);
+    if (!PHASES_WITH_QUESTION.includes(game.phase)) throw new PartyError(404, 'No media');
+    return sendMedia(req, res, game.questions[game.index].rekvizit_src);
   }
   if (url.pathname === '/tv/answer-image') {
-    if (game.phase !== 'reveal') throw new PartyError(404, 'No image');
-    return sendImage(res, game.questions[game.index].source_media_src);
+    if (game.phase !== 'reveal') throw new PartyError(404, 'No media');
+    return sendMedia(req, res, game.questions[game.index].source_media_src);
   }
   throw new PartyError(404, 'Not found');
 }
@@ -718,13 +731,13 @@ async function route(game, req, res) {
   if (req.method === 'GET' && (url.pathname === '/tv' || url.pathname.startsWith('/tv/'))) return routeTv(game, req, res, url);
   if (req.method === 'GET' && url.pathname === '/handout') {
     game.playerByToken(token);
-    if (!PHASES_WITH_QUESTION.includes(game.phase)) throw new PartyError(404, 'No image');
-    return sendImage(res, game.questions[game.index].rekvizit_src);
+    if (!PHASES_WITH_QUESTION.includes(game.phase)) throw new PartyError(404, 'No media');
+    return sendMedia(req, res, game.questions[game.index].rekvizit_src);
   }
   if (req.method === 'GET' && url.pathname === '/answer-image') {
     game.playerByToken(token);
-    if (game.phase !== 'reveal') throw new PartyError(404, 'No image');
-    return sendImage(res, game.questions[game.index].source_media_src);
+    if (game.phase !== 'reveal') throw new PartyError(404, 'No media');
+    return sendMedia(req, res, game.questions[game.index].source_media_src);
   }
   throw new PartyError(404, 'Not found');
 }

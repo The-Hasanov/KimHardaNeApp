@@ -306,52 +306,51 @@ app.whenReady().then(() => {
     return store.get(row.uid);
   });
   handle('delete-question', uid => store.deleteQuestion(uid));
-  const QUESTION_FILES = [{ name: 'KimHardaNeApp questions', extensions: ['json'] }];
+  const QUESTION_ARCHIVES = [{ name: 'KimHardaNeApp questions', extensions: ['zip'] }];
+  const QUESTION_FILES_TO_OPEN = [{ name: 'KimHardaNeApp questions', extensions: ['zip', 'json'] }];
   const fileNameOf = name => String(name).replace(/[\\/:*?"<>|]+/g, '-').trim() || 'Questions';
   const embedCreated = async uids => {
     if (uids.length && isAiReady()) await ai.embedRows(store, uids.map(uid => store.rows[store.pos.get(uid)]));
   };
-  const saveQuestionsFile = async (name, data) => {
+  const saveQuestionsFile = async (name, questions, options) => {
     const { canceled, filePath } = await dialog.showSaveDialog(win, {
-      title: 'Export questions', defaultPath: path.join(app.getPath('documents'), `${fileNameOf(name)}.json`), filters: QUESTION_FILES,
+      title: 'Export questions', defaultPath: path.join(app.getPath('documents'), `${fileNameOf(name)}.zip`), filters: QUESTION_ARCHIVES,
     });
     if (canceled) return null;
-    fs.writeFileSync(filePath, JSON.stringify(data, null, 2));
-    return { file: filePath, count: data.questions.length };
+    const { archive, count, mediaCount } = transfer.exportArchive(questions, options);
+    fs.writeFileSync(filePath, archive);
+    return { file: filePath, count, mediaCount };
   };
   const openQuestionsFile = async () => {
-    const { canceled, filePaths } = await dialog.showOpenDialog(win, { title: 'Import questions', properties: ['openFile'], filters: QUESTION_FILES });
+    const { canceled, filePaths } = await dialog.showOpenDialog(win, { title: 'Import questions', properties: ['openFile'], filters: QUESTION_FILES_TO_OPEN });
     if (canceled) return null;
-    try {
-      return { data: JSON.parse(fs.readFileSync(filePaths[0], 'utf8')), fileName: path.basename(filePaths[0], path.extname(filePaths[0])) };
-    } catch {
-      throw new Error('This file could not be read as KimHardaNeApp questions');
-    }
+    return { archive: transfer.readArchive(fs.readFileSync(filePaths[0])), fileName: path.basename(filePaths[0], path.extname(filePaths[0])) };
   };
   const ownQuestions = () => store.rows.filter(row => row.package_id === OWN_PACKAGE_ID).map(row => store.get(row.uid));
-  handle('export-own-questions', () => saveQuestionsFile('My questions', transfer.exportFile(ownQuestions())));
+  handle('export-own-questions', () => saveQuestionsFile('My questions', ownQuestions()));
   handle('import-own-questions', async () => {
     const opened = await openQuestionsFile();
     if (!opened) return null;
-    const { createdUids, summary } = transfer.importOwnQuestions(store, opened.data);
+    const { createdUids, summary } = transfer.importOwnQuestions(store, opened.archive);
     await embedCreated(createdUids);
     return summary;
   });
   handle('export-list', listId => {
     const list = store.allLists().find(candidate => candidate.id === listId);
     if (!list) throw new Error('This list no longer exists');
-    return saveQuestionsFile(list.name, transfer.exportFile(store.listQuestions(listId), { list }));
+    return saveQuestionsFile(list.name, store.listQuestions(listId), { list });
   });
   handle('import-list', async () => {
     const opened = await openQuestionsFile();
     if (!opened) return null;
-    const { listId, createdUids, summary } = transfer.importList(store, opened.data, { fileName: opened.fileName });
+    const { listId, createdUids, summary } = transfer.importList(store, opened.archive, { fileName: opened.fileName });
     await embedCreated(createdUids);
     return { listId, summary };
   });
   handle('pick-question-image', async (uid, column) => {
     const { canceled, filePaths } = await dialog.showOpenDialog(win, {
-      title: 'Add a picture', properties: ['openFile'], filters: [{ name: 'Pictures', extensions: ['png', 'jpg', 'jpeg', 'gif', 'webp'] }],
+      title: 'Add a picture, video or audio', properties: ['openFile'],
+      filters: [{ name: 'Pictures, videos and audio', extensions: ['png', 'jpg', 'jpeg', 'gif', 'webp', 'mp4', 'm4v', 'webm', 'mp3', 'm4a', 'wav', 'ogg', 'oga'] }],
     });
     return canceled ? null : store.setOwnImage(uid, column, filePaths[0]);
   });

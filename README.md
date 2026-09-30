@@ -23,8 +23,9 @@ game from the app. Bring your own questions or use the bundled question bank.
 - **Host controls**: points for right and wrong answers, pause, autoplay, answers shown after each question or
   all at the end of the round, several rounds with or without keeping the scores, and no question shown twice
   in one party.
-- **Your own questions**: write them on the *Custom* tab, add a handout picture and an answer picture,
-  collect them in lists and play a list in order. Import and export your questions or a list, pictures included.
+- **Your own questions**: write them on the *Custom* tab, add a picture, video or audio file to the question and to
+  the answer, collect them in lists and play a list in order. Import and export your questions or a list as a ZIP file,
+  media included.
 - **Game helper and solo play**: a timer for the host, or play alone and mark your answers yourself or let the
   AI check them.
 - **Question bank**: search by keyword or by meaning, ignoring case, diacritics and small typos, and edit

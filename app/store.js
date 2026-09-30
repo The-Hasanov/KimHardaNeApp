@@ -35,7 +35,17 @@ const OWN_GAME_ID = 0;
 const OWN_NAME = 'My questions';
 const OWN_IMAGE_PREFIX = 'own-image:';
 const IMAGE_COLUMNS = ['rekvizit_url', 'source_media_url'];
-const IMAGE_TYPES = { '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.gif': 'image/gif', '.webp': 'image/webp' };
+const MEDIA_TYPES = {
+  '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.gif': 'image/gif', '.webp': 'image/webp',
+  '.mp4': 'video/mp4', '.m4v': 'video/mp4', '.webm': 'video/webm',
+  '.mp3': 'audio/mpeg', '.m4a': 'audio/mp4', '.wav': 'audio/wav', '.ogg': 'audio/ogg', '.oga': 'audio/ogg',
+};
+const MAX_OWN_MEDIA_BYTES = 300 * 1024 * 1024;
+const MEDIA_CHOICE = 'Pick a picture (PNG, JPEG, GIF, WebP), a video (MP4, WebM) or an audio file (MP3, M4A, WAV, OGG)';
+const mediaKind = url => {
+  const type = url && MEDIA_TYPES[path.extname(String(url).split(/[?#]/)[0]).toLowerCase()];
+  return !url ? null : type?.startsWith('video/') ? 'video' : type?.startsWith('audio/') ? 'audio' : 'image';
+};
 const TUNING = { combineWith: 'AND', prefix: true, fuzzy: 0.2, boost: { answer: 2, text: 1.5 }, rrfK: 10, aiWeight: 0.5 };
 
 const fold = s => s.toLowerCase().normalize('NFD').replace(/\p{M}/gu, '').replace(/ə/g, 'e').replace(/ı/g, 'i');
@@ -197,6 +207,8 @@ class Store {
     for (const c of ['sources', 'authors', 'phase_path']) r[c] = r[c] == null ? null : JSON.parse(r[c]);
     r.rekvizit_src = this.imageSrc(r.rekvizit_url);
     r.source_media_src = this.imageSrc(r.source_media_url);
+    r.rekvizit_kind = mediaKind(r.rekvizit_url);
+    r.source_media_kind = mediaKind(r.source_media_url);
     return r;
   }
 
@@ -278,7 +290,8 @@ class Store {
   setOwnImage(uid, column, file = null) {
     if (!file) return this.setOwnImageBytes(uid, column, null);
     const extension = path.extname(file).toLowerCase();
-    if (!IMAGE_TYPES[extension]) throw new Error('Pick a PNG, JPEG, GIF or WebP picture');
+    if (!MEDIA_TYPES[extension]) throw new Error(MEDIA_CHOICE);
+    if (fs.statSync(file).size > MAX_OWN_MEDIA_BYTES) throw new Error('Pick a file smaller than 300 MB');
     return this.setOwnImageBytes(uid, column, { bytes: fs.readFileSync(file), extension });
   }
 
@@ -292,14 +305,14 @@ class Store {
       url = picture.remoteUrl;
     } else if (picture) {
       const { bytes, extension } = picture;
-      if (!IMAGE_TYPES[extension]) throw new Error('Pick a PNG, JPEG, GIF or WebP picture');
+      if (!MEDIA_TYPES[extension]) throw new Error(MEDIA_CHOICE);
       const sha256 = crypto.createHash('sha256').update(bytes).digest('hex');
       const relative = `images/own/${sha256}${extension}`;
       fs.mkdirSync(path.join(this.roots[0], 'images', 'own'), { recursive: true });
       fs.writeFileSync(path.join(this.roots[0], relative), bytes);
       url = OWN_IMAGE_PREFIX + sha256 + extension;
       this.db.prepare(`INSERT OR REPLACE INTO images (url, status, path, bytes, content_type, sha256, fetched_at)
-        VALUES (?, 'ok', ?, ?, ?, ?, datetime('now'))`).run(url, relative, bytes.length, IMAGE_TYPES[extension], sha256);
+        VALUES (?, 'ok', ?, ?, ?, ?, datetime('now'))`).run(url, relative, bytes.length, MEDIA_TYPES[extension], sha256);
     }
     this.db.prepare(`UPDATE questions SET ${column} = ?, edited_at = datetime('now') WHERE uid = ?`).run(url, uid);
     this.rows[i] = this.db.prepare(`SELECT ${LIST_COLS} FROM questions WHERE uid = ?`).get(uid);
@@ -431,4 +444,4 @@ class Store {
   }
 }
 
-module.exports = { Store, OWN_PACKAGE_ID, OWN_IMAGE_PREFIX, IMAGE_TYPES, IMAGE_COLUMNS, TUNING, LISTS_SCHEMA, PLAY_SCHEMA, PARTY_RESULTS_SCHEMA, EMBEDDINGS_SCHEMA, fold, passage, embeddable, hashOf, DIM };
+module.exports = { Store, OWN_PACKAGE_ID, OWN_IMAGE_PREFIX, MEDIA_TYPES, IMAGE_COLUMNS, mediaKind, TUNING, LISTS_SCHEMA, PLAY_SCHEMA, PARTY_RESULTS_SCHEMA, EMBEDDINGS_SCHEMA, fold, passage, embeddable, hashOf, DIM };

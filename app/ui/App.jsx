@@ -34,6 +34,7 @@ import Game from './Game';
 import Lists, { ListNameDialog } from './Lists';
 import SettingsDialog, { describeAiWork } from './Settings';
 import { setNightMode, useNightMode } from './theme';
+import { Media } from './gameShared';
 import { exportedMessage, importDetails, questionCountLabel, runTransfer } from './transferMessages';
 
 const { api } = window;
@@ -54,8 +55,8 @@ const OWN_PACKAGE_ID = 0;
 const OWN_GAME_ID = 0;
 const NEW_QUESTION = { uid: null, package_id: OWN_PACKAGE_ID, game_name: 'My questions' };
 const PICTURES = [
-  ['rekvizit_url', 'rekvizit_src', 'Handout picture', 'shown with the question'],
-  ['source_media_url', 'source_media_src', 'Answer picture', 'shown with the answer'],
+  ['rekvizit_url', 'rekvizit_src', 'rekvizit_kind', 'Handout', 'shown with the question'],
+  ['source_media_url', 'source_media_src', 'source_media_kind', 'Answer media', 'shown with the answer'],
 ];
 
 const fmt = n => n.toLocaleString('en');
@@ -141,20 +142,24 @@ function AddToListButton({ lists, listIdsOfQuestion, onToggle, onCreateNew }) {
 function OwnPictures({ q, concealed, onReveal, onZoom, onPick, onRemove }) {
   return (
     <div className="grid gap-4 sm:grid-cols-2">
-      {PICTURES.map(([column, srcKey, label, hint]) => {
+      {PICTURES.map(([column, srcKey, kindKey, label, hint]) => {
         const src = q[srcKey];
+        const kind = q[kindKey];
         const hide = concealed && column === 'source_media_url';
         return (
           <div key={column} className="grid content-start gap-2">
             <Label>{label}<span className="font-normal text-muted-foreground">{hint}</span></Label>
-            {src && (
+            {src && kind !== 'image' && (hide
+              ? <Button variant="outline" size="sm" className="justify-self-start" onClick={onReveal}><EyeIcon />Show the answer {kind}</Button>
+              : <Media src={src} kind={kind} alt={label} className="max-h-48 w-full" />)}
+            {src && kind === 'image' && (
               <button type="button" onClick={() => (hide ? onReveal() : onZoom(src))} title={hide ? 'Answer hidden: click to show' : 'Click to enlarge'}
                 className="cursor-zoom-in overflow-hidden rounded-lg border bg-muted/30 transition-opacity hover:opacity-90">
                 <img src={src} alt={label} className={cn('max-h-48 w-full object-contain', hide && 'blur-xl')} />
               </button>
             )}
             <div className="flex gap-2">
-              <Button variant="outline" size="sm" onClick={() => onPick(column)}><ImagePlusIcon />{src ? 'Replace' : 'Add picture'}</Button>
+              <Button variant="outline" size="sm" onClick={() => onPick(column)} title="A picture (PNG, JPEG, GIF, WebP), a video (MP4, WebM) or audio (MP3, M4A, WAV, OGG)"><ImagePlusIcon />{src ? 'Replace' : 'Add picture, video or audio'}</Button>
               {src && <Button variant="ghost" size="sm" onClick={() => onRemove(column)}><XIcon />Remove</Button>}
             </div>
           </div>

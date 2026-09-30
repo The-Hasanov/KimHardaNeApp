@@ -21,7 +21,7 @@ import { Spinner } from '@/components/ui/spinner';
 import { Switch } from '@/components/ui/switch';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
-  KEY_HINT_ON_PRIMARY_BUTTON, NextQuestionNumber, QuestionOnScreen, WARNING_AT_SECONDS_LEFT, formatClock, playTenSecondsLeftTone,
+  KEY_HINT_ON_PRIMARY_BUTTON, Media, NextQuestionNumber, QuestionOnScreen, WARNING_AT_SECONDS_LEFT, formatClock, playTenSecondsLeftTone,
   playTimeUpTone, withLineBreaks,
 } from './gameShared';
 import PartyScreen from './Party';
@@ -219,7 +219,7 @@ function AnswerCard({ question, number, isRevealed, onReveal }) {
             <p className="text-sm"><span className="text-muted-foreground">Also accepted: </span>{question.accepted_answers}</p>
           )}
           {question.comment && <p className="text-sm whitespace-pre-line text-muted-foreground">{question.comment}</p>}
-          {question.source_media_src && <img src={question.source_media_src} alt="Answer" className="max-h-72 rounded-lg border object-contain" />}
+          {question.source_media_src && <Media src={question.source_media_src} kind={question.source_media_kind} alt="Answer" className="max-h-72" />}
         </div>
       ) : <div className="h-8 rounded-md bg-muted" aria-label="Answer hidden" />}
     </div>
