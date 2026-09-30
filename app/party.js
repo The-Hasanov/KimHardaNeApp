@@ -184,7 +184,7 @@ class PartyGame {
     this.lastReactionAt.set(player.id, now);
     const reaction = { id: crypto.randomUUID(), emoji, name: player.name };
     this.onReaction(reaction);
-    for (const stream of this.streams) if (!stream.playerId) stream.sendEvent('reaction', reaction);
+    for (const stream of this.streams) if (stream.playerId !== player.id) stream.sendEvent('reaction', reaction);
     return reaction;
   }
 

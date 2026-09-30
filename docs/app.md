@@ -108,7 +108,10 @@ a short fanfare; each phone congratulates its player by place: a trophy and conf
 medals for second and third, and the place and winner for everyone else. Confetti is left out when the device asks
 for reduced motion. **Reactions**: players send one of eight emojis (👏 😂 😮 🤔 🔥 ❤️ 😢 🎉) from a tray,
 always shown in the lobby and on the results, and opened with the smile button in the top bar during a round. Each one
-floats up on the TV and on the host's screen with the player's name, at most one per player a second; *Reactions* in
+floats up on the TV and on the host's screen with the player's name, at most one per player a second, and small
+on the other players' phones, in a narrow lane on the right; while a question runs, phones only count them on the smile
+button so nothing moves over the question. *Show reactions* in the phone's Settings hides them and the tray for that
+player (remembered on the device); *Reactions* in
 the party header turns them off and on for everyone. Windows
   Firewall asks once whether KimHardaNeApp may accept connections on private networks; allow it.
 - **Lists**: *Add to list* in the editor puts the open question into one or more of your lists, or creates a

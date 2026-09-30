@@ -263,7 +263,7 @@ test('answers can wait for the end of the round: the host checks them between qu
   assert.equal(game.phase, 'finished');
 });
 
-const goOnline = (game, player) => game.streams.add({ playerId: player.id, view: () => null, send() {}, end() {} });
+const goOnline = (game, player) => game.streams.add({ playerId: player.id, view: () => null, send() {}, sendEvent() {}, end() {} });
 
 test('the host sees answers while the question runs and can call them early; a changed answer drops the call', async () => {
   const game = new PartyGame({ judge: async () => ({ verdict: 'wrong', similarity: null, closestAnswer: null }) });
@@ -534,9 +534,13 @@ test('players send reactions from the list to the TV and the host, one a second,
   const game = new PartyGame({ judge: judgeByText, onReaction: reaction => shownToHost.push(reaction) });
   game.streams.add({ playerId: null, view: () => null, send() {}, sendEvent: (name, data) => shownOnTv.push([name, data.emoji, data.name]), end() {} });
   const aysel = game.join('Aysel');
+  const nicat = game.join('Nicat');
+  const shownToPlayers = [];
+  for (const player of [aysel, nicat]) game.streams.add({ playerId: player.id, view: () => null, send() {}, sendEvent: (name, data) => shownToPlayers.push([player.name, data.emoji]), end() {} });
   assert.deepEqual(game.playerView(aysel).reactions, ['👏', '😂', '😮', '🤔', '🔥', '❤️', '😢', '🎉']);
   game.react(aysel.token, '🔥');
   assert.deepEqual(shownOnTv, [['reaction', '🔥', 'Aysel']]);
+  assert.deepEqual(shownToPlayers, [['Nicat', '🔥']], 'other players see it, the sender already did');
   assert.equal(shownToHost[0].emoji, '🔥');
   assert.throws(() => game.react(aysel.token, '👏'), /Wait/);
   game.lastReactionAt.set(aysel.id, 0);
