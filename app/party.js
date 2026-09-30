@@ -510,10 +510,11 @@ class PartyGame {
 
   roundResults() {
     return [...this.players.values()].map(player => {
-      const result = { name: player.name, correct: 0, wrong: 0, unanswered: 0, correctMs: 0 };
+      const result = { name: player.name, points: 0, correct: 0, wrong: 0, unanswered: 0, correctMs: 0 };
       const firstPosition = player.countsFrom.round === this.round ? player.countsFrom.position : 0;
       for (const answers of this.answers.slice(firstPosition, this.closedCount)) {
         const answer = answers.get(player.id);
+        result.points += this.pointsFor(answer);
         if (answer?.isCorrect) {
           result.correct += 1;
           result.correctMs += answer.ms ?? 0;

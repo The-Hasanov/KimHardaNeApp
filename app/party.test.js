@@ -358,12 +358,12 @@ test('players can rename to a free name, and a removed player can join again', (
   assert.equal(game.join('Aysel Q').name, 'Aysel Q');
 });
 
-test('a finished round reports correct, wrong and unanswered questions per player, from the question they joined at', async () => {
+test('a finished round reports points, correct, wrong and unanswered questions per player, from the question they joined at', async () => {
   const reports = [];
   const game = new PartyGame({ judge: judgeByText, onRoundFinished: results => reports.push(results) });
   const aysel = game.join('Aysel');
   const nicat = game.join('Nicat');
-  game.startRound(ROUND);
+  game.startRound({ ...ROUND, pointsForCorrect: 3, pointsForWrong: -1 });
   game.submitAnswer(aysel.token, 'Bakı');
   game.submitAnswer(nicat.token, 'Gəncə');
   await game.closeAnswers();
@@ -375,9 +375,9 @@ test('a finished round reports correct, wrong and unanswered questions per playe
   game.next();
   assert.ok(reports[0].every(result => result.correctMs >= 0));
   assert.deepEqual(reports.map(results => results.map(({ correctMs, ...result }) => result)), [[
-    { name: 'Aysel', correct: 1, wrong: 0, unanswered: 1 },
-    { name: 'Nicat', correct: 0, wrong: 1, unanswered: 1 },
-    { name: 'Leyla', correct: 1, wrong: 0, unanswered: 0 },
+    { name: 'Aysel', points: 3, correct: 1, wrong: 0, unanswered: 1 },
+    { name: 'Nicat', points: -1, correct: 0, wrong: 1, unanswered: 1 },
+    { name: 'Leyla', points: 3, correct: 1, wrong: 0, unanswered: 0 },
   ]]);
 });
 

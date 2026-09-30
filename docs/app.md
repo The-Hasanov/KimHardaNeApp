@@ -107,9 +107,10 @@ shown: when every online player has held it (hold again to take it back), the ga
 paused, and never while the host checks answers (between questions when the answers show at the end of the round, or
 while an answer is still *not sure*): phones then show that the host is checking, and only the host moves on. Phones
 and the host see how many tapped, and the count starts again at each step. Every finished round adds
-each player's correct, wrong and unanswered questions (counted from the question they joined at) to the
+each player's points, correct, wrong and unanswered questions (counted from the question they joined at) to the
 **all-time leaderboard** (in the party lobby and the Game tab's *Leaderboard*), kept per name in the `party_results` table and carried through
-updates; *Reset* there deletes them. Each answer keeps its time: seconds from the question's start to the last change of the
+updates; it ranks by total points, then by the faster average time, and *Reset* there deletes them (results saved before
+points were kept count one point per correct answer). Each answer keeps its time: seconds from the question's start to the last change of the
 answer, pauses left out (sending the same answer again keeps the first time). The host sees it next to every answer,
 phones see their own after the reveal, and every leaderboard (host, TV, phones, all-time) shows each player's average
 time of correct answers; players with the same score are ranked by it, the faster first. When a round ends, the TV and the host show

@@ -214,6 +214,7 @@ export function AllTimeLeaderboard() {
     <div className="space-y-3">
       <div className="flex items-center gap-2">
         <h2 className="flex items-center gap-2 font-medium"><TrophyIcon className="size-4" />All-time leaderboard</h2>
+        {results.length > 0 && <span className="text-sm text-muted-foreground">ranked by points, then average time</span>}
         {results.length > 0 && (
           <Button size="sm" variant="ghost" className="ml-auto text-muted-foreground" onClick={() => setIsConfirmingReset(true)}><Trash2Icon />Reset</Button>
         )}
@@ -225,6 +226,7 @@ export function AllTimeLeaderboard() {
               <tr className="text-left">
                 <th className="w-10 px-3 py-2 text-right font-medium">#</th>
                 <th className="px-3 py-2 font-medium">Player</th>
+                <th className="px-3 py-2 text-right font-medium">Points</th>
                 <th className="px-3 py-2 text-right font-medium">Correct</th>
                 <th className="px-3 py-2 text-right font-medium">Wrong</th>
                 <th className="px-3 py-2 text-right font-medium">No answer</th>
@@ -237,7 +239,8 @@ export function AllTimeLeaderboard() {
                 <tr key={result.name} className={cn(i === 0 && 'bg-amber-500/10')}>
                   <td className="px-3 py-2 text-right font-semibold text-muted-foreground tabular-nums">{i + 1}</td>
                   <td className="max-w-48 truncate px-3 py-2 font-medium">{result.name}</td>
-                  <td className="px-3 py-2 text-right font-semibold tabular-nums text-emerald-600 dark:text-emerald-400">{result.correct}</td>
+                  <td className="px-3 py-2 text-right text-base font-semibold tabular-nums">{result.points}</td>
+                  <td className="px-3 py-2 text-right tabular-nums text-emerald-600 dark:text-emerald-400">{result.correct}</td>
                   <td className="px-3 py-2 text-right tabular-nums text-destructive">{result.wrong}</td>
                   <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">{result.unanswered}</td>
                   <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">{secondsLabel(result.avg_seconds)}</td>
@@ -247,7 +250,7 @@ export function AllTimeLeaderboard() {
             </tbody>
           </table>
         </div>
-      ) : <p className="text-sm text-muted-foreground">Every finished round adds each player's correct, wrong and unanswered questions and answer times here.</p>}
+      ) : <p className="text-sm text-muted-foreground">Every finished round adds each player's points, correct, wrong and unanswered questions and answer times here. Players are ranked by points, then by the faster average time.</p>}
       <AlertDialog open={isConfirmingReset} onOpenChange={setIsConfirmingReset}>
         <AlertDialogContent>
           <AlertDialogHeader>

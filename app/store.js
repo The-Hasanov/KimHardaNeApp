@@ -28,7 +28,8 @@ CREATE TABLE IF NOT EXISTS list_questions (
 const PARTY_RESULTS_SCHEMA = `
 CREATE TABLE IF NOT EXISTS party_results (
   name_key TEXT PRIMARY KEY, name TEXT NOT NULL, correct INTEGER NOT NULL DEFAULT 0, wrong INTEGER NOT NULL DEFAULT 0,
-  unanswered INTEGER NOT NULL DEFAULT 0, rounds INTEGER NOT NULL DEFAULT 0, correct_ms INTEGER NOT NULL DEFAULT 0, updated_at TEXT NOT NULL);`;
+  unanswered INTEGER NOT NULL DEFAULT 0, rounds INTEGER NOT NULL DEFAULT 0, correct_ms INTEGER NOT NULL DEFAULT 0, points INTEGER NOT NULL DEFAULT 0,
+  updated_at TEXT NOT NULL);`;
 const PARTY_PROFILES_SCHEMA = `
 CREATE TABLE IF NOT EXISTS party_profiles (
   name_key TEXT PRIMARY KEY, name TEXT NOT NULL, pin_hash TEXT, pin_salt TEXT, preferences TEXT NOT NULL DEFAULT '{}',
@@ -70,9 +71,9 @@ class Store {
     this.db.exec(PLAY_SCHEMA);
     this.db.exec(PARTY_RESULTS_SCHEMA);
     this.db.exec(PARTY_PROFILES_SCHEMA);
-    if (!this.db.prepare('PRAGMA table_info(party_results)').all().some(c => c.name === 'correct_ms')) {
-      this.db.exec('ALTER TABLE party_results ADD COLUMN correct_ms INTEGER NOT NULL DEFAULT 0');
-    }
+    const resultColumns = this.db.prepare('PRAGMA table_info(party_results)').all().map(c => c.name);
+    if (!resultColumns.includes('correct_ms')) this.db.exec('ALTER TABLE party_results ADD COLUMN correct_ms INTEGER NOT NULL DEFAULT 0');
+    if (!resultColumns.includes('points')) this.db.exec('ALTER TABLE party_results ADD COLUMN points INTEGER NOT NULL DEFAULT 0; UPDATE party_results SET points = correct');
     this.loadRows();
     this.vecs = null;
     this.vectorCount = 0;
@@ -425,19 +426,20 @@ class Store {
   }
 
   addPartyResults(results) {
-    const add = this.db.prepare(`INSERT INTO party_results (name_key, name, correct, wrong, unanswered, correct_ms, rounds, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, 1, datetime('now'))
-      ON CONFLICT (name_key) DO UPDATE SET name = excluded.name, correct = correct + excluded.correct, wrong = wrong + excluded.wrong,
-        unanswered = unanswered + excluded.unanswered, correct_ms = correct_ms + excluded.correct_ms, rounds = rounds + 1, updated_at = excluded.updated_at`);
+    const add = this.db.prepare(`INSERT INTO party_results (name_key, name, points, correct, wrong, unanswered, correct_ms, rounds, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, 1, datetime('now'))
+      ON CONFLICT (name_key) DO UPDATE SET name = excluded.name, points = points + excluded.points, correct = correct + excluded.correct,
+        wrong = wrong + excluded.wrong, unanswered = unanswered + excluded.unanswered, correct_ms = correct_ms + excluded.correct_ms,
+        rounds = rounds + 1, updated_at = excluded.updated_at`);
     this.db.exec('BEGIN');
-    for (const { name, correct, wrong, unanswered, correctMs = 0 } of results) add.run(name.toLowerCase(), name, correct, wrong, unanswered, correctMs);
+    for (const { name, correct, points = correct, wrong, unanswered, correctMs = 0 } of results) add.run(name.toLowerCase(), name, points, correct, wrong, unanswered, correctMs);
     this.db.exec('COMMIT');
   }
 
   partyResults() {
-    return this.db.prepare(`SELECT name, correct, wrong, unanswered, rounds, updated_at,
+    return this.db.prepare(`SELECT name, points, correct, wrong, unanswered, rounds, updated_at,
         CASE WHEN correct > 0 THEN ROUND(correct_ms / 1000.0 / correct, 1) END AS avg_seconds
-      FROM party_results ORDER BY correct DESC, avg_seconds IS NULL, avg_seconds ASC, wrong ASC, unanswered ASC, name`).all();
+      FROM party_results ORDER BY points DESC, avg_seconds IS NULL, avg_seconds ASC, correct DESC, wrong ASC, name`).all();
   }
 
   resetPartyResults() {
