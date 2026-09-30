@@ -688,9 +688,9 @@ export default function PartyScreen({ party, isVisible, lobbySettings, onBackToL
             {isInRound && <Button variant="outline" size="sm" onClick={() => api.partyFinishRound()}><FlagIcon />End round</Button>}
             <ToggleGroup type="single" variant="outline" size="sm" spacing={0} value={party.screen} aria-label="What the TV shows"
               onValueChange={screen => screen && api.partySetScreen(screen)}>
-              <ToggleGroupItem value="game" className="px-2.5 aria-checked:bg-muted" title="The TV follows the game"><GamepadIcon />Game</ToggleGroupItem>
-              <ToggleGroupItem value="leaderboard" className="px-2.5 aria-checked:bg-muted" title="Show the leaderboard on the TV"><TrophyIcon />Leaderboard</ToggleGroupItem>
-              <ToggleGroupItem value="join" className="px-2.5 aria-checked:bg-muted" title="Show the join QR code on the TV"><QrCodeIcon />Join code</ToggleGroupItem>
+              <ToggleGroupItem value="game" className="px-2.5 aria-checked:bg-muted" title="The TV follows the game" aria-label="TV shows the game"><GamepadIcon /><span className="hidden 2xl:inline">Game</span></ToggleGroupItem>
+              <ToggleGroupItem value="leaderboard" className="px-2.5 aria-checked:bg-muted" title="Show the leaderboard on the TV" aria-label="TV shows the leaderboard"><TrophyIcon /><span className="hidden 2xl:inline">Leaderboard</span></ToggleGroupItem>
+              <ToggleGroupItem value="join" className="px-2.5 aria-checked:bg-muted" title="Show the join QR code on the TV" aria-label="TV shows the join code"><QrCodeIcon /><span className="hidden 2xl:inline">Join code</span></ToggleGroupItem>
             </ToggleGroup>
             <TvMenu />
             <Button variant="outline" size="sm" onClick={() => setIsConfirmingClose(true)}><DoorClosedIcon />Close party</Button>

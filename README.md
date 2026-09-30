@@ -14,15 +14,17 @@ game from the app. Bring your own questions or use the bundled question bank.
   the address in a browser, with nothing to install. The TV shows each question with
   its pictures, a countdown with sound for the last 10 seconds, the answer with everyone's result, and the
   leaderboard. Typed answers are checked by a local AI model, or marked by the host when AI search is off,
-  and the host can overrule any verdict, or mark answers while the question is still running. Players can skip
-  a wait together, rename themselves and reconnect without losing their place, and an all-time leaderboard adds up
-  every round.
+  and the host can overrule any verdict, or mark answers while the question is still running. Players answer
+  in a chat-style bar, send reactions that show on the TV and on everyone's screen, skip a wait together, rename
+  themselves and reconnect without losing their place. Answer times break ties, the round ends with a podium, and
+  an all-time leaderboard adds up every round. The host can send messages to all players and sees who leaves the
+  game screen during a question.
 - **Any TV**: a TV window on a second screen, Miracast, or the web browser of a Samsung Smart TV.
 - **Host controls**: points for right and wrong answers, pause, autoplay, answers shown after each question or
   all at the end of the round, several rounds with or without keeping the scores, and no question shown twice
   in one party.
 - **Your own questions**: write them on the *Custom* tab, add a handout picture and an answer picture,
-  collect them in lists and play a list in order.
+  collect them in lists and play a list in order. Import and export your questions or a list, pictures included.
 - **Game helper and solo play**: a timer for the host, or play alone and mark your answers yourself or let the
   AI check them.
 - **Question bank**: search by keyword or by meaning, ignoring case, diacritics and small typos, and edit
@@ -34,6 +36,7 @@ game from the app. Bring your own questions or use the bundled question bank.
 |---|---|---|
 | ![Host console](docs/screenshots/party-host.png) | ![TV question](docs/screenshots/tv-question.png) | ![Phone question](docs/screenshots/phone-question.png) |
 | ![Host reveal](docs/screenshots/party-reveal.png) | ![TV reveal](docs/screenshots/tv-reveal.png) | ![Phone reveal](docs/screenshots/phone-reveal.png) |
+| ![Host round results](docs/screenshots/party-results.png) | ![TV round results](docs/screenshots/tv-results.png) | ![Phone round results](docs/screenshots/phone-results.png) |
 
 1. Optional: open **Settings** and turn on AI search to check the answers automatically. Without it, you mark
    each answer.
@@ -52,8 +55,8 @@ the TV never receive it early.
 |---|---|
 | ![Search](docs/screenshots/search.png) | ![Custom questions](docs/screenshots/custom.png) |
 | ![Lists](docs/screenshots/lists.png) | ![Game setup](docs/screenshots/game-setup.png) |
-| ![TV lobby](docs/screenshots/tv-lobby.png) | ![Settings](docs/screenshots/settings.png) |
-| ![Night mode](docs/screenshots/search-dark.png) | |
+| ![Party lobby with the all-time leaderboard](docs/screenshots/party-lobby.png) | ![TV lobby](docs/screenshots/tv-lobby.png) |
+| ![Settings](docs/screenshots/settings.png) | ![Night mode](docs/screenshots/search-dark.png) |
 
 ## Install
 
