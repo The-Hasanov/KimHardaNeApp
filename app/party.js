@@ -23,6 +23,10 @@ const REACTIONS = ['👏', '😂', '😮', '🤔', '🔥', '❤️', '😢', '�
 const REACTION_COOLDOWN_MS = 1000;
 const REACTIONS_PER_MINUTE = 10;
 const MINUTE_MS = 60000;
+const REACTION_SCREENS = {
+  tv: { atOnce: 5, shownMs: 4200, maxWaitMs: 15000 },
+  players: { atOnce: 2, shownMs: 3000, maxWaitMs: 8000 },
+};
 const DEFAULT_RULES = { secondsPerQuestion: 60, secondsBetweenQuestions: 0, secondsOnAnswer: 0, pointsForCorrect: 1, pointsForWrong: 0 };
 
 class PartyError extends Error {
@@ -54,6 +58,9 @@ class PartyGame {
     this.onReaction = onReaction;
     this.areReactionsOn = true;
     this.reactionTimes = new Map();
+    this.reactionQueues = { tv: [], players: [] };
+    this.reactionsShown = { tv: 0, players: 0 };
+    this.reactionTimers = new Set();
     this.players = new Map();
     this.bankedScores = new Map();
     this.bankedTimes = new Map();
@@ -187,13 +194,40 @@ class PartyGame {
       const seconds = Math.ceil((MINUTE_MS - (now - times[0])) / 1000);
       throw new PartyError(429, `${REACTIONS_PER_MINUTE} reactions a minute. More in ${seconds} s`);
     }
-    if (now - (times.at(-1) ?? 0) < REACTION_COOLDOWN_MS) throw new PartyError(429, 'Wait a moment');
+    if (times.length && now - times.at(-1) < REACTION_COOLDOWN_MS) throw new PartyError(429, 'Wait a moment');
     times.push(now);
     this.reactionTimes.set(player.id, times);
     const reaction = { id: crypto.randomUUID(), emoji, name: player.name, playerId: player.id };
-    this.onReaction(reaction);
-    for (const stream of this.streams) if (stream.playerId !== player.id) stream.sendEvent('reaction', reaction);
+    for (const screen of Object.keys(REACTION_SCREENS)) {
+      this.reactionQueues[screen].push({ reaction, queuedAt: now });
+      this.showQueuedReactions(screen);
+    }
     return { reaction, left: REACTIONS_PER_MINUTE - times.length };
+  }
+
+  showQueuedReactions(screen) {
+    const { atOnce, shownMs, maxWaitMs } = REACTION_SCREENS[screen];
+    const queue = this.reactionQueues[screen];
+    while (this.reactionsShown[screen] < atOnce && queue.length && !this.isClosed) {
+      const { reaction, queuedAt } = queue.shift();
+      if (Date.now() - queuedAt > maxWaitMs) continue;
+      this.reactionsShown[screen] += 1;
+      this.deliverReaction(screen, reaction);
+      const timer = setTimeout(() => {
+        this.reactionTimers.delete(timer);
+        this.reactionsShown[screen] -= 1;
+        this.showQueuedReactions(screen);
+      }, shownMs);
+      this.reactionTimers.add(timer);
+    }
+  }
+
+  deliverReaction(screen, reaction) {
+    if (screen === 'tv') this.onReaction(reaction);
+    for (const stream of this.streams) {
+      const isTv = !stream.playerId;
+      if (screen === 'tv' ? isTv : !isTv && stream.playerId !== reaction.playerId) stream.sendEvent('reaction', reaction);
+    }
   }
 
   setReactionsOn(areOn) {
@@ -554,6 +588,7 @@ class PartyGame {
   close() {
     this.isClosed = true;
     this.stopTimer();
+    for (const timer of this.reactionTimers) clearTimeout(timer);
     for (const stream of this.streams) stream.end({ phase: 'closed' });
   }
 }

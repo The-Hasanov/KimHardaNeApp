@@ -108,9 +108,10 @@ a short fanfare; each phone congratulates its player by place: a trophy and conf
 medals for second and third, and the place and winner for everyone else. Confetti is left out when the device asks
 for reduced motion. **Reactions**: players send one of eight emojis (👏 😂 😮 🤔 🔥 ❤️ 😢 🎉) from a tray,
 always shown in the lobby and on the results, and opened with the smile button in the top bar during a round; one a
-second and ten a minute per player (the tray shows how many are left). Each reaction appears as a small toast with the
-player's name in the TV's bottom-right corner and on the other players' phones, and next to the player's name in the
-host's player lists for a few seconds. While a question runs, phones only count them on the smile button so nothing
+second and ten a minute per player (the tray shows how many are left). The host app queues every reaction and shows it as a small toast
+with the player's name in the TV's bottom-right corner (five at a time, about 4 s each) and on the other players' phones
+(two at a time, about 3 s each), in the order sent; one that waits too long (15 s for the TV, 8 s for phones) is dropped, and it shows next to the player's name in the
+host's player lists for a few seconds when it reaches the TV. While a question runs, phones only count them on the smile button so nothing
 moves over the question. *Show reactions* in the phone's Settings hides them and the tray for that player (remembered
 on the device); *Reactions* in
 the party header turns them off and on for everyone. Windows

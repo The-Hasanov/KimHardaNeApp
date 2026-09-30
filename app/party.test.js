@@ -553,6 +553,7 @@ test('players send reactions from the list to the TV and the host, one a second,
   assert.deepEqual([game.playerView(aysel).reactions, game.hostView().areReactionsOn], [[], false]);
   assert.throws(() => game.react(aysel.token, '👏'), /off/);
   assert.throws(() => game.react('forged', '👏'), /Join/);
+  game.close();
 });
 
 test('the party server takes reactions and streams them to the TV', async () => {
@@ -571,4 +572,34 @@ test('the party server takes reactions and streams them to the TV', async () => 
   } finally {
     await close();
   }
+});
+
+test('the host app queues reactions: five at a time on the TV, two at a time on phones, stale ones dropped', t => {
+  t.mock.timers.enable({ apis: ['setTimeout', 'Date'] });
+  const advance = ms => {
+    for (let passed = 0; passed < ms; passed += 100) t.mock.timers.tick(100);
+  };
+  const onTv = [];
+  const onPhone = [];
+  const game = new PartyGame({ judge: judgeByText, onReaction: reaction => onTv.push(reaction.name) });
+  const players = ['A', 'B', 'C', 'D', 'E', 'F', 'G'].map(name => game.join(name));
+  const watcher = game.join('Watcher');
+  game.streams.add({ playerId: watcher.id, view: () => null, send() {}, sendEvent: (name, data) => onPhone.push(data.name), end() {} });
+  for (const player of players) game.react(player.token, '👏');
+  assert.deepEqual([onTv, onPhone], [['A', 'B', 'C', 'D', 'E'], ['A', 'B']]);
+  advance(3000);
+  assert.deepEqual([onTv.length, onPhone], [5, ['A', 'B', 'C', 'D']], 'phones free their two places after 3 s');
+  advance(1200);
+  assert.deepEqual([onTv, onPhone.length], [['A', 'B', 'C', 'D', 'E', 'F', 'G'], 4]);
+  advance(3000);
+  assert.deepEqual(onPhone, ['A', 'B', 'C', 'D', 'E', 'F']);
+  advance(3000);
+  assert.deepEqual(onPhone, ['A', 'B', 'C', 'D', 'E', 'F'], 'G waited more than 8 s for a place on phones, so it is dropped');
+  for (const player of players) {
+    game.reactionTimes.delete(player.id);
+    game.react(player.token, '🔥');
+  }
+  advance(9000);
+  assert.equal(onPhone.length, 6 + 6);
+  game.close();
 });
