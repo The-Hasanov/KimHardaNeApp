@@ -37,6 +37,9 @@ CREATE TABLE IF NOT EXISTS party_profiles (
 const POINT_SYSTEMS_SCHEMA = `
 CREATE TABLE IF NOT EXISTS point_systems (
   id INTEGER PRIMARY KEY, name TEXT NOT NULL UNIQUE COLLATE NOCASE, settings TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL);`;
+const GAME_TEMPLATES_SCHEMA = `
+CREATE TABLE IF NOT EXISTS game_templates (
+  id INTEGER PRIMARY KEY, name TEXT NOT NULL UNIQUE COLLATE NOCASE, rounds TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL);`;
 const POOL = 500;
 const OWN_PACKAGE_ID = 0;
 const OWN_GAME_ID = 0;
@@ -75,6 +78,7 @@ class Store {
     this.db.exec(PARTY_RESULTS_SCHEMA);
     this.db.exec(PARTY_PROFILES_SCHEMA);
     this.db.exec(POINT_SYSTEMS_SCHEMA);
+    this.db.exec(GAME_TEMPLATES_SCHEMA);
     const resultColumns = this.db.prepare('PRAGMA table_info(party_results)').all().map(c => c.name);
     if (!resultColumns.includes('correct_ms')) this.db.exec('ALTER TABLE party_results ADD COLUMN correct_ms INTEGER NOT NULL DEFAULT 0');
     if (!resultColumns.includes('points')) this.db.exec('ALTER TABLE party_results ADD COLUMN points INTEGER NOT NULL DEFAULT 0; UPDATE party_results SET points = correct');
@@ -511,9 +515,34 @@ class Store {
     this.db.prepare('DELETE FROM point_systems WHERE id = ?').run(id);
   }
 
+  gameTemplates() {
+    return this.db.prepare('SELECT id, name, rounds, updated_at FROM game_templates ORDER BY name COLLATE NOCASE').all()
+      .map(row => ({ ...row, rounds: JSON.parse(row.rounds) }));
+  }
+
+  saveGameTemplate({ id = null, name, rounds }) {
+    const existing = this.db.prepare('SELECT id FROM game_templates WHERE name = ?').get(name);
+    const targetId = id ?? existing?.id ?? null;
+    if (existing && existing.id !== targetId) throw new Error(`A template named “${name}” already exists`);
+    const json = JSON.stringify(rounds);
+    if (targetId == null) {
+      return Number(this.db.prepare("INSERT INTO game_templates (name, rounds, created_at, updated_at) VALUES (?, ?, datetime('now'), datetime('now'))").run(name, json).lastInsertRowid);
+    }
+    this.db.prepare("UPDATE game_templates SET name = ?, rounds = ?, updated_at = datetime('now') WHERE id = ?").run(name, json, targetId);
+    return targetId;
+  }
+
+  deleteGameTemplate(id) {
+    this.db.prepare('DELETE FROM game_templates WHERE id = ?').run(id);
+  }
+
+  templatesUsingPointSystem(pointSystemId) {
+    return this.gameTemplates().filter(template => template.rounds.some(round => round.pointSystemId === pointSystemId)).map(template => template.name);
+  }
+
   games() {
     return this.db.prepare('SELECT game_id AS id, game_name AS name, COUNT(*) AS n FROM questions GROUP BY game_id ORDER BY game_id').all();
   }
 }
 
-module.exports = { Store, OWN_PACKAGE_ID, OWN_IMAGE_PREFIX, MEDIA_TYPES, IMAGE_COLUMNS, mediaKind, TUNING, LISTS_SCHEMA, PLAY_SCHEMA, PARTY_RESULTS_SCHEMA, PARTY_PROFILES_SCHEMA, POINT_SYSTEMS_SCHEMA, EMBEDDINGS_SCHEMA, fold, passage, embeddable, hashOf, DIM };
+module.exports = { Store, OWN_PACKAGE_ID, OWN_IMAGE_PREFIX, MEDIA_TYPES, IMAGE_COLUMNS, mediaKind, TUNING, LISTS_SCHEMA, PLAY_SCHEMA, PARTY_RESULTS_SCHEMA, PARTY_PROFILES_SCHEMA, POINT_SYSTEMS_SCHEMA, GAME_TEMPLATES_SCHEMA, EMBEDDINGS_SCHEMA, fold, passage, embeddable, hashOf, DIM };

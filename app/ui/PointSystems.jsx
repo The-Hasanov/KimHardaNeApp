@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { cn } from 'cn';
-import { CopyIcon, DicesIcon, FlameIcon, PencilIcon, PlusIcon, SigmaIcon, Trash2Icon, TriangleAlertIcon, XIcon } from 'lucide-react';
+import { CopyIcon, DicesIcon, FlameIcon, LayoutTemplateIcon, PencilIcon, PlusIcon, SigmaIcon, Trash2Icon, TriangleAlertIcon, XIcon } from 'lucide-react';
 import { toast } from 'sonner';
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter,
@@ -250,7 +250,7 @@ export default function PointSystems() {
       toast.error(`Could not delete ${system.name}`, { description: e.message.replace(/^Error invoking remote method '[^']+': (Error: )?/, '') });
     }
   };
-  const editable = ({ summary, updated_at, ...system }) => system;
+  const editable = ({ summary, updated_at, usedBy, ...system }) => system;
   if (!pointSystems) return null;
   return (
     <div className="mx-auto max-w-3xl space-y-5 px-6 py-8">
@@ -269,10 +269,16 @@ export default function PointSystems() {
               <Button size="icon-sm" variant="ghost" className="text-muted-foreground" aria-label={`Edit ${system.name}`} title="Edit" onClick={() => setEditing(editable(system))}><PencilIcon /></Button>
               <Button size="icon-sm" variant="ghost" className="text-muted-foreground" aria-label={`Duplicate ${system.name}`} title="Duplicate"
                 onClick={() => setEditing({ ...editable(system), id: undefined, name: `${system.name} copy`.slice(0, 40) })}><CopyIcon /></Button>
-              <Button size="icon-sm" variant="ghost" className="text-muted-foreground" aria-label={`Delete ${system.name}`} title="Delete"
-                disabled={pointSystems.length <= 1} onClick={() => setSystemToDelete(system)}><Trash2Icon /></Button>
+              <Button size="icon-sm" variant="ghost" className="text-muted-foreground" aria-label={`Delete ${system.name}`}
+                title={system.usedBy?.length ? 'Used by a template, so it cannot be deleted' : 'Delete'}
+                disabled={pointSystems.length <= 1 || system.usedBy?.length > 0} onClick={() => setSystemToDelete(system)}><Trash2Icon /></Button>
             </div>
             <PointSystemSummary system={system} />
+            {system.usedBy?.length > 0 && (
+              <p className="mt-auto flex items-center gap-1.5 text-xs text-muted-foreground">
+                <LayoutTemplateIcon className="size-3.5" />Used by {system.usedBy.join(', ')}
+              </p>
+            )}
           </li>
         ))}
       </ul>

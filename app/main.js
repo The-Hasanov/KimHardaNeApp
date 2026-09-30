@@ -12,6 +12,7 @@ const { judgeAnswer } = require('./judge');
 const { openParty } = require('./party');
 const { PlayerProfiles } = require('./profiles');
 const { CLASSIC_POINT_SYSTEM, normalizePointSystem, summaryOf } = require('./scoring');
+const { normalizeTemplate } = require('./templates');
 const transfer = require('./transfer');
 const { findSamsungTvs, openInTvBrowser, isLocalNetworkAddress } = require('./samsungTv');
 
@@ -291,7 +292,7 @@ app.whenReady().then(() => {
   });
   const pointSystemsWithSummary = () => {
     if (!store.pointSystems().length) store.savePointSystem(normalizePointSystem(CLASSIC_POINT_SYSTEM));
-    return store.pointSystems().map(system => ({ ...system, summary: summaryOf(normalizePointSystem(system)) }));
+    return store.pointSystems().map(system => ({ ...system, summary: summaryOf(normalizePointSystem(system)), usedBy: store.templatesUsingPointSystem(system.id) }));
   };
   handle('point-systems', pointSystemsWithSummary);
   handle('save-point-system', system => {
@@ -300,8 +301,19 @@ app.whenReady().then(() => {
   });
   handle('delete-point-system', id => {
     if (store.pointSystems().length <= 1) throw new Error('Keep at least one point system');
+    const usedBy = store.templatesUsingPointSystem(id);
+    if (usedBy.length) throw new Error(`It is used by ${usedBy.length === 1 ? 'the template' : 'the templates'} ${usedBy.map(name => `“${name}”`).join(', ')}. Change those rounds first.`);
     store.deletePointSystem(id);
     return pointSystemsWithSummary();
+  });
+  handle('game-templates', () => store.gameTemplates());
+  handle('save-game-template', template => {
+    const id = store.saveGameTemplate(normalizeTemplate(template));
+    return { id, templates: store.gameTemplates() };
+  });
+  handle('delete-game-template', id => {
+    store.deleteGameTemplate(id);
+    return store.gameTemplates();
   });
   handle('party-profiles', () => store.partyProfiles());
   handle('clear-party-profile-pin', name => {

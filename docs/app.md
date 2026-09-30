@@ -76,7 +76,13 @@ npm test         # offline tests for the scraper, search, ranking, edits, data u
   status and a small *Done* chip (the Skip vote, held for a second) under it. When the time is up (or *Close answers now*),
   AI search checks every answer as in Play mode (with AI search off the host marks each one, and phones show
   *The host is checking* until then); phones then show their verdict, the answer and the
-  leaderboard, and the host sees every answer and can overrule it. Each round uses a **point system**,
+  leaderboard, and the host sees every answer and can overrule it. In Party mode the host plans the **rounds** before opening the party: each round has its own questions (random, with a count,
+  or a list), timers, answer showing, autoplay and point system, and rounds can be added, duplicated, removed and changed
+  until they are played (between rounds too). The party cannot open, and a round cannot start, while a planned round does
+  not fit its point system or its list is gone; the round shows why in red. *Save as template* keeps the plan as a **game
+  template** (`game_templates` table, carried through updates; saving with an existing name replaces it), and *Use a
+  template* or *Game → Templates → Use* loads one. Templates point to their point systems, so editing a point system changes
+  every template that uses it, and a point system a template uses cannot be deleted. Each round uses a **point system**,
   picked in the round settings and kept under *Game → Point systems* (`point_systems` table, carried through updates;
   a *Classic* one, correct +1, is made on first use). A point system has either *fixed points* (correct, wrong and no
   answer, negative for a penalty) or a *point pool* (values such as 10, 20 and 30, each with its own wrong and no-answer
