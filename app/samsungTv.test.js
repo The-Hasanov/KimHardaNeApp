@@ -53,3 +53,10 @@ test('says so when the TV refuses the connection', async () => {
     tv.close();
   }
 });
+
+test('only devices on the local network are asked whether they are Samsung TVs', async () => {
+  const { isLocalNetworkAddress, readTvInfo } = require('./samsungTv');
+  for (const address of ['192.168.1.20', '10.0.0.5', '172.16.4.2', '169.254.10.1']) assert.equal(isLocalNetworkAddress(address), true, address);
+  for (const address of ['8.8.8.8', '127.0.0.1', '172.32.0.1', '::1', 'tv.example', '192.168.1.20:80']) assert.equal(isLocalNetworkAddress(address), false, address);
+  await assert.rejects(readTvInfo('8.8.8.8'), /not on the local network/);
+});

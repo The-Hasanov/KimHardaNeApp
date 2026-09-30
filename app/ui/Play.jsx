@@ -16,7 +16,7 @@ import { Kbd } from '@/components/ui/kbd';
 import { Progress } from '@/components/ui/progress';
 import { Spinner } from '@/components/ui/spinner';
 import {
-  KEY_HINT_ON_PRIMARY_BUTTON, NextQuestionNumber, QuestionOnScreen, WARNING_AT_SECONDS_LEFT, formatClock, playTenSecondsLeftTone,
+  KEY_HINT_ON_PRIMARY_BUTTON, Media, NextQuestionNumber, QuestionOnScreen, WARNING_AT_SECONDS_LEFT, formatClock, playTenSecondsLeftTone,
   playTimeUpTone, useCountdown, withLineBreaks,
 } from './gameShared';
 
@@ -62,7 +62,7 @@ export function CorrectAnswer({ question }) {
       <p className="text-2xl font-semibold">{question.answer}</p>
       {question.accepted_answers && <p className="text-sm"><span className="text-muted-foreground">Also accepted: </span>{question.accepted_answers}</p>}
       {question.comment && <p className="text-sm whitespace-pre-line text-muted-foreground">{question.comment}</p>}
-      {question.source_media_src && <img src={question.source_media_src} alt="Answer" className="max-h-72 rounded-lg border object-contain" />}
+      {question.source_media_src && <Media src={question.source_media_src} kind={question.source_media_kind} alt="Answer" className="max-h-72" />}
     </div>
   );
 }

@@ -13,6 +13,7 @@ const memdb = () => t.prepareDb(new DatabaseSync(':memory:'));
 const one = (db, sql, ...a) => Object.values(db.prepare(sql).get(...a))[0];
 const tmp = () => fs.mkdtempSync(path.join(os.tmpdir(), 'scraper-'));
 const quiet = () => {};
+const PNG_SIGNATURE = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
 
 test('questions inside subphases (Breyn Rinq: phases[].subs[].questions[])', needsFixtures, () => {
   const ext = t.normalizePackage(fixture('package_breyn_subs.json'));
@@ -158,7 +159,7 @@ class FakeFetch {
   async fetch(url) {
     this.calls.push(url);
     if (this.fail.has(url)) throw new t.FetchError(`HTTP 404 for ${url}`);
-    return { status: 200, headers: new Headers({ 'Content-Type': 'image/png' }), body: Buffer.from(`PNG${url}`) };
+    return { status: 200, headers: new Headers({ 'Content-Type': 'image/png' }), body: Buffer.concat([PNG_SIGNATURE, Buffer.from(url)]) };
   }
 }
 
@@ -337,4 +338,39 @@ test('client: 204 is null, bad JSON raises, abort stops', async () => {
   assert.equal(await client([res(204)]).c.getJson('x'), null);
   await assert.rejects(client([res(200, '<html>')]).c.getJson('x'), /invalid JSON/);
   await assert.rejects(client([res(200)], { signal: AbortSignal.abort() }).c.getJson('x'), t.Interrupted);
+});
+
+test('downloads use https only, stay under size limits and refuse redirects away from https', async () => {
+  const quietClient = fetch => new t.Client({ delay: 0, retries: 0, log: quiet, fetch, sleep: async () => {} });
+  const ok = async () => new Response('{"ok":1}');
+  await assert.rejects(quietClient(ok).fetch('http://api.3sual.az/api/x'), /only https/);
+  await assert.rejects(quietClient(ok).fetch('file:///etc/passwd'), /only https/);
+  const declared = async () => new Response('x', { headers: { 'Content-Length': String(100 * 1024 * 1024) } });
+  await assert.rejects(quietClient(declared).fetch('https://api.3sual.az/images/a.png', 'image/*', { maxBytes: 1024 }), /larger than/);
+  const streamed = async () => new Response(new ReadableStream({ pull(controller) { controller.enqueue(new Uint8Array(4096)); } }));
+  await assert.rejects(quietClient(streamed).fetch('https://api.3sual.az/images/a.png', 'image/*', { maxBytes: 64 * 1024 }), /larger than/);
+  const redirected = async () => ({ status: 200, url: 'http://evil.example/a.png', headers: new Headers(), body: null, arrayBuffer: async () => new ArrayBuffer(1) });
+  await assert.rejects(quietClient(redirected).fetch('https://api.3sual.az/images/a.png'), /redirected away from https/);
+});
+
+test('image download fetches only question bank pictures and keeps only real images', async () => {
+  const db = memdb();
+  const add = db.prepare("INSERT INTO questions (package_id, kind, value_id, uid, origin, ordinal, rekvizit_url) VALUES (1, 'question', ?, ?, 'package', ?, ?)");
+  const site = 'https://api.3sual.az/images/good.png';
+  const fake = 'https://api.3sual.az/images/fake.png';
+  [site, fake, 'http://192.168.1.1/admin', 'https://tracker.example/pixel.png', 'own-image:abc.png', 'https://api.3sual.az/api/secret']
+    .forEach((url, i) => add.run(i + 1, `1:question:${i + 1}`, i + 1, url));
+  const calls = [];
+  const client = new t.Client({ delay: 0, retries: 0, log: quiet, sleep: async () => {}, fetch: async url => {
+    calls.push(url);
+    const body = url === site ? Buffer.concat([PNG_SIGNATURE, Buffer.alloc(16)]) : Buffer.from('<html><script>alert(1)</script></html>');
+    return new Response(body, { headers: { 'Content-Type': 'image/png' } });
+  } });
+  const root = tmp();
+  const report = await t.downloadImages(db, client, root, { log: quiet });
+  assert.deepEqual(calls, [fake, site]);
+  assert.deepEqual([report.downloaded, report.failed], [1, 1]);
+  const rel = one(db, "SELECT path FROM images WHERE url=? AND status='ok'", site);
+  assert.match(rel, /^images\/[0-9a-f]{2}\/[0-9a-f]{40}\.png$/);
+  assert.equal(one(db, 'SELECT status FROM images WHERE url=?', fake), 'failed');
 });

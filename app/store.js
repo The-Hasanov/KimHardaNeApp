@@ -25,13 +25,27 @@ CREATE TABLE IF NOT EXISTS lists (id INTEGER PRIMARY KEY, name TEXT NOT NULL, cr
 CREATE TABLE IF NOT EXISTS list_questions (
   list_id INTEGER NOT NULL, uid TEXT NOT NULL, position INTEGER NOT NULL, added_at TEXT NOT NULL,
   PRIMARY KEY (list_id, uid));`;
+const PARTY_RESULTS_SCHEMA = `
+CREATE TABLE IF NOT EXISTS party_results (
+  name_key TEXT PRIMARY KEY, name TEXT NOT NULL, correct INTEGER NOT NULL DEFAULT 0, wrong INTEGER NOT NULL DEFAULT 0,
+  unanswered INTEGER NOT NULL DEFAULT 0, rounds INTEGER NOT NULL DEFAULT 0, correct_ms INTEGER NOT NULL DEFAULT 0, updated_at TEXT NOT NULL);`;
 const POOL = 500;
 const OWN_PACKAGE_ID = 0;
 const OWN_GAME_ID = 0;
 const OWN_NAME = 'My questions';
 const OWN_IMAGE_PREFIX = 'own-image:';
 const IMAGE_COLUMNS = ['rekvizit_url', 'source_media_url'];
-const IMAGE_TYPES = { '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.gif': 'image/gif', '.webp': 'image/webp' };
+const MEDIA_TYPES = {
+  '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.gif': 'image/gif', '.webp': 'image/webp',
+  '.mp4': 'video/mp4', '.m4v': 'video/mp4', '.webm': 'video/webm',
+  '.mp3': 'audio/mpeg', '.m4a': 'audio/mp4', '.wav': 'audio/wav', '.ogg': 'audio/ogg', '.oga': 'audio/ogg',
+};
+const MAX_OWN_MEDIA_BYTES = 300 * 1024 * 1024;
+const MEDIA_CHOICE = 'Pick a picture (PNG, JPEG, GIF, WebP), a video (MP4, WebM) or an audio file (MP3, M4A, WAV, OGG)';
+const mediaKind = url => {
+  const type = url && MEDIA_TYPES[path.extname(String(url).split(/[?#]/)[0]).toLowerCase()];
+  return !url ? null : type?.startsWith('video/') ? 'video' : type?.startsWith('audio/') ? 'audio' : 'image';
+};
 const TUNING = { combineWith: 'AND', prefix: true, fuzzy: 0.2, boost: { answer: 2, text: 1.5 }, rrfK: 10, aiWeight: 0.5 };
 
 const fold = s => s.toLowerCase().normalize('NFD').replace(/\p{M}/gu, '').replace(/ə/g, 'e').replace(/ı/g, 'i');
@@ -50,6 +64,10 @@ class Store {
     this.db.exec(EMBEDDINGS_SCHEMA);
     this.db.exec(LISTS_SCHEMA);
     this.db.exec(PLAY_SCHEMA);
+    this.db.exec(PARTY_RESULTS_SCHEMA);
+    if (!this.db.prepare('PRAGMA table_info(party_results)').all().some(c => c.name === 'correct_ms')) {
+      this.db.exec('ALTER TABLE party_results ADD COLUMN correct_ms INTEGER NOT NULL DEFAULT 0');
+    }
     this.loadRows();
     this.vecs = null;
     this.vectorCount = 0;
@@ -189,6 +207,8 @@ class Store {
     for (const c of ['sources', 'authors', 'phase_path']) r[c] = r[c] == null ? null : JSON.parse(r[c]);
     r.rekvizit_src = this.imageSrc(r.rekvizit_url);
     r.source_media_src = this.imageSrc(r.source_media_url);
+    r.rekvizit_kind = mediaKind(r.rekvizit_url);
+    r.source_media_kind = mediaKind(r.source_media_url);
     return r;
   }
 
@@ -268,21 +288,31 @@ class Store {
   }
 
   setOwnImage(uid, column, file = null) {
+    if (!file) return this.setOwnImageBytes(uid, column, null);
+    const extension = path.extname(file).toLowerCase();
+    if (!MEDIA_TYPES[extension]) throw new Error(MEDIA_CHOICE);
+    if (fs.statSync(file).size > MAX_OWN_MEDIA_BYTES) throw new Error('Pick a file smaller than 300 MB');
+    return this.setOwnImageBytes(uid, column, { bytes: fs.readFileSync(file), extension });
+  }
+
+  setOwnImageBytes(uid, column, picture) {
     const i = this.pos.get(uid);
     if (i === undefined || this.rows[i].package_id !== OWN_PACKAGE_ID) throw new Error('Pictures can be added to your own questions only');
     if (!IMAGE_COLUMNS.includes(column)) throw new Error(`unknown picture ${column}`);
     let url = null;
-    if (file) {
-      const extension = path.extname(file).toLowerCase();
-      if (!IMAGE_TYPES[extension]) throw new Error('Pick a PNG, JPEG, GIF or WebP picture');
-      const bytes = fs.readFileSync(file);
+    if (picture?.remoteUrl) {
+      if (!/^https?:\/\//.test(picture.remoteUrl)) throw new Error('A picture link must start with http or https');
+      url = picture.remoteUrl;
+    } else if (picture) {
+      const { bytes, extension } = picture;
+      if (!MEDIA_TYPES[extension]) throw new Error(MEDIA_CHOICE);
       const sha256 = crypto.createHash('sha256').update(bytes).digest('hex');
       const relative = `images/own/${sha256}${extension}`;
       fs.mkdirSync(path.join(this.roots[0], 'images', 'own'), { recursive: true });
       fs.writeFileSync(path.join(this.roots[0], relative), bytes);
       url = OWN_IMAGE_PREFIX + sha256 + extension;
       this.db.prepare(`INSERT OR REPLACE INTO images (url, status, path, bytes, content_type, sha256, fetched_at)
-        VALUES (?, 'ok', ?, ?, ?, ?, datetime('now'))`).run(url, relative, bytes.length, IMAGE_TYPES[extension], sha256);
+        VALUES (?, 'ok', ?, ?, ?, ?, datetime('now'))`).run(url, relative, bytes.length, MEDIA_TYPES[extension], sha256);
     }
     this.db.prepare(`UPDATE questions SET ${column} = ?, edited_at = datetime('now') WHERE uid = ?`).run(url, uid);
     this.rows[i] = this.db.prepare(`SELECT ${LIST_COLS} FROM questions WHERE uid = ?`).get(uid);
@@ -389,9 +419,29 @@ class Store {
       .map(answer => ({ ...answer, question: this.get(answer.uid) }));
   }
 
+  addPartyResults(results) {
+    const add = this.db.prepare(`INSERT INTO party_results (name_key, name, correct, wrong, unanswered, correct_ms, rounds, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, 1, datetime('now'))
+      ON CONFLICT (name_key) DO UPDATE SET name = excluded.name, correct = correct + excluded.correct, wrong = wrong + excluded.wrong,
+        unanswered = unanswered + excluded.unanswered, correct_ms = correct_ms + excluded.correct_ms, rounds = rounds + 1, updated_at = excluded.updated_at`);
+    this.db.exec('BEGIN');
+    for (const { name, correct, wrong, unanswered, correctMs = 0 } of results) add.run(name.toLowerCase(), name, correct, wrong, unanswered, correctMs);
+    this.db.exec('COMMIT');
+  }
+
+  partyResults() {
+    return this.db.prepare(`SELECT name, correct, wrong, unanswered, rounds, updated_at,
+        CASE WHEN correct > 0 THEN ROUND(correct_ms / 1000.0 / correct, 1) END AS avg_seconds
+      FROM party_results ORDER BY correct DESC, avg_seconds IS NULL, avg_seconds ASC, wrong ASC, unanswered ASC, name`).all();
+  }
+
+  resetPartyResults() {
+    this.db.exec('DELETE FROM party_results');
+  }
+
   games() {
     return this.db.prepare('SELECT game_id AS id, game_name AS name, COUNT(*) AS n FROM questions GROUP BY game_id ORDER BY game_id').all();
   }
 }
 
-module.exports = { Store, OWN_PACKAGE_ID, OWN_IMAGE_PREFIX, TUNING, LISTS_SCHEMA, PLAY_SCHEMA, EMBEDDINGS_SCHEMA, fold, passage, embeddable, hashOf, DIM };
+module.exports = { Store, OWN_PACKAGE_ID, OWN_IMAGE_PREFIX, MEDIA_TYPES, IMAGE_COLUMNS, mediaKind, TUNING, LISTS_SCHEMA, PLAY_SCHEMA, PARTY_RESULTS_SCHEMA, EMBEDDINGS_SCHEMA, fold, passage, embeddable, hashOf, DIM };

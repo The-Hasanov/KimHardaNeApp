@@ -3,8 +3,8 @@ import { toast } from 'sonner';
 import { useDefaultLayout } from 'react-resizable-panels';
 import { cn } from 'cn';
 import {
-  DownloadIcon, EyeIcon, FileTextIcon, ImagePlusIcon, LayersIcon, PencilIcon, RefreshCwIcon, RotateCcwIcon, SaveIcon, SearchIcon,
-  ListIcon, ListPlusIcon, MoonIcon, NotebookPenIcon, PlusIcon, SearchXIcon, SettingsIcon, SparklesIcon, SquareIcon, TimerIcon, Trash2Icon, UserIcon, XIcon, ZapIcon,
+  DownloadIcon, EyeIcon, FileDownIcon, FileUpIcon, FileTextIcon, ImagePlusIcon, PencilIcon, RotateCcwIcon, SaveIcon, SearchIcon,
+  ListIcon, ListPlusIcon, MoonIcon, NotebookPenIcon, PlusIcon, SearchXIcon, SettingsIcon, SparklesIcon, TimerIcon, Trash2Icon, UserIcon, XIcon,
 } from 'lucide-react';
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter,
@@ -12,15 +12,12 @@ import {
 } from '@/components/ui/alert-dialog';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import {
-  Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
-} from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from '@/components/ui/empty';
 import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput } from '@/components/ui/input-group';
 import { Kbd, KbdGroup } from '@/components/ui/kbd';
 import { Label } from '@/components/ui/label';
 import { Progress } from '@/components/ui/progress';
-import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '@/components/ui/resizable';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Spinner } from '@/components/ui/spinner';
@@ -37,6 +34,8 @@ import Game from './Game';
 import Lists, { ListNameDialog } from './Lists';
 import SettingsDialog, { describeAiWork } from './Settings';
 import { setNightMode, useNightMode } from './theme';
+import { Media } from './gameShared';
+import { exportedMessage, importDetails, questionCountLabel, runTransfer } from './transferMessages';
 
 const { api } = window;
 const FIELDS = [
@@ -48,10 +47,6 @@ const MODES = [
   ['keyword', 'Keyword', 'Exact words (BM25), tolerant of small typos'],
   ['ai', 'AI', 'Similar meaning, even without shared words'],
 ];
-const REFRESH_MODES = [
-  ['quick', ZapIcon, 'Quick', 'about 2 min', 'Download packages published since the last refresh.'],
-  ['full', LayersIcon, 'Full', 'about 20 min', 'Re-check every package for changes made on 3sual.az.'],
-];
 const STAGES = { list: 'Listing packages', packages: 'Downloading packages', audit: 'Checking authors',
   images: 'Downloading images', index: 'Rebuilding search index', embed: 'Computing AI vectors' };
 const PAGE = 100;
@@ -60,8 +55,8 @@ const OWN_PACKAGE_ID = 0;
 const OWN_GAME_ID = 0;
 const NEW_QUESTION = { uid: null, package_id: OWN_PACKAGE_ID, game_name: 'My questions' };
 const PICTURES = [
-  ['rekvizit_url', 'rekvizit_src', 'Handout picture', 'shown with the question'],
-  ['source_media_url', 'source_media_src', 'Answer picture', 'shown with the answer'],
+  ['rekvizit_url', 'rekvizit_src', 'rekvizit_kind', 'Handout', 'shown with the question'],
+  ['source_media_url', 'source_media_src', 'source_media_kind', 'Answer media', 'shown with the answer'],
 ];
 
 const fmt = n => n.toLocaleString('en');
@@ -147,20 +142,24 @@ function AddToListButton({ lists, listIdsOfQuestion, onToggle, onCreateNew }) {
 function OwnPictures({ q, concealed, onReveal, onZoom, onPick, onRemove }) {
   return (
     <div className="grid gap-4 sm:grid-cols-2">
-      {PICTURES.map(([column, srcKey, label, hint]) => {
+      {PICTURES.map(([column, srcKey, kindKey, label, hint]) => {
         const src = q[srcKey];
+        const kind = q[kindKey];
         const hide = concealed && column === 'source_media_url';
         return (
           <div key={column} className="grid content-start gap-2">
             <Label>{label}<span className="font-normal text-muted-foreground">{hint}</span></Label>
-            {src && (
+            {src && kind !== 'image' && (hide
+              ? <Button variant="outline" size="sm" className="justify-self-start" onClick={onReveal}><EyeIcon />Show the answer {kind}</Button>
+              : <Media src={src} kind={kind} alt={label} className="max-h-48 w-full" />)}
+            {src && kind === 'image' && (
               <button type="button" onClick={() => (hide ? onReveal() : onZoom(src))} title={hide ? 'Answer hidden: click to show' : 'Click to enlarge'}
                 className="cursor-zoom-in overflow-hidden rounded-lg border bg-muted/30 transition-opacity hover:opacity-90">
                 <img src={src} alt={label} className={cn('max-h-48 w-full object-contain', hide && 'blur-xl')} />
               </button>
             )}
             <div className="flex gap-2">
-              <Button variant="outline" size="sm" onClick={() => onPick(column)}><ImagePlusIcon />{src ? 'Replace' : 'Add picture'}</Button>
+              <Button variant="outline" size="sm" onClick={() => onPick(column)} title="A picture (PNG, JPEG, GIF, WebP), a video (MP4, WebM) or audio (MP3, M4A, WAV, OGG)"><ImagePlusIcon />{src ? 'Replace' : 'Add picture, video or audio'}</Button>
               {src && <Button variant="ghost" size="sm" onClick={() => onRemove(column)}><XIcon />Remove</Button>}
             </div>
           </div>
@@ -317,7 +316,6 @@ export default function App() {
   const [savedAt, setSavedAt] = useState(null);
   const [progress, setProgress] = useState(null);
   const [stopping, setStopping] = useState(false);
-  const [refreshOpen, setRefreshOpen] = useState(false);
   const [refreshMode, setRefreshMode] = useState('quick');
   const [ask, setAsk] = useState(null);
   const [zoom, setZoom] = useState(null);
@@ -438,6 +436,17 @@ export default function App() {
     setTimeout(() => document.getElementById('f-text')?.focus());
   }
 
+  const importOwnQuestions = () => runTransfer(api.importOwnQuestions, async summary => {
+    setInfo(await api.info());
+    const details = importDetails(summary, { isList: false });
+    if (summary.added) toast.success(`Imported ${questionCountLabel(summary.added)}`, { description: details });
+    else toast.info('Nothing new to import', { description: details });
+  });
+  const exportOwnQuestions = () => runTransfer(api.exportOwnQuestions, result => {
+    const { title, description } = exportedMessage(result);
+    toast.success(title, { description });
+  });
+
   async function deleteCurrent() {
     try {
       await api.deleteQuestion(current.uid);
@@ -503,7 +512,6 @@ export default function App() {
   }
 
   async function startRefresh() {
-    setRefreshOpen(false);
     setProgress({ stage: 'start' });
     const r = await api.refresh(refreshMode).catch(e => ({ error: e.message }));
     setProgress(null);
@@ -602,7 +610,11 @@ export default function App() {
             <TooltipContent>Night mode</TooltipContent>
           </Tooltip>
         )}
-        {isMine && <Button variant="outline" className="ml-auto" onClick={startNewQuestion}><PlusIcon />New question</Button>}
+        {isMine && <>
+          <Button variant="ghost" className="ml-auto" onClick={importOwnQuestions} title="Add questions from a KimHardaNeApp file"><FileUpIcon />Import</Button>
+          <Button variant="ghost" onClick={exportOwnQuestions} disabled={!info?.ownCount} title="Save your questions, with their pictures, to a file"><FileDownIcon />Export</Button>
+          <Button variant="outline" onClick={startNewQuestion}><PlusIcon />New question</Button>
+        </>}
         {view === 'search' && <>
         <InputGroup className="min-w-40 flex-1 basis-40">
           <InputGroupAddon><SearchIcon /></InputGroupAddon>
@@ -648,16 +660,6 @@ export default function App() {
           <Switch id="with-image" checked={withImage} onCheckedChange={filter(setWithImage)} />
           <Label htmlFor="with-image" className="font-normal">With image</Label>
         </div>
-        {progress ? (
-          <Button variant="outline" onClick={stopRefresh} disabled={stopping}><SquareIcon className="fill-current" />Stop refresh</Button>
-        ) : (
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button variant="outline" onClick={() => setRefreshOpen(true)}><RefreshCwIcon />Refresh data</Button>
-            </TooltipTrigger>
-            <TooltipContent>Download new or changed questions from 3sual.az</TooltipContent>
-          </Tooltip>
-        )}
         </>}
         <Tooltip>
           <TooltipTrigger asChild>
@@ -758,7 +760,9 @@ export default function App() {
         <Game key={gameSession} isVisible={view === 'game'} lists={lists} listId={gameListId} onListIdChange={setGameListId}
           isAiReady={isAiReady} onOpenSettings={() => setIsSettingsOpen(true)} />
       </div>
-      <SettingsDialog open={isSettingsOpen} onOpenChange={setIsSettingsOpen} aiStatus={aiStatus} onAiSearchChange={changeAiSearch} />
+      <SettingsDialog open={isSettingsOpen} onOpenChange={setIsSettingsOpen} aiStatus={aiStatus} onAiSearchChange={changeAiSearch}
+        refresh={{ stage, isRunning: !!progress, isStopping: stopping, percent: progress?.total ? (progress.done / progress.total) * 100 : null,
+          mode: refreshMode, dataDate: info?.dataDate, onModeChange: setRefreshMode, onStart: startRefresh, onStop: stopRefresh }} />
       <ListNameDialog open={isCreatingListForCurrent} title="New list" confirmLabel="Create and add"
         onOpenChange={setIsCreatingListForCurrent} onSubmit={createListWithCurrent} />
 
@@ -789,36 +793,6 @@ export default function App() {
           )}
         </div>
       </footer>
-
-      <Dialog open={refreshOpen} onOpenChange={setRefreshOpen}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Refresh data from 3sual.az</DialogTitle>
-            <DialogDescription>
-              The built-in scraper downloads politely, one request per second. Keep searching and editing while it runs;
-              your edits are never overwritten.
-            </DialogDescription>
-          </DialogHeader>
-          <RadioGroup value={refreshMode} onValueChange={setRefreshMode}>
-            {REFRESH_MODES.map(([value, Icon, title, time, description]) => (
-              <Label key={value} htmlFor={`refresh-${value}`}
-                className="flex cursor-pointer items-start gap-3 rounded-lg border p-3 font-normal transition-colors hover:bg-muted/50 has-[[data-state=checked]]:border-primary has-[[data-state=checked]]:bg-muted/50">
-                <RadioGroupItem id={`refresh-${value}`} value={value} className="mt-0.5" />
-                <div className="grid gap-1">
-                  <div className="flex items-center gap-2 font-medium"><Icon className="size-4" />{title}
-                    <Badge variant="secondary" className="font-normal">{time}</Badge>
-                  </div>
-                  <p className="text-muted-foreground">{description}</p>
-                </div>
-              </Label>
-            ))}
-          </RadioGroup>
-          <DialogFooter>
-            <DialogClose asChild><Button variant="outline">Cancel</Button></DialogClose>
-            <Button onClick={startRefresh}><RefreshCwIcon />Start refresh</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
 
       <AlertDialog open={!!ask} onOpenChange={o => { if (!o) { ask?.(false); setAsk(null); } }}>
         <AlertDialogContent>

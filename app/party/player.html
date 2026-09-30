@@ -26,8 +26,35 @@
 html, body { margin: 0; background: var(--bg); color: var(--fg); }
 body { font: 16px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; -webkit-text-size-adjust: 100%; }
 main { max-width: 640px; margin: 0 auto; padding: 16px 16px calc(24px + env(safe-area-inset-bottom)); min-height: 100dvh; display: flex; flex-direction: column; gap: 16px; }
-.bar { display: flex; align-items: center; justify-content: space-between; gap: 12px; font-size: 14px; color: var(--muted); }
+header { position: sticky; top: 0; z-index: 3; margin: -16px -16px 0; padding: 12px 16px 0; background: var(--bg); display: flex; flex-direction: column; gap: 10px; }
+.bar { display: flex; align-items: center; gap: 8px; font-size: 14px; color: var(--muted); }
 .bar strong { color: var(--fg); }
+.pill { display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 12px; border-radius: 999px; background: var(--card); border: 1px solid var(--border); color: var(--fg); font-size: 14px; font-weight: 600; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.pill .label { color: var(--muted); font-weight: 500; }
+.name-pill { min-width: 0; flex: 0 1 auto; }
+.name-pill span { overflow: hidden; text-overflow: ellipsis; }
+.name-pill svg { flex: none; opacity: .6; }
+.spacer { flex: 1; }
+.time-track { height: 4px; margin: 0 -16px; background: var(--card); }
+.time-fill { height: 100%; width: 100%; background: var(--primary); transform-origin: left; transition: transform .2s linear, background-color .3s; }
+.time-fill.low { background: var(--warn); }
+.dock { position: sticky; bottom: 0; z-index: 3; margin: auto -16px calc(-24px - env(safe-area-inset-bottom)); padding: 12px 16px calc(12px + env(safe-area-inset-bottom)); background: linear-gradient(to bottom, transparent, var(--bg) 16px); }
+.skip { width: 100%; display: flex; flex-direction: column; gap: 10px; padding: 12px 14px; border-radius: 14px; background: var(--card); color: var(--fg); border: 1px solid var(--border); text-align: left; transition: background-color .2s, border-color .2s, transform .1s; -webkit-tap-highlight-color: transparent; }
+.skip:active { transform: scale(.98); }
+.skip:disabled { opacity: 1; cursor: default; transform: none; }
+.skip:disabled .skip-title { color: var(--muted); }
+.skip-main { display: flex; align-items: center; gap: 12px; }
+.skip-icon { flex: none; width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center; background: var(--bg); border: 1px solid var(--border); }
+.skip-text { flex: 1; min-width: 0; display: flex; flex-direction: column; line-height: 1.3; }
+.skip-title { font-size: 16px; font-weight: 700; }
+.skip-hint { font-size: 13px; font-weight: 500; color: var(--muted); }
+.skip-count { font-size: 15px; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--muted); }
+.skip-segments { display: flex; gap: 4px; height: 6px; }
+.skip-segments i { flex: 1; border-radius: 3px; background: var(--border); transition: background-color .25s; }
+.skip-segments i.on { background: var(--good); }
+.skip.on { border-color: color-mix(in srgb, var(--good) 55%, transparent); background: color-mix(in srgb, var(--good) 12%, var(--card)); }
+.skip.on .skip-icon { background: var(--good); border-color: var(--good); color: var(--bg); }
+.skip.on .skip-count { color: var(--good); }
 .center { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; gap: 8px; }
 h1 { font-size: 24px; line-height: 1.25; margin: 0; }
 .muted { color: var(--muted); }
@@ -35,6 +62,8 @@ h1 { font-size: 24px; line-height: 1.25; margin: 0; }
 .question { font-size: 20px; line-height: 1.45; font-weight: 500; white-space: pre-line; margin: 0; }
 .note { border: 1px solid color-mix(in srgb, var(--warn) 40%, transparent); background: color-mix(in srgb, var(--warn) 12%, transparent); border-radius: 10px; padding: 10px 12px; font-size: 14px; }
 .handout { width: 100%; border-radius: 10px; border: 1px solid var(--border); }
+video.handout { background: #000; }
+audio.handout { border: 0; height: 44px; }
 .pre { white-space: pre-line; }
 .card { border: 1px solid var(--border); border-radius: 12px; padding: 14px; display: flex; flex-direction: column; gap: 8px; }
 form { display: flex; flex-direction: column; gap: 10px; }
@@ -43,12 +72,90 @@ input:focus { outline: 2px solid var(--primary); outline-offset: 1px; }
 button { font: inherit; font-weight: 600; padding: 12px 16px; border-radius: 10px; border: 0; background: var(--primary); color: var(--primary-fg); cursor: pointer; }
 button:disabled { opacity: .5; }
 .error { color: var(--bad); font-size: 14px; min-height: 1.5em; margin: 0; }
-.sent { color: var(--good); font-size: 14px; margin: 0; }
-.timer { font-size: 22px; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--fg); }
+.link { background: none; color: inherit; padding: 0; font-weight: inherit; text-decoration: underline dotted; text-underline-offset: 3px; border-radius: 0; }
+.ghost { display: inline-flex; align-items: center; gap: 6px; background: var(--card); color: var(--fg); border: 1px solid var(--border); border-radius: 999px; padding: 8px 14px; font-size: 14px; }
+.banner { position: fixed; left: 50%; top: 12px; transform: translateX(-50%); display: flex; align-items: center; gap: 8px; padding: 8px 14px; border-radius: 999px; font-size: 14px; font-weight: 600; background: var(--warn); color: #000; z-index: 5; box-shadow: 0 4px 16px rgb(0 0 0 / .25); }
+.banner[hidden] { display: none; }
+.dot-pulse { width: 8px; height: 8px; border-radius: 50%; background: currentColor; animation: pulse 1s ease-in-out infinite; }
+@keyframes pulse { 50% { opacity: .3; } }
+.overlay { position: fixed; inset: 0; background: rgb(0 0 0 / .5); display: flex; align-items: center; justify-content: center; padding: 16px; z-index: 10; }
+.overlay .card { background: var(--bg); width: 100%; max-width: 420px; }
+.row { display: flex; gap: 8px; }
+.row button { flex: 1; }
+.secondary { background: var(--card); color: var(--fg); border: 1px solid var(--border); }
+.notice { display: flex; gap: 12px; align-items: flex-start; padding: 12px 12px 12px 14px; border-radius: 14px; background: var(--primary); color: var(--primary-fg); }
+.notice.is-new { animation: drop .25s ease-out; }
+.notice[hidden] { display: none; }
+@keyframes drop { from { transform: translateY(-8px); opacity: 0; } }
+.notice-icon { flex: none; width: 32px; height: 32px; border-radius: 50%; display: grid; place-items: center; background: color-mix(in srgb, var(--primary-fg) 14%, transparent); }
+.notice-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.notice-label { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; opacity: .7; }
+.notice-text { font-size: 17px; font-weight: 600; line-height: 1.35; overflow-wrap: anywhere; }
+.notice-close { flex: none; width: 32px; height: 32px; padding: 0; display: grid; place-items: center; border-radius: 50%; background: transparent; color: inherit; opacity: .7; }
+.react-toggle { width: 32px; flex: none; padding: 0; justify-content: center; }
+.react-toggle.on { background: var(--primary); border-color: var(--primary); color: var(--primary-fg); }
+header .pill { padding: 0 10px; }
+header .bar { gap: 6px; }
+.name-pill { min-width: 64px; }
+.reaction-tray { display: flex; justify-content: space-between; gap: 4px; padding: 6px; border-radius: 16px; background: var(--card); border: 1px solid var(--border); animation: drop .2s ease-out; }
+.emoji, .reaction-tray button, .flying, .congrats-badge { font-family: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", "Twemoji Mozilla", sans-serif; }
+.reaction-tray button { flex: 1; min-width: 0; height: 44px; padding: 0; font-size: 24px; line-height: 1; background: transparent; border-radius: 12px; transition: transform .12s, opacity .2s; }
+.reaction-tray button:active { transform: scale(.85); background: var(--border); }
+.reaction-tray.cooling button { opacity: .45; }
+.reaction-label { font-size: 12px; font-weight: 600; color: var(--muted); text-align: center; margin: 0 0 6px; }
+.flying { position: fixed; z-index: 30; font-size: 32px; pointer-events: none; animation: fly .9s ease-out forwards; }
+@keyframes fly { to { transform: translateY(-120px) scale(1.4); opacity: 0; } }
+.reaction-toasts { position: fixed; left: 50%; transform: translateX(-50%); bottom: 24px; z-index: 6; display: flex; flex-direction: column; align-items: center; gap: 6px; pointer-events: none; width: calc(100% - 32px); max-width: 608px; }
+.reaction-toast { display: inline-flex; align-items: center; gap: 8px; max-width: 100%; padding: 6px 14px 6px 8px; border-radius: 99px; background: var(--card); border: 1px solid var(--border); box-shadow: 0 6px 20px rgb(0 0 0 / .25); font-size: 14px; font-weight: 600; animation: toast-in .25s ease-out, toast-out .35s ease-in 2.4s forwards; }
+.reaction-toast .emoji { font-size: 20px; line-height: 1; }
+.reaction-toast .who { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.reaction-toast.notice-toast { color: var(--warn); }
+@keyframes toast-in { from { transform: translateY(10px); opacity: 0; } }
+@keyframes toast-out { to { transform: translateY(6px); opacity: 0; } }
+.reactions-left { font-size: 12px; color: var(--muted); text-align: right; margin: 4px 6px -4px 0; }
+.switch-row { display: flex; align-items: center; gap: 12px; cursor: pointer; }
+.switch-row .switch-text { flex: 1; display: flex; flex-direction: column; }
+.switch-row input { appearance: none; -webkit-appearance: none; flex: none; width: 46px; height: 28px; padding: 0; border-radius: 99px; background: var(--border); position: relative; cursor: pointer; transition: background-color .2s; }
+.switch-row input::after { content: ''; position: absolute; top: 3px; left: 3px; width: 22px; height: 22px; border-radius: 50%; background: #fff; transition: transform .2s; box-shadow: 0 1px 3px rgb(0 0 0 / .3); }
+.switch-row input:checked { background: var(--good); }
+.switch-row input:checked::after { transform: translateX(18px); }
+.composer-dock { position: sticky; bottom: 0; z-index: 3; margin: auto -16px calc(-24px - env(safe-area-inset-bottom)); padding: 16px 12px calc(12px + env(safe-area-inset-bottom)); background: linear-gradient(to bottom, transparent, var(--bg) 16px); display: flex; flex-direction: column; gap: 8px; }
+.composer-emojis { display: flex; justify-content: space-between; padding: 0 4px; }
+.composer-emojis[hidden] { display: none; }
+.composer-emojis button { width: 40px; height: 40px; padding: 0; font-size: 24px; line-height: 1; background: transparent; border-radius: 12px; font-family: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", "Twemoji Mozilla", sans-serif; transition: transform .12s, opacity .2s; }
+.composer-emojis button:active { transform: scale(.85); background: var(--card); }
+.composer-emojis.cooling button { opacity: .45; }
+.composer { display: flex; flex-direction: row; align-items: center; gap: 8px; padding: 6px 6px 6px 18px; border-radius: 999px; background: var(--card); border: 1px solid var(--border); transition: border-color .2s; }
+.composer:focus-within { border-color: var(--primary); }
+.composer .composer-input { flex: 1; width: auto; min-width: 0; border: 0; border-radius: 0; padding: 8px 0; background: transparent; font-size: 18px; }
+.composer .composer-input:focus { outline: none; }
+.composer-send { flex: none; width: 46px; height: 46px; padding: 0; border-radius: 50%; display: grid; place-items: center; }
+.composer-send svg { width: 22px; height: 22px; }
+.composer-meta { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 30px; padding: 0 4px 0 8px; }
+.composer-status { font-size: 13px; min-height: 0; }
+.skip-chip { flex: none; display: inline-flex; align-items: center; gap: 6px; padding: 5px 12px; border-radius: 99px; border: 1px solid var(--border); background: var(--card); color: var(--fg); font-size: 13px; font-weight: 700; }
+.skip-chip[hidden], .react-toggle[hidden] { display: none; }
+.skip-chip svg { width: 14px; height: 14px; }
+.skip-chip .count { color: var(--muted); font-weight: 600; }
+.skip-chip.on { background: color-mix(in srgb, var(--good) 16%, var(--card)); border-color: color-mix(in srgb, var(--good) 55%, transparent); color: var(--good); }
+.skip-chip.on .count { color: var(--good); }
+.danger { background: color-mix(in srgb, var(--bad) 12%, transparent); color: var(--bad); border: 1px solid color-mix(in srgb, var(--bad) 45%, transparent); }
+.sheet-overlay { align-items: flex-end; padding: 0; }
+.sheet { max-width: 640px !important; border-radius: 20px 20px 0 0; border-bottom: 0; padding: 16px 16px calc(24px + env(safe-area-inset-bottom)); gap: 16px; animation: rise .2s ease-out; }
+@keyframes rise { from { transform: translateY(24px); opacity: 0; } }
+.sheet-head { display: flex; align-items: center; justify-content: space-between; }
+.sheet-title { font-size: 20px; }
+.sheet-section { display: flex; flex-direction: column; gap: 10px; padding-top: 16px; border-top: 1px solid var(--border); }
+.field-label { font-size: 13px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+.icon-button { width: 36px; height: 36px; padding: 0; display: grid; place-items: center; border-radius: 50%; background: var(--card); color: var(--fg); border: 1px solid var(--border); }
+.sent { display: flex; align-items: center; gap: 6px; color: var(--good); font-size: 14px; margin: 0; min-height: 1.5em; }
+.sent.error-text { color: var(--bad); }
+.timer { font-size: 22px; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--fg); min-width: 3ch; text-align: right; }
 .timer.low { color: var(--warn); }
-.verdict { font-size: 32px; font-weight: 700; }
-.verdict.good { color: var(--good); }
-.verdict.bad { color: var(--bad); }
+.verdict { display: flex; align-items: center; gap: 10px; font-size: 28px; font-weight: 800; margin: -14px -14px 4px; padding: 14px; border-radius: 12px 12px 0 0; background: var(--card); }
+.verdict.good { color: var(--good); background: color-mix(in srgb, var(--good) 14%, transparent); }
+.verdict.bad { color: var(--bad); background: color-mix(in srgb, var(--bad) 12%, transparent); }
+.verdict .points { margin-left: auto; font-size: 20px; }
 .answer { font-size: 22px; font-weight: 700; margin: 0; }
 ol.board { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
 ol.board li { display: flex; gap: 10px; align-items: center; padding: 10px 12px; border-radius: 10px; background: var(--card); }
@@ -56,6 +163,38 @@ ol.board li.me { outline: 2px solid var(--primary); }
 ol.board .rank { width: 28px; font-weight: 700; color: var(--muted); font-variant-numeric: tabular-nums; }
 ol.board .name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 ol.board .score { font-weight: 700; font-variant-numeric: tabular-nums; }
+.congrats { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 6px; padding: 28px 16px 22px; border-radius: 20px; background: var(--card); border: 1px solid var(--border); margin-top: 8px; }
+.congrats.place-1 { background: linear-gradient(160deg, color-mix(in srgb, #fbbf24 30%, var(--card)), var(--card) 70%); border-color: color-mix(in srgb, #fbbf24 55%, transparent); }
+.congrats.place-2 { background: linear-gradient(160deg, color-mix(in srgb, #a3a3a3 22%, var(--card)), var(--card) 70%); }
+.congrats.place-3 { background: linear-gradient(160deg, color-mix(in srgb, #d08b53 24%, var(--card)), var(--card) 70%); }
+.congrats-badge { font-size: 64px; line-height: 1; animation: pop .6s cubic-bezier(.2, 1.6, .4, 1) both; }
+.congrats.place-1 .congrats-badge { font-size: 88px; }
+@keyframes pop { from { transform: scale(.3); opacity: 0; } }
+.congrats-kicker { font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); }
+.congrats.place-1 .congrats-kicker { color: #d97706; }
+.congrats-title { font-size: 28px; }
+.congrats-text { margin: 0; color: var(--muted); }
+.congrats-facts { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin-top: 10px; }
+.confetti { position: fixed; inset: 0; overflow: hidden; pointer-events: none; z-index: 20; }
+.confetti i { position: absolute; top: -20px; width: 8px; height: 14px; border-radius: 2px; animation: fall linear forwards; }
+@keyframes fall { to { transform: translateY(110vh) rotate(720deg); } }
+ol.board .time { font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.time-note { display: inline-flex; align-items: center; gap: 4px; font-size: 14px; color: var(--muted); }
+@media (min-width: 700px) {
+  main { max-width: 760px; padding-top: 24px; gap: 20px; }
+  header { margin-top: -24px; padding-top: 20px; }
+  .question { font-size: 26px; }
+  .note, .pre { font-size: 17px; }
+  input { font-size: 20px; }
+  .big-number { font-size: 160px; }
+  h1 { font-size: 32px; }
+  .overlay:not(.sheet-overlay) .card, .sheet { border-radius: 20px; border-bottom: 1px solid var(--border); margin-bottom: 10vh; }
+  .sheet-overlay { align-items: center; padding: 16px; }
+  .sheet { max-width: 480px !important; }
+  .composer-emojis { justify-content: center; gap: 12px; }
+}
+button:not(:disabled):hover { filter: brightness(1.08); }
+button:focus-visible, .skip:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
 </style>
 </head>
 <body>
@@ -69,6 +208,11 @@ let state = null;
 let deadline = null;
 let renderedScreen = null;
 let timerElement = null;
+let retryTimer = null;
+let lastHeardAt = Date.now();
+const SILENCE_BEFORE_RECONNECT_MS = 50000;
+const banner = el('div', { class: 'banner', hidden: true }, el('span', { class: 'dot-pulse' }), 'Reconnecting…');
+document.body.append(banner);
 
 function readSession() {
   try {
@@ -102,6 +246,29 @@ const clock = ms => {
   const seconds = Math.ceil(ms / 1000);
   return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
 };
+const ORDINALS = { 1: '1st', 2: '2nd', 3: '3rd' };
+const ordinal = place => ORDINALS[place] ?? `${place}th`;
+const MEDALS = { 1: '🥇', 2: '🥈', 3: '🥉' };
+const CONGRATULATIONS = {
+  1: { badge: '🏆', title: 'Congratulations, champion!', text: 'You won the round. Take a bow!' },
+  2: { badge: '🥈', title: 'Great game!', text: 'So close to the top. Silver is yours.' },
+  3: { badge: '🥉', title: 'Well done!', text: 'You made the podium with bronze.' },
+  4: { badge: '👏', title: 'Round over', text: '' },
+};
+const CONFETTI_COLORS = ['#fbbf24', '#4ade80', '#60a5fa', '#f87171', '#c084fc', '#f472b6'];
+let celebratedRound = null;
+
+function celebrate(pieces) {
+  if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return;
+  const layer = el('div', { class: 'confetti' });
+  for (let i = 0; i < pieces; i++) {
+    layer.append(el('i', { style: `left:${Math.random() * 100}%;background:${CONFETTI_COLORS[i % CONFETTI_COLORS.length]};animation-duration:${2.8 + Math.random() * 2.8}s;animation-delay:${Math.random() * 1.8}s` }));
+  }
+  document.body.append(layer);
+  setTimeout(() => layer.remove(), 8000);
+}
+
+const secondsLabel = seconds => `${seconds.toFixed(1)} s`;
 const pointsLabel = points => (points > 0 ? `+${points}` : points < 0 ? `−${-points}` : '0');
 const rulesText = () => `Correct ${pointsLabel(state.rules.pointsForCorrect)} · Wrong ${pointsLabel(state.rules.pointsForWrong)} · No answer 0`;
 const imageUrl = (route) => `${route}?token=${encodeURIComponent(session.token)}&question=${state.index}`;
@@ -110,9 +277,11 @@ function show(...children) {
   app.replaceChildren(...children.flat().filter(Boolean));
 }
 
-function showJoin(errorText = '') {
+function showJoin(errorText = '', { previousName = session?.name ?? '', note = 'Type your name to join the game.' } = {}) {
   renderedScreen = 'join';
-  const name = el('input', { placeholder: 'Your name', maxLength: 24, autocomplete: 'nickname', required: true, value: session?.name ?? '' });
+  banner.hidden = true;
+  notice.hidden = true;
+  const name = el('input', { placeholder: 'Your name', maxLength: 24, autocomplete: 'nickname', required: true, value: previousName });
   const error = el('p', { class: 'error' }, errorText);
   const button = el('button', { type: 'submit' }, 'Join the game');
   const join = async event => {
@@ -132,34 +301,428 @@ function showJoin(errorText = '') {
   };
   show(el('div', { class: 'center' },
     el('h1', {}, 'Nə? Harada? Nə zaman?'),
-    el('p', { class: 'muted' }, 'Type your name to join the game.'),
+    el('p', { class: 'muted' }, note),
     el('form', { onsubmit: join, style: 'width:100%' }, name, button, error)));
   name.focus();
 }
 
 function connect() {
+  clearTimeout(retryTimer);
   events?.close();
+  lastHeardAt = Date.now();
   events = new EventSource(`/events?token=${encodeURIComponent(session.token)}`);
-  events.onmessage = message => render(JSON.parse(message.data));
-  events.onerror = () => {
-    if (events.readyState === EventSource.CLOSED && renderedScreen !== 'closed') {
-      saveSession(null);
-      showJoin();
-    }
+  events.onopen = () => { banner.hidden = true; };
+  events.onmessage = message => {
+    lastHeardAt = Date.now();
+    banner.hidden = true;
+    render(JSON.parse(message.data));
   };
+  events.addEventListener('ping', () => { lastHeardAt = Date.now(); });
+  events.addEventListener('reaction', message => {
+    lastHeardAt = Date.now();
+    showOthersReaction(JSON.parse(message.data));
+  });
+  events.onerror = () => {
+    if (renderedScreen === 'closed' || renderedScreen === 'join') return;
+    banner.hidden = false;
+    if (events.readyState === EventSource.CLOSED) checkSession();
+  };
+}
+
+async function checkSession() {
+  clearTimeout(retryTimer);
+  events?.close();
+  if (!session?.token) return showJoin();
+  try {
+    const response = await fetch(`/me?token=${encodeURIComponent(session.token)}`, { cache: 'no-store' });
+    if (response.status === 401) {
+      const previousName = session.name;
+      saveSession(null);
+      return showJoin('', { previousName, note: 'You are no longer in this game. Type your name to join again.' });
+    }
+    if (response.ok) {
+      const body = await response.json();
+      saveSession({ ...session, name: body.name });
+      return connect();
+    }
+  } catch {}
+  banner.hidden = false;
+  retryTimer = setTimeout(checkSession, 3000);
+}
+
+function reconnectIfDead() {
+  if (!session?.token || renderedScreen === 'closed' || renderedScreen === 'join') return;
+  const isSilent = Date.now() - lastHeardAt > SILENCE_BEFORE_RECONNECT_MS;
+  if (!events || events.readyState === EventSource.CLOSED || isSilent) checkSession();
+}
+
+document.addEventListener('visibilitychange', () => (document.visibilityState === 'hidden' ? reportAway() : cameBack()));
+window.addEventListener('online', reconnectIfDead);
+window.addEventListener('pageshow', reconnectIfDead);
+setInterval(reconnectIfDead, 10000);
+
+function showSettings() {
+  document.querySelector('.overlay')?.remove();
+  const name = el('input', { placeholder: 'Your name', maxLength: 24, autocomplete: 'nickname', required: true, value: state?.me.name ?? session.name ?? '' });
+  const message = el('p', { class: 'sent' });
+  const save = el('button', { type: 'submit' }, 'Save name');
+  const leave = el('button', { type: 'button', class: 'danger' }, 'Leave the game');
+  const overlay = el('div', { class: 'overlay sheet-overlay' });
+  const close = () => overlay.remove();
+  const showMessage = (text, isError) => {
+    message.classList.toggle('error-text', isError);
+    message.textContent = text;
+  };
+  const rename = async event => {
+    event.preventDefault();
+    save.disabled = true;
+    showMessage('', false);
+    try {
+      const response = await fetch('/rename', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token: session.token, name: name.value }) });
+      const body = await response.json();
+      if (!response.ok) throw new Error(body.error);
+      saveSession({ ...session, name: body.name });
+      name.value = body.name;
+      message.replaceChildren(icon(ICONS.check), 'Name saved');
+    } catch (e) {
+      showMessage(e.message || 'Could not change the name', true);
+    }
+    save.disabled = false;
+  };
+  let isConfirmingLeave = false;
+  leave.addEventListener('click', async () => {
+    if (!isConfirmingLeave) {
+      isConfirmingLeave = true;
+      leave.textContent = 'Press again to leave';
+      return;
+    }
+    leave.disabled = true;
+    const token = session.token;
+    const previousName = session.name;
+    renderedScreen = 'join';
+    events?.close();
+    saveSession(null);
+    try {
+      await fetch('/leave', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token }) });
+    } catch {}
+    close();
+    showJoin('', { previousName, note: 'You left the game. Type your name to join again.' });
+  });
+  overlay.append(el('div', { class: 'card sheet' },
+    el('div', { class: 'sheet-head' },
+      el('strong', { class: 'sheet-title' }, 'Settings'),
+      el('button', { type: 'button', class: 'icon-button', onclick: close, title: 'Close' }, icon(ICONS.close))),
+    el('form', { onsubmit: rename },
+      el('label', { class: 'field-label', lang: 'en' }, 'Your name'),
+      name, save, message),
+    el('div', { class: 'sheet-section' },
+      el('label', { class: 'field-label', lang: 'en' }, 'Reactions'),
+      el('label', { class: 'switch-row' },
+        el('span', { class: 'switch-text' },
+          el('strong', {}, 'Show reactions'),
+          el('span', { class: 'muted', style: 'font-size:14px' }, "See other players' emojis and send your own.")),
+        el('input', { type: 'checkbox', role: 'switch', checked: areReactionsShown(), onchange: event => setReactionsShown(event.target.checked) }))),
+    el('div', { class: 'sheet-section' },
+      el('label', { class: 'field-label', lang: 'en' }, 'Leave'),
+      el('p', { class: 'muted', style: 'margin:0;font-size:14px' }, 'Leaving removes you and your score from this game. You can join again with any free name.'),
+      leave)));
+  overlay.addEventListener('click', event => { if (event.target === overlay) close(); });
+  document.body.append(overlay);
+}
+
+const DISMISSED_KEY = 'party-dismissed-announcement';
+const notice = el('div', { class: 'notice', hidden: true, role: 'status' });
+let shownAnnouncementId = null;
+
+function dismissedAnnouncementId() {
+  try {
+    return sessionStorage.getItem(DISMISSED_KEY);
+  } catch {
+    return null;
+  }
+}
+
+function dismissAnnouncement() {
+  try {
+    sessionStorage.setItem(DISMISSED_KEY, shownAnnouncementId);
+  } catch {}
+  notice.hidden = true;
+}
+
+function updateAnnouncement() {
+  const announcement = state?.announcement;
+  if (!announcement || announcement.id === dismissedAnnouncementId()) {
+    notice.hidden = true;
+    shownAnnouncementId = null;
+    return;
+  }
+  const header = app.querySelector('header');
+  if (header) header.after(notice);
+  else app.prepend(notice);
+  if (announcement.id === shownAnnouncementId && !notice.hidden) return;
+  const isNew = announcement.id !== shownAnnouncementId;
+  if (isNew) navigator.vibrate?.([80, 60, 80]);
+  notice.classList.toggle('is-new', isNew);
+  shownAnnouncementId = announcement.id;
+  notice.replaceChildren(
+    el('span', { class: 'notice-icon' }, icon(ICONS.megaphone)),
+    el('span', { class: 'notice-body' }, el('span', { class: 'notice-label', lang: 'en' }, 'From the host'), el('span', { class: 'notice-text' }, announcement.text)),
+    el('button', { type: 'button', class: 'notice-close', title: 'Close', onclick: dismissAnnouncement }, icon(ICONS.close)));
+  notice.hidden = false;
+}
+
+let isAway = false;
+
+function reportAway() {
+  if (isAway || !session?.token || state?.phase !== 'question') return;
+  isAway = true;
+  const body = JSON.stringify({ token: session.token });
+  if (!navigator.sendBeacon?.('/away', body)) fetch('/away', { method: 'POST', body, keepalive: true }).catch(() => {});
+}
+
+function cameBack() {
+  isAway = false;
+  reconnectIfDead();
+}
+
+window.addEventListener('blur', reportAway);
+window.addEventListener('pagehide', reportAway);
+window.addEventListener('focus', cameBack);
+
+const icon = path => {
+  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  svg.setAttribute('viewBox', '0 0 24 24');
+  svg.setAttribute('width', '18');
+  svg.setAttribute('height', '18');
+  svg.setAttribute('fill', 'none');
+  svg.setAttribute('stroke', 'currentColor');
+  svg.setAttribute('stroke-width', '2.2');
+  svg.setAttribute('stroke-linecap', 'round');
+  svg.setAttribute('stroke-linejoin', 'round');
+  svg.innerHTML = path;
+  return svg;
+};
+const SHOW_REACTIONS_KEY = 'party-show-reactions';
+const MAX_REACTION_TOASTS = 2;
+const reactionToasts = el('div', { class: 'reaction-toasts', role: 'status' });
+document.body.append(reactionToasts);
+let reactionsLeft = null;
+
+function areReactionsShown() {
+  try {
+    return localStorage.getItem(SHOW_REACTIONS_KEY) !== 'off';
+  } catch {
+    return true;
+  }
+}
+
+function setReactionsShown(areShown) {
+  try {
+    localStorage.setItem(SHOW_REACTIONS_KEY, areShown ? 'on' : 'off');
+  } catch {}
+  if (!areShown) {
+    isReactionTrayOpen = false;
+    reactionToasts.replaceChildren();
+  }
+  updateReactions();
+}
+
+function showOthersReaction(reaction) {
+  if (!areReactionsShown() || !state || renderedScreen === 'join' || renderedScreen === 'closed') return;
+  showReactionToast(el('span', { class: 'emoji' }, reaction.emoji), el('span', { class: 'who' }, reaction.name));
+}
+
+function showReactionToast(...children) {
+  const isNotice = children.length === 1;
+  const toast = el('div', { class: `reaction-toast${isNotice ? ' notice-toast' : ''}` }, ...children);
+  const dock = [document.getElementById('composer-dock'), document.getElementById('skip-dock')].find(candidate => candidate && !candidate.hidden);
+  reactionToasts.style.bottom = `${dock ? window.innerHeight - dock.getBoundingClientRect().top + 8 : 24}px`;
+  reactionToasts.append(toast);
+  while (reactionToasts.childElementCount > MAX_REACTION_TOASTS) reactionToasts.firstElementChild.remove();
+  setTimeout(() => toast.remove(), 2800);
+}
+
+let isReactionTrayOpen = false;
+let reactionCoolsUntil = 0;
+const REACTION_COOLDOWN_MS = 1000;
+
+function flyFrom(button, emoji) {
+  const box = button.getBoundingClientRect();
+  const flying = el('span', { class: 'flying' }, emoji);
+  flying.style.left = `${box.left + box.width / 2 - 16}px`;
+  flying.style.top = `${box.top - 8}px`;
+  document.body.append(flying);
+  setTimeout(() => flying.remove(), 950);
+}
+
+async function sendReaction(button, emoji) {
+  if (Date.now() < reactionCoolsUntil) return;
+  reactionCoolsUntil = Date.now() + REACTION_COOLDOWN_MS;
+  const tray = button.closest('.reaction-tray, .composer-emojis');
+  tray?.classList.add('cooling');
+  setTimeout(() => tray?.classList.remove('cooling'), REACTION_COOLDOWN_MS);
+  flyFrom(button, emoji);
+  navigator.vibrate?.(15);
+  try {
+    const response = await fetch('/react', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token: session.token, emoji }) });
+    const body = await response.json();
+    if (!response.ok) return showReactionToast(el('span', {}, body.error));
+    reactionsLeft = body.left;
+    updateReactionsLeft();
+  } catch {}
+}
+
+function updateReactionsLeft() {
+  const label = document.getElementById('reactions-left');
+  if (label) label.textContent = reactionsLeft == null ? `${state.reactionsPerMinute} a minute` : `${reactionsLeft} of ${state.reactionsPerMinute} left this minute`;
+}
+
+function reactionTray() {
+  const tray = el('div', { id: 'reaction-tray' },
+    el('div', { class: 'reaction-tray', role: 'group', title: 'Reactions show on the TV and on the other players\' screens' },
+      state.reactions.map(emoji => el('button', { type: 'button', title: `Send ${emoji}`, onclick: event => sendReaction(event.currentTarget, emoji) }, emoji))),
+    el('p', { class: 'reactions-left', id: 'reactions-left' }));
+  setTimeout(updateReactionsLeft);
+  return tray;
+}
+
+function toggleReactionTray() {
+  isReactionTrayOpen = !isReactionTrayOpen;
+  updateReactions();
+}
+
+function updateReactions() {
+  const toggle = document.getElementById('react-toggle');
+  const hasReactions = !!state?.reactions?.length && areReactionsShown();
+  const composerEmojis = document.getElementById('composer-emojis');
+  if (composerEmojis) composerEmojis.hidden = !hasReactions;
+  if (toggle) {
+    toggle.hidden = !hasReactions || !!composerEmojis;
+    toggle.classList.toggle('on', isReactionTrayOpen);
+  }
+  const header = app.querySelector('header');
+  const existing = document.getElementById('reaction-tray');
+  const wantsTray = hasReactions && !composerEmojis && (!header || isReactionTrayOpen);
+  if (!wantsTray) {
+    app.querySelector('.reactions-slot')?.replaceChildren();
+    return existing?.remove();
+  }
+  if (existing) return;
+  const tray = reactionTray();
+  if (header) (notice.isConnected ? notice : header).after(tray);
+  else app.querySelector('.reactions-slot')?.replaceChildren(el('p', { class: 'reaction-label' }, 'Reactions · everyone sees them'), tray);
+}
+
+const ICONS = {
+  skip: '<path d="m5 4 10 8-10 8z"/><path d="M19 5v14"/>',
+  check: '<path d="M20 6 9 17l-5-5"/>',
+  arrow: '<path d="M5 12h14"/><path d="m13 6 6 6-6 6"/>',
+  pencil: '<path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/>',
+  settings: '<path d="M12.2 2h-.4a2 2 0 0 0-2 2v.2a2 2 0 0 1-1 1.7l-.4.3a2 2 0 0 1-2 0l-.2-.1a2 2 0 0 0-2.7.7l-.2.4a2 2 0 0 0 .7 2.7l.2.1a2 2 0 0 1 1 1.7v.5a2 2 0 0 1-1 1.7l-.2.1a2 2 0 0 0-.7 2.7l.2.4a2 2 0 0 0 2.7.7l.2-.1a2 2 0 0 1 2 0l.4.3a2 2 0 0 1 1 1.7v.2a2 2 0 0 0 2 2h.4a2 2 0 0 0 2-2v-.2a2 2 0 0 1 1-1.7l.4-.3a2 2 0 0 1 2 0l.2.1a2 2 0 0 0 2.7-.7l.2-.4a2 2 0 0 0-.7-2.7l-.2-.1a2 2 0 0 1-1-1.7v-.5a2 2 0 0 1 1-1.7l.2-.1a2 2 0 0 0 .7-2.7l-.2-.4a2 2 0 0 0-2.7-.7l-.2.1a2 2 0 0 1-2 0l-.4-.3a2 2 0 0 1-1-1.7V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/>',
+  close: '<path d="M18 6 6 18"/><path d="m6 6 12 12"/>',
+  clock: '<circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>',
+  smile: '<circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><path d="M9 9h.01"/><path d="M15 9h.01"/>',
+  hourglass: '<path d="M5 22h14"/><path d="M5 2h14"/><path d="M17 22v-4.2a2 2 0 0 0-.6-1.4L12 12l-4.4 4.4a2 2 0 0 0-.6 1.4V22"/><path d="M7 2v4.2a2 2 0 0 0 .6 1.4L12 12l4.4-4.4a2 2 0 0 0 .6-1.4V2"/>',
+  megaphone: '<path d="m3 11 18-5v12L3 14v-3z"/><path d="M11.6 16.8a3 3 0 1 1-5.8-1.6"/>',
+};
+
+const nameButton = () => el('button', { type: 'button', class: 'pill name-pill', onclick: showSettings, title: 'Settings' },
+  el('span', { id: 'me-name' }, state.me.name), icon(ICONS.settings));
+const settingsButton = () => el('button', { type: 'button', class: 'ghost', onclick: showSettings }, icon(ICONS.settings), 'Settings');
+
+async function toggleSkip() {
+  try {
+    await fetch('/skip', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token: session.token }) });
+  } catch {}
+}
+
+const SKIP_TITLES = { waiting: 'Start the question', question: "I'm done", reveal: 'Next' };
+const MAX_SKIP_SEGMENTS = 12;
+
+function skipDock() {
+  return el('div', { class: 'dock', id: 'skip-dock' },
+    el('button', { type: 'button', class: 'skip', id: 'skip-button', onclick: toggleSkip },
+      el('span', { class: 'skip-main' },
+        el('span', { class: 'skip-icon', id: 'skip-icon' }),
+        el('span', { class: 'skip-text' }, el('span', { class: 'skip-title', id: 'skip-title' }), el('span', { class: 'skip-hint', id: 'skip-hint' })),
+        el('span', { class: 'skip-count', id: 'skip-count' })),
+      el('span', { class: 'skip-segments', id: 'skip-segments' })));
+}
+
+function updateSkipChip() {
+  const chip = document.getElementById('skip-chip');
+  if (!chip) return;
+  const skip = state.skip;
+  chip.hidden = !skip?.isAvailable;
+  if (chip.hidden) return;
+  chip.classList.toggle('on', !!skip.isMine);
+  chip.title = skip.isMine ? 'Tap again to take it back' : 'Moves on when everyone taps Done';
+  chip.replaceChildren(icon(skip.isMine ? ICONS.check : ICONS.skip), 'Done', el('span', { class: 'count' }, `${skip.count}/${skip.of}`));
+}
+
+function updateSkip() {
+  updateSkipChip();
+  const dock = document.getElementById('skip-dock');
+  if (!dock) return;
+  const skip = state.skip;
+  dock.hidden = !skip?.isAvailable && !skip?.isHostChecking;
+  if (dock.hidden) return;
+  const button = document.getElementById('skip-button');
+  button.disabled = !skip.isAvailable;
+  if (!skip.isAvailable) {
+    button.classList.remove('on');
+    document.getElementById('skip-icon').replaceChildren(icon(ICONS.hourglass));
+    document.getElementById('skip-title').textContent = 'The host is checking answers';
+    document.getElementById('skip-hint').textContent = 'Only the host can move on now';
+    document.getElementById('skip-count').textContent = '';
+    document.getElementById('skip-segments').replaceChildren();
+    return;
+  }
+  const others = skip.of - skip.count;
+  button.classList.toggle('on', !!skip.isMine);
+  document.getElementById('skip-icon').replaceChildren(icon(skip.isMine ? ICONS.check : ICONS.skip));
+  document.getElementById('skip-title').textContent = skip.isMine ? `Waiting for ${others} ${others === 1 ? 'player' : 'players'}` : SKIP_TITLES[state.phase];
+  document.getElementById('skip-hint').textContent = skip.isMine ? 'Press again to undo' : 'Moves on when everyone skips';
+  document.getElementById('skip-count').textContent = `${skip.count}/${skip.of}`;
+  const segmentCount = Math.min(skip.of, MAX_SKIP_SEGMENTS);
+  const filled = Math.round((skip.count / Math.max(skip.of, 1)) * segmentCount);
+  document.getElementById('skip-segments').replaceChildren(...Array.from({ length: segmentCount }, (_, i) => el('i', { class: i < filled ? 'on' : '' })));
 }
 
 function leaderboard(entries) {
   return el('ol', { class: 'board' }, entries.map(entry => el('li', { class: entry.name === state.me.name ? 'me' : '' },
-    el('span', { class: 'rank' }, `${entry.rank}.`), el('span', { class: 'name' }, entry.name), el('span', { class: 'score' }, entry.score))));
+    el('span', { class: 'rank' }, MEDALS[entry.rank] ? el('span', { class: 'emoji' }, MEDALS[entry.rank]) : `${entry.rank}.`), el('span', { class: 'name' }, entry.name),
+    entry.avgSeconds != null && el('span', { class: 'time', title: 'Average time of correct answers' }, secondsLabel(entry.avgSeconds)),
+    el('span', { class: 'score' }, entry.score))));
 }
+
+let timeFillElement = null;
 
 function topBar() {
   timerElement = el('span', { class: 'timer' });
-  return el('div', { class: 'bar' },
-    el('span', {}, `Round ${state.round} · Question `, el('strong', {}, state.index + 1), ` of ${state.total}`),
-    el('span', {}, `${state.me.name} · `, el('strong', {}, state.me.score)),
-    timerElement);
+  timeFillElement = el('div', { class: 'time-fill' });
+  return el('header', {},
+    el('div', { class: 'bar' },
+      el('span', { class: 'pill' }, el('span', { class: 'label' }, 'Q'), `${state.index + 1}/${state.total}`),
+      nameButton(),
+      el('span', { class: 'pill', title: 'Your score' }, state.me.score, el('span', { class: 'label' }, state.me.score === 1 ? 'pt' : 'pts')),
+      el('button', { type: 'button', class: 'pill react-toggle', id: 'react-toggle', title: 'Reactions', onclick: toggleReactionTray }, icon(ICONS.smile)),
+      el('span', { class: 'spacer' }),
+      timerElement),
+    el('div', { class: 'time-track' }, timeFillElement));
+}
+
+const phaseSeconds = () => ({ waiting: state.rules.secondsBetweenQuestions, question: state.rules.secondsPerQuestion, reveal: state.rules.secondsOnAnswer })[state.phase];
+
+let mediaNodes = new Map();
+
+function media(src, kind, alt) {
+  if (kind !== 'video' && kind !== 'audio') return el('img', { class: 'handout', src, alt });
+  if (!mediaNodes.has(src)) {
+    mediaNodes.forEach(node => node.pause());
+    mediaNodes = new Map([[src, el(kind, { class: `handout ${kind}`, src, controls: true, preload: 'metadata', playsInline: true })]]);
+  }
+  return mediaNodes.get(src);
 }
 
 function questionBlock() {
@@ -167,15 +730,15 @@ function questionBlock() {
   return [
     question.noteBefore && el('div', { class: 'note' }, question.noteBefore),
     el('p', { class: 'question' }, withLineBreaks(question.text)),
-    question.hasHandoutImage && el('img', { class: 'handout', src: imageUrl('/handout'), alt: 'Handout' }),
+    question.hasHandoutImage && media(imageUrl('/handout'), question.handoutKind, 'Handout'),
     question.handoutText && el('p', { class: 'pre' }, question.handoutText),
   ];
 }
 
-function answerForm() {
-  const input = el('input', { placeholder: 'Your answer', maxLength: 200, autocomplete: 'off', autocapitalize: 'off', spellcheck: false, value: state.myAnswer ?? '' });
-  const status = el('p', { class: 'sent', id: 'answer-status' });
-  const button = el('button', { type: 'submit' }, 'Send answer');
+function composerDock() {
+  const input = el('input', { class: 'composer-input', placeholder: 'Your answer', maxLength: 200, autocomplete: 'off', autocapitalize: 'off', spellcheck: false, enterKeyHint: 'send', value: state.myAnswer ?? '' });
+  const status = el('span', { class: 'sent composer-status', id: 'answer-status' });
+  const button = el('button', { type: 'submit', class: 'composer-send', title: 'Send answer' }, icon(ICONS.arrow));
   const send = async event => {
     event.preventDefault();
     button.disabled = true;
@@ -185,50 +748,88 @@ function answerForm() {
       if (!response.ok) throw new Error(body.error);
       input.blur();
     } catch (e) {
+      status.classList.add('error-text');
       status.textContent = e.message || 'Could not send';
     }
     button.disabled = false;
   };
-  return el('form', { onsubmit: send }, input, button, status);
+  const emojis = el('div', { class: 'composer-emojis', id: 'composer-emojis', role: 'group', title: 'Reactions: everyone sees them' },
+    state.reactions.map(emoji => el('button', { type: 'button', title: `Send ${emoji}`, onclick: event => sendReaction(event.currentTarget, emoji) }, emoji)));
+  const skipChip = el('button', { type: 'button', class: 'skip-chip', id: 'skip-chip', onclick: toggleSkip });
+  return el('div', { class: 'composer-dock', id: 'composer-dock' },
+    emojis,
+    el('form', { class: 'composer', onsubmit: send }, input, button),
+    el('div', { class: 'composer-meta' }, status, skipChip));
 }
 
 function updateAnswerStatus() {
   const status = document.getElementById('answer-status');
-  if (status && state.myAnswer != null) status.textContent = `Sent: “${state.myAnswer || '—'}”. You can change it until time is up.`;
+  if (!status) return;
+  status.classList.remove('error-text');
+  if (state.myAnswer == null) return status.replaceChildren(el('span', { class: 'muted' }, 'Not sent yet'));
+  status.replaceChildren(icon(ICONS.check), 'Sent · you can change it');
 }
 
 function render(next) {
+  renderScreen(next);
+  if (renderedScreen === 'join' || renderedScreen === 'closed') return (notice.hidden = true);
+  updateAnnouncement();
+  updateReactions();
+}
+
+function renderScreen(next) {
   state = next;
   if ('isNightMode' in next) document.documentElement.dataset.theme = next.isNightMode ? 'dark' : 'light';
   deadline = next.remainingMs == null || next.isPaused ? null : Date.now() + next.remainingMs;
-  if (next.phase === 'closed' || next.phase === 'kicked') {
+  if (next.phase === 'kicked') {
+    events.close();
+    const previousName = session?.name;
+    saveSession(null);
+    return showJoin('', { previousName, note: 'The host removed you from the game. Type your name to join again.' });
+  }
+  if (next.phase === 'closed') {
     renderedScreen = 'closed';
     events.close();
     saveSession(null);
     return show(el('div', { class: 'center' },
-      el('h1', {}, next.phase === 'kicked' ? 'You were removed from the game' : 'The host closed the game'),
+      el('h1', {}, 'The host closed the game'),
       el('p', { class: 'muted' }, 'Thanks for playing!')));
   }
+  if (session && next.me && session.name !== next.me.name) saveSession({ ...session, name: next.me.name });
   const screen = `${next.phase}:${next.index}`;
-  if (screen === renderedScreen && next.phase === 'question') return updateAnswerStatus();
+  if (screen === renderedScreen && next.phase === 'question') {
+    const nameElement = document.getElementById('me-name');
+    if (nameElement) nameElement.textContent = next.me.name;
+    updateSkip();
+    return updateAnswerStatus();
+  }
   renderedScreen = screen;
+  const done = rendered => {
+    updateSkip();
+    return rendered;
+  };
   if (next.phase === 'lobby' && next.round > 0) {
     return show(el('div', { class: 'center', style: 'flex:0;padding-top:24px' },
       el('h1', {}, `Round ${next.round} is over`),
-      el('p', { class: 'muted' }, `Your score: ${next.me.score} · place ${next.me.rank} of ${next.playerCount}. Waiting for the next round…`)),
-      leaderboard(next.leaderboard));
+      el('p', { class: 'muted' }, `Your score: ${next.me.score} · place ${next.me.rank} of ${next.playerCount}. Waiting for the next round…`),
+      el('div', { style: 'margin-top:8px' }, settingsButton())),
+      leaderboard(next.leaderboard), el('div', { class: 'reactions-slot' }));
   }
   if (next.phase === 'lobby') {
     return show(el('div', { class: 'center' },
       el('h1', {}, `You're in, ${next.me.name}!`),
-      el('p', { class: 'muted' }, `Waiting for the host to start… ${next.playerCount} ${next.playerCount === 1 ? 'player' : 'players'} joined.`)));
+      el('p', { class: 'muted' }, `Waiting for the host to start… ${next.playerCount} ${next.playerCount === 1 ? 'player' : 'players'} joined.`),
+      el('div', { style: 'margin-top:8px' }, settingsButton())), el('div', { class: 'reactions-slot' }));
   }
   if (next.phase === 'waiting') {
-    return show(topBar(), el('div', { class: 'center' },
-      el('p', { class: 'muted' }, 'Question'), el('div', { class: 'big-number' }, next.index + 1), el('p', { class: 'muted' }, `of ${next.total}`)));
+    return done(show(topBar(), el('div', { class: 'center' },
+      el('p', { class: 'muted' }, 'Question'), el('div', { class: 'big-number' }, next.index + 1), el('p', { class: 'muted' }, `of ${next.total}`)), skipDock()));
   }
   if (next.phase === 'question') {
-    show(topBar(), questionBlock(), answerForm(), el('p', { class: 'muted', style: 'margin:0;font-size:14px' }, rulesText()));
+    isAway = false;
+    if (document.visibilityState === 'hidden') reportAway();
+    show(topBar(), questionBlock(), el('p', { class: 'muted', style: 'margin:0;font-size:14px' }, rulesText()), composerDock());
+    updateSkip();
     return updateAnswerStatus();
   }
   if (next.phase === 'judging') {
@@ -240,22 +841,40 @@ function render(next) {
     const reveal = next.reveal;
     const verdict = reveal.isCorrect == null ? el('div', { class: 'verdict bad' }, 'No answer')
       : reveal.isPending ? el('div', { class: 'verdict' }, '? The host is checking')
-      : el('div', { class: `verdict ${reveal.isCorrect ? 'good' : 'bad'}` }, reveal.isCorrect ? '✓ Correct' : '✗ Wrong', el('span', { class: 'muted', style: 'font-size:18px;margin-left:10px' }, pointsLabel(reveal.points)));
-    return show(topBar(), el('div', { class: 'card' },
+      : el('div', { class: `verdict ${reveal.isCorrect ? 'good' : 'bad'}` }, reveal.isCorrect ? '✓ Correct' : '✗ Wrong', el('span', { class: 'points' }, pointsLabel(reveal.points)));
+    return done(show(topBar(), el('div', { class: 'card' },
       verdict,
       next.myAnswer != null && el('span', { class: 'muted' }, `Your answer: ${next.myAnswer || '—'}`),
+      reveal.seconds != null && el('span', { class: 'time-note' }, icon(ICONS.clock), `Answered in ${secondsLabel(reveal.seconds)}`),
       el('p', { class: 'answer' }, reveal.answer),
       reveal.acceptedAnswers && el('span', {}, el('span', { class: 'muted' }, 'Also accepted: '), reveal.acceptedAnswers),
       reveal.comment && el('p', { class: 'pre muted', style: 'margin:0;font-size:14px' }, reveal.comment),
-      reveal.hasAnswerImage && el('img', { class: 'handout', src: imageUrl('/answer-image'), alt: 'Answer' })),
+      reveal.hasAnswerImage && media(imageUrl('/answer-image'), reveal.answerKind, 'Answer')),
       el('p', { class: 'muted', style: 'margin:0' }, `Your score: ${next.me.score} · place ${next.me.rank} of ${next.playerCount}`),
-      leaderboard(next.leaderboard));
+      leaderboard(next.leaderboard), skipDock()));
   }
   if (next.phase === 'finished') {
-    return show(el('div', { class: 'center', style: 'flex:0;padding-top:24px' },
-      el('h1', {}, `Round ${next.round} results`),
-      el('p', { class: 'muted' }, `This round ${pointsLabel(next.me.roundScore)} · total ${next.me.score} · place ${next.me.rank} of ${next.playerCount}`)),
+    const place = next.me.rank;
+    const winners = next.leaderboard.filter(entry => entry.rank === 1).map(entry => entry.name);
+    const congratulation = CONGRATULATIONS[Math.min(place, 4)];
+    const title = place === 1 && winners.length > 1 ? 'You share first place!' : congratulation.title;
+    const celebrationKey = `${next.partyId}:${next.round}`;
+    if (place <= 3 && celebratedRound !== celebrationKey) {
+      celebratedRound = celebrationKey;
+      celebrate(place === 1 ? 140 : 60);
+      navigator.vibrate?.(place === 1 ? [120, 80, 120, 80, 300] : [120, 80, 120]);
+    }
+    return show(el('div', { class: `congrats place-${Math.min(place, 4)}` },
+      el('div', { class: 'congrats-badge' }, congratulation.badge),
+      el('div', { class: 'congrats-kicker', lang: 'en' }, place <= 3 ? `${ORDINALS[place]} place · round ${next.round}` : `Round ${next.round} results`),
+      el('h1', { class: 'congrats-title' }, place > 3 ? `You finished ${ordinal(place)} of ${next.playerCount}` : title),
+      el('p', { class: 'congrats-text' }, place === 1 ? congratulation.text : place <= 3 ? congratulation.text : `Thanks for playing! 🏆 ${winners.join(', ')} won this round.`),
+      el('div', { class: 'congrats-facts' },
+        el('span', { class: 'pill' }, el('span', { class: 'label' }, 'Round'), pointsLabel(next.me.roundScore)),
+        el('span', { class: 'pill' }, el('span', { class: 'label' }, 'Total'), next.me.score),
+        next.me.avgSeconds != null && el('span', { class: 'pill' }, el('span', { class: 'label' }, 'Avg'), secondsLabel(next.me.avgSeconds)))),
       leaderboard(next.leaderboard),
+      el('div', { class: 'reactions-slot' }),
       el('p', { class: 'muted', style: 'text-align:center' }, 'Waiting for the host…'));
   }
 }
@@ -263,10 +882,17 @@ function render(next) {
 setInterval(() => {
   if (!timerElement || !timerElement.isConnected) return;
   if (state?.isPaused && state.remainingMs != null) return (timerElement.textContent = `Paused ${clock(state.remainingMs)}`);
-  if (deadline == null) return (timerElement.textContent = '');
+  if (deadline == null) {
+    timerElement.textContent = '';
+    timeFillElement.style.transform = 'scaleX(0)';
+    return;
+  }
   const left = Math.max(0, deadline - Date.now());
+  const isLow = left <= 10000 && state.phase === 'question';
   timerElement.textContent = clock(left);
-  timerElement.classList.toggle('low', left <= 10000);
+  timerElement.classList.toggle('low', isLow);
+  timeFillElement.classList.toggle('low', isLow);
+  timeFillElement.style.transform = `scaleX(${phaseSeconds() ? Math.min(1, left / (phaseSeconds() * 1000)) : 0})`;
 }, 200);
 
 if (session?.token) connect();

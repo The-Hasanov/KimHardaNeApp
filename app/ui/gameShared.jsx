@@ -2,6 +2,12 @@ import { useEffect, useRef, useState } from 'react';
 import { cn } from 'cn';
 
 export const WARNING_AT_SECONDS_LEFT = 10;
+
+export function Media({ src, kind, alt, className }) {
+  if (kind === 'video') return <video src={src} controls playsInline preload="metadata" className={cn('rounded-lg border bg-black', className)} />;
+  if (kind === 'audio') return <audio src={src} controls preload="metadata" className="w-full max-w-md" />;
+  return <img src={src} alt={alt} className={cn('rounded-lg border object-contain', className)} />;
+}
 export const KEY_HINT_ON_PRIMARY_BUTTON = 'bg-primary-foreground/15 text-primary-foreground';
 
 export const formatClock = seconds => `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
@@ -53,7 +59,7 @@ export function QuestionOnScreen({ question, textClassName = 'text-3xl', imageCl
       {(question.rekvizit_src || question.rekvizit_text) && (
         <div className="space-y-2">
           <div className="text-xs font-medium tracking-wide text-muted-foreground uppercase">Handout</div>
-          {question.rekvizit_src && <img src={question.rekvizit_src} alt="Handout" className={cn('rounded-lg border object-contain', imageClassName)} />}
+          {question.rekvizit_src && <Media src={question.rekvizit_src} kind={question.rekvizit_kind} alt="Handout" className={imageClassName} />}
           {question.rekvizit_text && <p className="whitespace-pre-line">{question.rekvizit_text}</p>}
         </div>
       )}

@@ -4,13 +4,14 @@ const { autoUpdater } = require('electron-updater');
 const { execFile } = require('node:child_process');
 const fs = require('node:fs');
 const path = require('node:path');
-const { Store } = require('./store');
+const { Store, OWN_PACKAGE_ID } = require('./store');
 const { installData } = require('./data');
 const ai = require('./ai');
 const scraper = require('./scraper');
 const { judgeAnswer } = require('./judge');
 const { openParty } = require('./party');
-const { findSamsungTvs, openInTvBrowser } = require('./samsungTv');
+const transfer = require('./transfer');
+const { findSamsungTvs, openInTvBrowser, isLocalNetworkAddress } = require('./samsungTv');
 
 const WHAT_WHERE_WHEN_GAME_ID = 1;
 const USER_DATA_BEFORE_RENAME = path.join(app.getPath('appData'), '3sual Editor');
@@ -211,7 +212,7 @@ app.whenReady().then(() => {
   });
   const handle = (channel, fn) => ipcMain.handle(channel, async (_e, ...args) => { await ready; return fn(...args); });
 
-  handle('info', () => ({ version: app.getVersion(), rows: store.rows.length, games: store.games(), dataUpdate, dataDate: dataDate() }));
+  handle('info', () => ({ version: app.getVersion(), rows: store.rows.length, ownCount: store.rows.filter(row => row.package_id === OWN_PACKAGE_ID).length, games: store.games(), dataUpdate, dataDate: dataDate() }));
   handle('ai-status', () => aiStatus);
   handle('set-ai-search', async isOn => {
     writeSettings({ aiSearch: isOn });
@@ -257,7 +258,10 @@ app.whenReady().then(() => {
   };
   handle('party-open', async () => {
     await closeParty();
-    party = await openParty({ judge: judgeNow, onChange: sendPartyState });
+    party = await openParty({ judge: judgeNow, onChange: sendPartyState, onReaction: reaction => win.webContents.send('party-reaction', reaction), onRoundFinished: results => {
+      store.addPartyResults(results);
+      win.webContents.send('party-results', store.partyResults());
+    } });
     openPartyDisplay(win, party.game.port);
     return party.game.hostView();
   });
@@ -271,8 +275,15 @@ app.whenReady().then(() => {
   handle('party-finish-round', withParty(game => game.finish()));
   handle('party-set-correct', withParty((game, playerId, position, isCorrect) => game.setCorrect(playerId, position, isCorrect)));
   handle('party-kick', withParty((game, playerId) => game.kick(playerId)));
+  handle('party-announce', withParty((game, text) => game.announce(text)));
+  handle('party-set-reactions-on', withParty((game, areOn) => game.setReactionsOn(areOn)));
   handle('party-back-to-lobby', withParty((game, keepScores) => game.backToLobby({ keepScores })));
   handle('party-close', closeParty);
+  handle('party-results', () => store.partyResults());
+  handle('reset-party-results', () => {
+    store.resetPartyResults();
+    return store.partyResults();
+  });
   handle('party-state', () => party?.game.hostView() ?? null);
   handle('party-open-display', () => party && openPartyDisplay(win, party.game.port));
   handle('party-cast-miracast', () => shell.openExternal('ms-settings-connectabledevices:devicediscovery'));
@@ -281,6 +292,7 @@ app.whenReady().then(() => {
   handle('party-find-tvs', () => findSamsungTvs());
   handle('party-cast-samsung', async address => {
     if (!party) throw new Error('No party is open');
+    if (!isLocalNetworkAddress(address)) throw new Error('That TV is not on the local network');
     const tvNetwork = address.split('.').slice(0, 3).join('.');
     const joinUrls = party.game.urls.map(({ url }) => url);
     const partyUrl = joinUrls.find(url => url.startsWith(`http://${tvNetwork}.`)) ?? joinUrls[0];
@@ -295,9 +307,51 @@ app.whenReady().then(() => {
     return store.get(row.uid);
   });
   handle('delete-question', uid => store.deleteQuestion(uid));
+  const QUESTION_ARCHIVES = [{ name: 'KimHardaNeApp questions', extensions: ['quzip'] }];
+  const QUESTION_FILES_TO_OPEN = [{ name: 'KimHardaNeApp questions', extensions: ['quzip', 'zip', 'json'] }];
+  const fileNameOf = name => String(name).replace(/[\\/:*?"<>|]+/g, '-').trim() || 'Questions';
+  const embedCreated = async uids => {
+    if (uids.length && isAiReady()) await ai.embedRows(store, uids.map(uid => store.rows[store.pos.get(uid)]));
+  };
+  const saveQuestionsFile = async (name, questions, options) => {
+    const { canceled, filePath } = await dialog.showSaveDialog(win, {
+      title: 'Export questions', defaultPath: path.join(app.getPath('documents'), `${fileNameOf(name)}.quzip`), filters: QUESTION_ARCHIVES,
+    });
+    if (canceled) return null;
+    const { archive, count, mediaCount } = transfer.exportArchive(questions, options);
+    fs.writeFileSync(filePath, archive);
+    return { file: filePath, count, mediaCount };
+  };
+  const openQuestionsFile = async () => {
+    const { canceled, filePaths } = await dialog.showOpenDialog(win, { title: 'Import questions', properties: ['openFile'], filters: QUESTION_FILES_TO_OPEN });
+    if (canceled) return null;
+    return { archive: transfer.readArchiveFile(filePaths[0]), fileName: path.basename(filePaths[0], path.extname(filePaths[0])) };
+  };
+  const ownQuestions = () => store.rows.filter(row => row.package_id === OWN_PACKAGE_ID).map(row => store.get(row.uid));
+  handle('export-own-questions', () => saveQuestionsFile('My questions', ownQuestions()));
+  handle('import-own-questions', async () => {
+    const opened = await openQuestionsFile();
+    if (!opened) return null;
+    const { createdUids, summary } = transfer.importOwnQuestions(store, opened.archive);
+    await embedCreated(createdUids);
+    return summary;
+  });
+  handle('export-list', listId => {
+    const list = store.allLists().find(candidate => candidate.id === listId);
+    if (!list) throw new Error('This list no longer exists');
+    return saveQuestionsFile(list.name, store.listQuestions(listId), { list });
+  });
+  handle('import-list', async () => {
+    const opened = await openQuestionsFile();
+    if (!opened) return null;
+    const { listId, createdUids, summary } = transfer.importList(store, opened.archive, { fileName: opened.fileName });
+    await embedCreated(createdUids);
+    return { listId, summary };
+  });
   handle('pick-question-image', async (uid, column) => {
     const { canceled, filePaths } = await dialog.showOpenDialog(win, {
-      title: 'Add a picture', properties: ['openFile'], filters: [{ name: 'Pictures', extensions: ['png', 'jpg', 'jpeg', 'gif', 'webp'] }],
+      title: 'Add a picture, video or audio', properties: ['openFile'],
+      filters: [{ name: 'Pictures, videos and audio', extensions: ['png', 'jpg', 'jpeg', 'gif', 'webp', 'mp4', 'm4v', 'webm', 'mp3', 'm4a', 'wav', 'ogg', 'oga'] }],
     });
     return canceled ? null : store.setOwnImage(uid, column, filePaths[0]);
   });

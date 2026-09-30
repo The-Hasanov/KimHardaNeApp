@@ -36,8 +36,22 @@ contextBridge.exposeInMainWorld('api', {
   partyFinishRound: () => ipcRenderer.invoke('party-finish-round'),
   partySetCorrect: (playerId, position, isCorrect) => ipcRenderer.invoke('party-set-correct', playerId, position, isCorrect),
   partyKick: playerId => ipcRenderer.invoke('party-kick', playerId),
+  partyAnnounce: text => ipcRenderer.invoke('party-announce', text),
+  partySetReactionsOn: areOn => ipcRenderer.invoke('party-set-reactions-on', areOn),
+  onPartyReaction: cb => {
+    const listener = (_e, reaction) => cb(reaction);
+    ipcRenderer.on('party-reaction', listener);
+    return () => ipcRenderer.removeListener('party-reaction', listener);
+  },
   partyBackToLobby: keepScores => ipcRenderer.invoke('party-back-to-lobby', keepScores),
   partyClose: () => ipcRenderer.invoke('party-close'),
+  partyResults: () => ipcRenderer.invoke('party-results'),
+  resetPartyResults: () => ipcRenderer.invoke('reset-party-results'),
+  onPartyResults: cb => {
+    const listener = (_e, results) => cb(results);
+    ipcRenderer.on('party-results', listener);
+    return () => ipcRenderer.removeListener('party-results', listener);
+  },
   partyState: () => ipcRenderer.invoke('party-state'),
   partyOpenDisplay: () => ipcRenderer.invoke('party-open-display'),
   partyCastMiracast: () => ipcRenderer.invoke('party-cast-miracast'),
@@ -49,6 +63,10 @@ contextBridge.exposeInMainWorld('api', {
   save: (uid, fields) => ipcRenderer.invoke('save', uid, fields),
   createQuestion: fields => ipcRenderer.invoke('create-question', fields),
   deleteQuestion: uid => ipcRenderer.invoke('delete-question', uid),
+  exportOwnQuestions: () => ipcRenderer.invoke('export-own-questions'),
+  importOwnQuestions: () => ipcRenderer.invoke('import-own-questions'),
+  exportList: listId => ipcRenderer.invoke('export-list', listId),
+  importList: () => ipcRenderer.invoke('import-list'),
   pickQuestionImage: (uid, column) => ipcRenderer.invoke('pick-question-image', uid, column),
   removeQuestionImage: (uid, column) => ipcRenderer.invoke('remove-question-image', uid, column),
   onUpdate: cb => ipcRenderer.on('update', (_e, status) => cb(status)),

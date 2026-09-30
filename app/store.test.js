@@ -7,26 +7,7 @@ const path = require('node:path');
 const { fileURLToPath } = require('node:url');
 const { DatabaseSync } = require('node:sqlite');
 const { Store, fold, DIM } = require('./store');
-
-function tempDb() {
-  const file = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'quiz-')), 'q.sqlite');
-  const db = new DatabaseSync(file);
-  db.exec(`CREATE TABLE questions (package_id INTEGER, kind TEXT, value_id INTEGER, uid TEXT UNIQUE, origin TEXT, ordinal INTEGER,
-    package_name TEXT, package_played TEXT, tournament_name TEXT, game_id INTEGER, game_name TEXT, phase_path TEXT,
-    theme_name TEXT, theme_round INTEGER, group_size INTEGER, group_index INTEGER, text TEXT, answer TEXT, comment TEXT,
-    accepted_answers TEXT, note_before TEXT, rekvizit_text TEXT, rekvizit_url TEXT, source_media_url TEXT, sources TEXT,
-    authors TEXT, raw_value TEXT, raw_parent TEXT)`);
-  db.exec('CREATE TABLE images (url TEXT PRIMARY KEY, status TEXT, path TEXT, bytes INTEGER, content_type TEXT, sha256 TEXT, error TEXT, fetched_at TEXT)');
-  const add = db.prepare('INSERT INTO questions (package_id, kind, value_id, uid, ordinal, game_id, game_name, text, answer, sources) VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
-  add.run('question', 1, '1:question:1', 1, 1, 'NHN', 'Azərbaycanın paytaxtı hansı şəhərdir?', 'Bakı', '["https://a.az"]');
-  add.run('question', 2, '1:question:2', 2, 1, 'NHN', 'Futbol klubu "Qarabağ" hansı şəhəri təmsil edir?', 'Ağdam', null);
-  add.run('theme', 3, '1:theme:3', 3, 3, 'Fərdi Oyun', 'Bakının ən qədim məhəlləsi', 'İçərişəhər', null);
-  add.run('question', 4, '1:question:4', 4, 1, 'NHN', '-', '-', null);
-  db.exec(`UPDATE questions SET authors = '[{"id":7,"fullname":"Aysel"},{"id":9,"fullname":"Nicat"}]' WHERE value_id IN (1, 3);
-    UPDATE questions SET authors = '[{"id":9,"fullname":"Nicat"}]' WHERE value_id = 2`);
-  db.close();
-  return file;
-}
+const { tempDb } = require('./testDb');
 
 const vec = (a, b = a, w = 0) => {
   const v = new Float32Array(DIM);
@@ -230,4 +211,14 @@ test('pictures on your own questions are saved next to the database, shown from 
   assert.throws(() => s.setOwnImage('1:question:1', 'rekvizit_url', picture), /own questions/);
   assert.throws(() => s.setOwnImage(own.uid, 'text', picture), /unknown picture/);
   assert.throws(() => s.setOwnImage(own.uid, 'rekvizit_url', 'notes.txt'), /PNG, JPEG/);
+});
+
+test('party results add up per player name across rounds and can be reset', () => {
+  const s = store();
+  s.addPartyResults([{ name: 'Aysel', correct: 3, wrong: 1, unanswered: 1, correctMs: 30000 }, { name: 'Nicat', correct: 1, wrong: 0, unanswered: 4, correctMs: 5000 }]);
+  s.addPartyResults([{ name: 'aysel', correct: 2, wrong: 2, unanswered: 0, correctMs: 15500 }, { name: 'Leyla', correct: 1, wrong: 0, unanswered: 0, correctMs: 2000 }]);
+  assert.deepEqual(s.partyResults().map(({ name, correct, wrong, unanswered, rounds, avg_seconds }) => [name, correct, wrong, unanswered, rounds, avg_seconds]),
+    [['aysel', 5, 3, 1, 2, 9.1], ['Leyla', 1, 0, 0, 1, 2], ['Nicat', 1, 0, 4, 1, 5]]);
+  s.resetPartyResults();
+  assert.deepEqual(s.partyResults(), []);
 });

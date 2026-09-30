@@ -11,11 +11,21 @@ const REMOTE_CONTROL_PORT = 8002;
 const SENDER_NAME = 'KimHardaNeApp';
 const TV_BROWSER_APP_ID = 'org.tizen.browser';
 const ANSWER_TIMEOUT_MS = 30000;
+const MAX_INFO_BYTES = 64 * 1024;
+const MAX_NAME_LENGTH = 100;
+
+const isLocalNetworkAddress = address => net.isIPv4(address) && /^(10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|169\.254\.)/.test(address);
+const textOf = value => (typeof value === 'string' ? value.slice(0, MAX_NAME_LENGTH) : '');
 
 async function readTvInfo(address, infoPort = INFO_PORT) {
-  const response = await fetch(`http://${address}:${infoPort}/api/v2/`, { signal: AbortSignal.timeout(3000) });
-  const info = await response.json();
-  return { address, name: info.name.replace(/^\[TV\]\s*/, ''), model: info.device?.modelName ?? '' };
+  if (!isLocalNetworkAddress(address)) throw new Error(`${address} is not on the local network`);
+  const response = await fetch(`http://${address}:${infoPort}/api/v2/`, { signal: AbortSignal.timeout(3000), redirect: 'error' });
+  const text = await response.text();
+  if (!response.ok || text.length > MAX_INFO_BYTES) throw new Error(`${address} did not answer like a Samsung TV`);
+  const info = JSON.parse(text);
+  const name = textOf(info?.name).replace(/^\[TV\]\s*/, '');
+  if (!name) throw new Error(`${address} did not answer like a Samsung TV`);
+  return { address, name, model: textOf(info.device?.modelName) };
 }
 
 function findSamsungTvs({ searchMs = 2500 } = {}) {
@@ -29,7 +39,7 @@ function findSamsungTvs({ searchMs = 2500 } = {}) {
       resolve(found.filter(result => result.status === 'fulfilled').map(result => result.value));
     };
     socket.on('message', (message, remote) => {
-      if (message.toString().includes(SAMSUNG_SEARCH_TARGET)) addresses.add(remote.address);
+      if (isLocalNetworkAddress(remote.address) && message.toString().includes(SAMSUNG_SEARCH_TARGET)) addresses.add(remote.address);
     });
     socket.on('error', () => resolve([]));
     socket.bind(0, () => {
@@ -81,4 +91,4 @@ function openInTvBrowser(address, url, { port = REMOTE_CONTROL_PORT, isSecure = 
   });
 }
 
-module.exports = { findSamsungTvs, openInTvBrowser, readTvInfo, maskedTextFrame };
+module.exports = { findSamsungTvs, openInTvBrowser, readTvInfo, maskedTextFrame, isLocalNetworkAddress };

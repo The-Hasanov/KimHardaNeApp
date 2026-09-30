@@ -43,7 +43,8 @@ npm test         # offline tests for the scraper, search, ranking, edits, data u
   "Yalnız dəqiq cavablar" are not treated as answers, and exact-only or very short answers skip the AI check.
   You can overrule every verdict with *Correct* / *Wrong*. The score and every answer are saved; *Your results*
   in the Play setup lists past games, where verdicts can still be changed or a game deleted.
-- **Party mode** (Game tab, *Party*): players join from their phones. *Open party* starts a small web server
+- **Party mode** (Game tab, *Party*): players join from any phone, tablet or computer with a web browser (below, *phones* means any of
+  them). *Open party* starts a small web server
   (`party.js`, Node's `http`, port 8765 or a free one) on this computer's local network address, which the app
   finds itself (private IPv4, real adapters before virtual ones such as Hyper-V or VPNs; a picker appears when
   there are several). The lobby shows a QR code of that address; players scan it, type a name and join in the
@@ -53,22 +54,26 @@ npm test         # offline tests for the scraper, search, ranking, edits, data u
   gets what it shows). It follows the host's night mode. Opening a party also opens it in the **TV window**, a
   normal window placed on a second screen if there is one: drag it where you want and press F11 for full
   screen (Esc leaves it; *TV → Show TV window* brings it back if closed). *TV → Show on Samsung TV…* finds
-  Samsung Smart TVs on the network (SSDP, `samsungTv.js`) and opens the TV page in the TV's own web browser
+  Samsung Smart TVs on the network (SSDP, `samsungTv.js`; only devices with a local network address are asked, and their
+  answers are size-limited) and opens the TV page in the TV's own web browser
   through Samsung's remote-control channel (`wss://<tv>:8002`, the TV may ask once to allow KimHardaNeApp);
   press OK on the remote for full screen. Nothing is installed on the TV. *TV → Cast with Miracast…* opens the
   Windows Cast panel (Win+K) on computers with Miracast-capable Wi-Fi: pick the TV, then *Extend to TV*
   (`DisplaySwitch /extend`; Duplicate would show the host's answers) and the TV window moves to the new display
   by itself. The TV shows the join code, each question with its images and countdown, the answer with every
   player's result, and the leaderboard. The app window stays the host's
-  console: the question with its answer (only the host sees it) before and while it runs, who has answered,
-  and every control. *Game / Leaderboard / Join code* in the header picks what the TV shows; a choice other
+  console: the question with its answer (only the host sees it) before and while it runs, every player's answer
+  as it comes in, and every control. The host can already mark answers correct or wrong while the question runs; the call
+  also applies to the same answer (as `judge.js` compares text) from any other player the host has not marked directly, before
+  and after the check, and a player who changes the answer loses the mark (sending the same answer again keeps it). *Game / Leaderboard / Join code* in the header picks what the TV shows; a choice other
   than *Game* holds until the next question starts. *Pause* (Space during a question) freezes the countdown on
   every screen and phone. The TV counts the last 10 seconds of each question in big numbers with a beep per
   second and a tone when time is up; sounds play only from the TV page (after *Show on Samsung TV* the TV window
   on the computer goes silent). *Autoplay* in the round settings moves on to the next question once the answer
   has been shown for *Seconds on the answer*; the host can still press *Next question* early or *Pause* (Space)
-  to look at the answers longer. Each question and its images appear on every phone with an answer box and a
-  countdown. When the time is up (or *Close answers now*),
+  to look at the answers longer. Each question and its images appear on every phone with a countdown and, at the bottom where
+  thumbs are, a chat-style answer bar (answer box and round send button) with the reactions above it and the answer's
+  status and a small *Done* chip (the Skip vote) under it. When the time is up (or *Close answers now*),
   AI search checks every answer as in Play mode (with AI search off the host marks each one, and phones show
   *The host is checking* until then); phones then show their verdict, the answer and the
   leaderboard, and the host sees every answer and can overrule it. The host sets the points for a correct
@@ -80,7 +85,38 @@ npm test         # offline tests for the scraper, search, ranking, edits, data u
   stay connected and the host picks the next questions in the lobby. Random questions never repeat one already
   shown while the party is open (lists play as chosen). Players can only join and send answers:
   every host control stays in the app, phones never receive an answer before the reveal, names and answers are
-  length-limited, and the host can remove a player. Party results are not saved. Windows
+  length-limited, and the host can remove a player at any time, online or not (a green dot marks who is online):
+their answers and score leave the party, and their phone asks for a name again, so it is not a ban. A phone that
+loses the connection keeps its place and reconnects by itself, even after minutes or a page reload; only a removed
+player or a closed party has to join again. The phone's *Settings* (tap the name, or the button in the lobby) change the name, never to a name
+someone else has, and *Leave the game* removes the player and their score, as if the host had removed them. While a
+question runs, a phone that switches to another tab or app, or loses the connection, gets a warning sign on the
+host's screen only, with how many times, and a short toast there names the player as it happens (one toast per
+player and question, updated with the count); the count starts again at each question. *Message* in the party header sends a clue or
+an announcement (up to 300 characters) to every phone, never to the TV; players cannot reply. It shows at the top of each
+phone, which vibrates where it can, until the player closes it, the host clears or replaces it, or the next question starts. Phones have a small *Skip* button while the next question's number, a question or an answer is
+shown: when every online player has tapped it (tap again to take it back), the game moves on, unless the host has
+paused, and never while the host checks answers (between questions when the answers show at the end of the round, or
+while an answer is still *not sure*): phones then show that the host is checking, and only the host moves on. Phones
+and the host see how many tapped, and the count starts again at each step. Every finished round adds
+each player's correct, wrong and unanswered questions (counted from the question they joined at) to the
+**all-time leaderboard** in the party lobby, kept per name in the `party_results` table and carried through
+updates; *Reset* there deletes them. Each answer keeps its time: seconds from the question's start to the last change of the
+answer, pauses left out (sending the same answer again keeps the first time). The host sees it next to every answer,
+phones see their own after the reveal, and every leaderboard (host, TV, phones, all-time) shows each player's average
+time of correct answers; players with the same score are ranked by it, the faster first. When a round ends, the TV and the host show
+a podium of the top three with *Congratulations, <winner>!* (shared first places name everyone), confetti and, on the TV,
+a short fanfare; each phone congratulates its player by place: a trophy and confetti for first, silver and bronze
+medals for second and third, and the place and winner for everyone else. Confetti is left out when the device asks
+for reduced motion. **Reactions**: players send one of eight emojis (👏 😂 😮 🤔 🔥 ❤️ 😢 🎉) from a tray,
+always shown in the lobby and on the results, and opened with the smile button in the top bar during a round; while a
+question runs they sit in a row just above the answer bar; one a
+second and ten a minute per player (the tray shows how many are left). The host app queues every reaction and shows it as a small toast
+with the player's name in the TV's bottom-right corner (five at a time, about 4 s each) and on the other players' phones
+(two at a time, about 3 s each), in the order sent; one that waits too long (15 s for the TV, 8 s for phones) is dropped, and it shows next to the player's name in the
+host's player lists for a few seconds when it reaches the TV. *Show reactions* in the phone's Settings hides them and the tray for that player (remembered
+on the device); *Reactions* in
+the party header turns them off and on for everyone. Windows
   Firewall asks once whether KimHardaNeApp may accept connections on private networks; allow it.
 - **Lists**: *Add to list* in the editor puts the open question into one or more of your lists, or creates a
   new list with it. The **Lists** tab shows each list in order: move questions up or down, open one in the
@@ -106,13 +142,35 @@ npm test         # offline tests for the scraper, search, ranking, edits, data u
   `crawl --refresh` keeps edited rows. The site's original values are still in `packages.raw_json`, and
   the export includes `edited_at`.
 - **Your own questions**: the *Custom* tab lists them next to the editor, and *New question* there opens an
-  empty editor; a question needs its text and answer. Once saved, it can get a handout picture and an answer
-  picture (PNG, JPEG, GIF or WebP), copied to `images/own/` next to the database and kept through updates. They are stored in the same `questions` table (`package_id` 0, `origin` `own`), so search, lists,
+  empty editor; a question needs its text and answer. Once saved, it can get a handout and an answer medium: a
+  picture (PNG, JPEG, GIF, WebP), a video (MP4, WebM) or an audio file (MP3, M4A, WAV, OGG), up to 300 MB, copied to
+  `images/own/` next to the database and kept through updates. Videos and audio play with controls in the editor, in the
+  Game and Play tabs, on the host's party screen, on the TV (they start by themselves) and on phones (tap to play); the
+  party server streams them in byte ranges so phones and iPhones can seek. They are stored in the same `questions` table (`package_id` 0, `origin` `own`), so search, lists,
   games and parties treat them like any other question, and *My questions* in the game filter finds them in search too.
   Like edits, they survive refreshes and version updates, and `npm run dist` leaves them out of the installer.
   Only your own questions can be deleted.
+- **Import and export**: *Export* on the *Custom* tab saves all your own questions, and *Export* on a list saves that list
+  with its questions in order, to a `.quzip` file, a ZIP archive under its own name (`transfer.js`, written and read by `zip.js`): `questions.json` with every
+  text field and the sources, and a `media/` folder with the pictures, videos and audio stored on this computer (media
+  only known by a web link stay links). Import also reads `.zip` copies of it and the older `.json` exports. Import treats every file as untrusted: archives over 2 GB,
+  more than 5,000 questions, media over 300 MB or files that unpack to more than they declare (ZIP bombs) are refused;
+  archive entries are unpacked one at a time only when a question uses them and are never written under their own names
+  (media is stored as `images/own/<sha256>.<ext>`, with the extension taken from an allowed type); only text is taken
+  for text fields, capped at 20,000 characters; media links must be `http(s)`; and question text is always shown as
+  text, never as HTML. The party server sends media with `nosniff` and a sandboxing content policy. *Import* on the *Custom* tab adds the file's
+  questions to your own, skipping ones you already have (same text and answer, ignoring case, diacritics and spacing)
+  and question bank questions already in this computer's bank. *Import* on the *Lists* tab (the icon next to *New list*)
+  creates a new list from the file, named after it (with a number if the name is taken): question bank questions found
+  here are used as they are, your own questions already here are reused, and every other question, custom or from a
+  question bank this computer lacks, is added to your own questions first. A message sums up what was added.
 - **Images** are shown from `data/images/` when `scraper.js images` has fetched them, otherwise from the site.
-- **Refresh data** (header button) runs the scraper inside the app and brings the open database up to date.
+- **Refresh data** (in Settings, the gear icon top right) runs the scraper inside the app and brings the open database up to date.
+  Every download goes over `https` only (redirects away from it are refused) and has a size limit (64 MB of data per API
+  answer, 25 MB per picture). Pictures are fetched only from the question bank's own image address
+  (`https://api.3sual.az/images/`): links that your own or imported questions carry are shown as links, never downloaded
+  in the background. A downloaded picture is kept only when its bytes really are a JPEG, PNG, GIF, WebP, BMP or SVG
+  image, and it is stored under a hashed name with an extension from that list.
   *Quick* (~2 min) lists every package, fetches the ones not stored yet and runs the author check. *Full*
   (~20 min) also refetches every stored package, which picks up upstream edits. Both then download new
   images, rebuild the index and embed new or changed questions. Search and editing keep working meanwhile, and

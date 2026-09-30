@@ -1,5 +1,6 @@
 'use strict';
 const updateUrl = process.env.UPDATE_URL;
+if (updateUrl && !/^https:\/\//i.test(updateUrl)) throw new Error('UPDATE_URL must start with https:// so updates cannot be swapped on the way');
 // A platform-level `files` list drops the exclusions below, so pick the other OS's onnxruntime binaries here.
 const otherOs = process.argv.includes('--mac') ? 'win32' : 'darwin';
 
