@@ -112,8 +112,6 @@ header .bar { gap: 6px; }
 @keyframes toast-in { from { transform: translateY(10px); opacity: 0; } }
 @keyframes toast-out { to { transform: translateY(6px); opacity: 0; } }
 .reactions-left { font-size: 12px; color: var(--muted); text-align: right; margin: 4px 6px -4px 0; }
-.react-toggle { position: relative; }
-.react-badge { position: absolute; top: -4px; right: -4px; min-width: 16px; height: 16px; padding: 0 4px; border-radius: 99px; background: var(--muted); color: var(--bg); font-size: 10px; font-weight: 700; line-height: 16px; text-align: center; }
 .switch-row { display: flex; align-items: center; gap: 12px; cursor: pointer; }
 .switch-row .switch-text { flex: 1; display: flex; flex-direction: column; }
 .switch-row input { appearance: none; -webkit-appearance: none; flex: none; width: 46px; height: 28px; padding: 0; border-radius: 99px; background: var(--border); position: relative; cursor: pointer; transition: background-color .2s; }
@@ -400,7 +398,7 @@ function showSettings() {
       el('label', { class: 'switch-row' },
         el('span', { class: 'switch-text' },
           el('strong', {}, 'Show reactions'),
-          el('span', { class: 'muted', style: 'font-size:14px' }, "See other players' emojis and send your own. During a question they wait quietly on the smile button.")),
+          el('span', { class: 'muted', style: 'font-size:14px' }, "See other players' emojis and send your own.")),
         el('input', { type: 'checkbox', role: 'switch', checked: areReactionsShown(), onchange: event => setReactionsShown(event.target.checked) }))),
     el('div', { class: 'sheet-section' },
       el('label', { class: 'field-label', lang: 'en' }, 'Leave'),
@@ -487,7 +485,6 @@ const MAX_REACTION_TOASTS = 2;
 const reactionToasts = el('div', { class: 'reaction-toasts', role: 'status' });
 document.body.append(reactionToasts);
 let reactionsLeft = null;
-let unseenReactions = 0;
 
 function areReactionsShown() {
   try {
@@ -505,16 +502,11 @@ function setReactionsShown(areShown) {
     isReactionTrayOpen = false;
     reactionToasts.replaceChildren();
   }
-  unseenReactions = 0;
   updateReactions();
 }
 
 function showOthersReaction(reaction) {
   if (!areReactionsShown() || !state || renderedScreen === 'join' || renderedScreen === 'closed') return;
-  if (state.phase === 'question') {
-    unseenReactions += 1;
-    return updateReactionBadge();
-  }
   showReactionToast(el('span', { class: 'emoji' }, reaction.emoji), el('span', { class: 'who' }, reaction.name));
 }
 
@@ -525,15 +517,6 @@ function showReactionToast(...children) {
   reactionToasts.append(toast);
   while (reactionToasts.childElementCount > MAX_REACTION_TOASTS) reactionToasts.firstElementChild.remove();
   setTimeout(() => toast.remove(), 2800);
-}
-
-function updateReactionBadge() {
-  const toggle = document.getElementById('react-toggle');
-  if (!toggle) return;
-  toggle.querySelector('.react-badge')?.remove();
-  if (unseenReactions && state.phase === 'question' && !isReactionTrayOpen) {
-    toggle.append(el('span', { class: 'react-badge', title: `${unseenReactions} reactions from other players` }, unseenReactions > 9 ? '9+' : unseenReactions));
-  }
 }
 
 let isReactionTrayOpen = false;
@@ -582,14 +565,12 @@ function reactionTray() {
 
 function toggleReactionTray() {
   isReactionTrayOpen = !isReactionTrayOpen;
-  unseenReactions = 0;
   updateReactions();
 }
 
 function updateReactions() {
   const toggle = document.getElementById('react-toggle');
   const hasReactions = !!state?.reactions?.length && areReactionsShown();
-  if (state?.phase !== 'question') unseenReactions = 0;
   if (toggle) {
     toggle.hidden = !hasReactions;
     toggle.classList.toggle('on', isReactionTrayOpen);
@@ -597,14 +578,15 @@ function updateReactions() {
   const header = app.querySelector('header');
   const existing = document.getElementById('reaction-tray');
   const wantsTray = hasReactions && (!header || isReactionTrayOpen);
-  updateReactionBadge();
   if (!wantsTray) {
     app.querySelector('.reactions-slot')?.replaceChildren();
     return existing?.remove();
   }
   if (existing) return;
   const tray = reactionTray();
-  if (header) (notice.isConnected ? notice : header).after(tray);
+  const answerForm = document.getElementById('answer-status')?.closest('form');
+  if (answerForm) answerForm.after(tray);
+  else if (header) (notice.isConnected ? notice : header).after(tray);
   else app.querySelector('.reactions-slot')?.replaceChildren(el('p', { class: 'reaction-label' }, 'Reactions · everyone sees them'), tray);
 }
 
