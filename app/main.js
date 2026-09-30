@@ -324,7 +324,7 @@ app.whenReady().then(() => {
   const openQuestionsFile = async () => {
     const { canceled, filePaths } = await dialog.showOpenDialog(win, { title: 'Import questions', properties: ['openFile'], filters: QUESTION_FILES_TO_OPEN });
     if (canceled) return null;
-    return { archive: transfer.readArchive(fs.readFileSync(filePaths[0])), fileName: path.basename(filePaths[0], path.extname(filePaths[0])) };
+    return { archive: transfer.readArchiveFile(filePaths[0]), fileName: path.basename(filePaths[0], path.extname(filePaths[0])) };
   };
   const ownQuestions = () => store.rows.filter(row => row.package_id === OWN_PACKAGE_ID).map(row => store.get(row.uid));
   handle('export-own-questions', () => saveQuestionsFile('My questions', ownQuestions()));

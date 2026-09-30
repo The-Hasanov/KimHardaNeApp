@@ -34,11 +34,11 @@ test('zip archives keep names and bytes, stored or compressed, and catch damage'
   const zip = createZip([{ name: 'a/ə.txt', data: text }, { name: 'b.bin', data: Buffer.from([1, 2, 3]), compress: false }]);
   const files = readZip(zip);
   assert.deepEqual([...files.keys()], ['a/ə.txt', 'b.bin']);
-  assert.ok(files.get('a/ə.txt').equals(text));
+  assert.ok(files.get('a/ə.txt').read().equals(text));
   assert.ok(zip.length < text.length);
   const damaged = Buffer.from(zip);
   damaged[40] ^= 0xff;
-  assert.throws(() => readZip(damaged), /damaged|incorrect|invalid/i);
+  assert.throws(() => [...readZip(damaged).values()].forEach(file => file.read()), /damaged/);
 });
 
 test('your own questions export as a zip with their media files and import on another computer once', () => {
@@ -49,10 +49,10 @@ test('your own questions export as a zip with their media files and import on an
   const { archive, count, mediaCount } = exportArchive(ownQuestions(source));
   assert.deepEqual([count, mediaCount], [2, 2]);
   const files = readZip(archive);
-  const manifest = JSON.parse(files.get(MANIFEST));
+  const manifest = JSON.parse(files.get(MANIFEST).read());
   assert.equal(manifest.version, 2);
   assert.deepEqual(manifest.questions[0].answerMedia.type, 'video/mp4');
-  assert.equal(files.get(manifest.questions[0].answerMedia.file).toString(), 'mp4 bytes');
+  assert.equal(files.get(manifest.questions[0].answerMedia.file).read().toString(), 'mp4 bytes');
 
   const target = newStore();
   target.createQuestion({ text: 'ikinci   SUAL', answer: 'cavab' });
@@ -73,7 +73,7 @@ test('a list exports dataset and own questions, and imports as a new list that a
   source.addToList(listId, own.uid);
   source.addToList(listId, '1:question:1');
   const { archive } = exportArchive(source.listQuestions(listId), { list: { name: 'Friday' } });
-  const manifest = JSON.parse(readZip(archive).get(MANIFEST));
+  const manifest = JSON.parse(readZip(archive).get(MANIFEST).read());
   assert.deepEqual(manifest.questions.map(q => [q.origin, q.uid ?? null]), [['dataset', '1:question:2'], ['own', null], ['dataset', '1:question:1']]);
 
   const target = newStore();
@@ -115,4 +115,62 @@ test('own questions take pictures, videos and audio files, and say which kind ea
   assert.equal(store.setOwnImage(uid, 'rekvizit_url', tempFile('song.mp3', 'mp3')).rekvizit_kind, 'audio');
   assert.equal(store.setOwnImage(uid, 'rekvizit_url', tempFile('clip.webm', 'webm')).rekvizit_kind, 'video');
   assert.throws(() => store.setOwnImage(uid, 'rekvizit_url', tempFile('clip.avi', 'avi')), /video \(MP4, WebM\)/);
+});
+
+const quzip = (manifest, media = []) => createZip([{ name: MANIFEST, data: Buffer.from(JSON.stringify({ format: 'kimhardaneapp-questions', version: 2, ...manifest })) }, ...media]);
+
+test('hostile archives: zip bombs, lying sizes, huge entries and broken offsets are refused', () => {
+  const zeros = Buffer.alloc(4 * 1024 * 1024);
+  const bomb = createZip([{ name: 'media/bomb.png', data: zeros }]);
+  assert.throws(() => readZip(bomb, { maxEntryBytes: 1024 * 1024 }), /too large/);
+  assert.throws(() => readZip(bomb, { maxEntryBytes: 8 * 1024 * 1024, maxTotalBytes: 1024 * 1024 }), /too large/);
+  const lying = Buffer.from(bomb);
+  const centralAt = lying.lastIndexOf(Buffer.from([0x50, 0x4b, 0x01, 0x02]));
+  lying.writeUInt32LE(100, centralAt + 24);
+  assert.throws(() => readZip(lying).get('media/bomb.png').read(), /damaged/, 'inflating stops at the declared size');
+  const broken = Buffer.from(bomb);
+  broken.writeUInt32LE(0x7fffffff, centralAt + 42);
+  assert.throws(() => readZip(broken), /damaged/);
+  assert.throws(() => readArchive(Buffer.concat([Buffer.from('PK\x03\x04'), Buffer.alloc(100)])), /damaged/);
+});
+
+test('hostile archives: file names cannot write outside the media folder, and only allowed media types are taken', () => {
+  const store = newStore();
+  const outside = path.join(path.dirname(store.roots[0]), 'evil.png');
+  const archive = quzip({
+    questions: [
+      { origin: 'own', text: 'Birinci', answer: 'A', handoutMedia: { file: '../../evil.png', type: 'image/png' } },
+      { origin: 'own', text: 'İkinci', answer: 'B', handoutMedia: { file: 'media/page.html', type: 'text/html' } },
+      { origin: 'own', text: 'Üçüncü', answer: 'C', handoutMedia: { url: 'javascript:alert(1)' }, answerMedia: { url: 'file:///C:/Windows/win.ini' } },
+    ],
+  }, [{ name: '../../evil.png', data: Buffer.from('png bytes') }, { name: 'media/page.html', data: Buffer.from('<script>alert(1)</script>') }]);
+  const { createdUids } = importOwnQuestions(store, readArchive(archive));
+  const [first, second, third] = createdUids.map(uid => store.get(uid));
+  assert.ok(!fs.existsSync(outside));
+  assert.match(fileURLToPath(first.rekvizit_src), /images[\\/]own[\\/][0-9a-f]{64}\.png$/);
+  assert.equal(fileURLToPath(first.rekvizit_src).startsWith(store.roots[0]), true);
+  assert.deepEqual([second.rekvizit_src, third.rekvizit_src, third.source_media_src], [null, null, null]);
+});
+
+test('hostile archives: fields must be text, sizes are capped and lists get sane names', () => {
+  const store = newStore();
+  const long = 'ə'.repeat(50000);
+  const archive = quzip({
+    list: { name: `  ${'L'.repeat(500)}  ` },
+    questions: [
+      { origin: 'own', text: { toString: 1 }, answer: 'A' },
+      { origin: 'own', text: ['x'], answer: 'B' },
+      null, 7, 'text',
+      { origin: 'dataset', uid: { $ne: 1 }, text: 'Sual', answer: 'Cavab', comment: 42, sources: ['https://a.az', { x: 1 }, 'line\nbreak'], note_before: long },
+      { origin: 'own', text: '<img src=x onerror=alert(1)>', answer: '<script>alert(1)</script>' },
+    ],
+  });
+  const result = importList(store, readArchive(archive));
+  assert.deepEqual(result.summary, { fromDataset: 0, alreadyYours: 0, added: 2, invalid: 2, total: 2 });
+  assert.equal(store.allLists().find(list => list.id === result.listId).name, 'L'.repeat(80));
+  const [plain, markup] = store.listQuestions(result.listId);
+  assert.deepEqual([plain.comment, plain.sources, plain.note_before.length], [null, ['https://a.az', 'line break'], 20000]);
+  assert.deepEqual([markup.text, markup.answer], ['<img src=x onerror=alert(1)>', '<script>alert(1)</script>'], 'markup stays plain text; every screen shows it as text');
+  const many = quzip({ questions: Array.from({ length: 5001 }, (_, i) => ({ origin: 'own', text: `S${i}`, answer: 'C' })) });
+  assert.throws(() => readArchive(many), /at most 5000/);
 });

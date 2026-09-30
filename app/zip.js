@@ -69,32 +69,55 @@ function createZip(entries, { now = new Date() } = {}) {
 
 const isZip = buffer => buffer.length >= 4 && buffer.readUInt32LE(0) === LOCAL_HEADER;
 
-function readZip(buffer) {
+class DamagedArchiveError extends Error {}
+
+function readZip(buffer, { maxEntryBytes = 512 * 1024 * 1024, maxTotalBytes = 2 * 1024 * 1024 * 1024, maxEntries = MAX_ENTRIES } = {}) {
+  const damaged = () => new DamagedArchiveError('This archive is damaged or not a KimHardaNeApp file');
+  const within = (at, length) => at >= 0 && length >= 0 && at + length <= buffer.length;
   const endAt = buffer.lastIndexOf(Buffer.from([0x50, 0x4b, 0x05, 0x06]));
-  if (endAt < 0) throw new Error('This archive is damaged');
+  if (endAt < 0 || !within(endAt, 22)) throw damaged();
   const count = buffer.readUInt16LE(endAt + 10);
+  if (count > maxEntries) throw new Error('This archive holds too many files');
   let at = buffer.readUInt32LE(endAt + 16);
+  let totalBytes = 0;
   const files = new Map();
   for (let i = 0; i < count; i++) {
-    if (buffer.readUInt32LE(at) !== CENTRAL_HEADER) throw new Error('This archive is damaged');
+    if (!within(at, 46) || buffer.readUInt32LE(at) !== CENTRAL_HEADER) throw damaged();
     const method = buffer.readUInt16LE(at + 10);
     const crc = buffer.readUInt32LE(at + 16);
     const compressedSize = buffer.readUInt32LE(at + 20);
+    const size = buffer.readUInt32LE(at + 24);
     const nameLength = buffer.readUInt16LE(at + 28);
     const extraLength = buffer.readUInt16LE(at + 30);
     const commentLength = buffer.readUInt16LE(at + 32);
     const localAt = buffer.readUInt32LE(at + 42);
+    if (!within(at + 46, nameLength)) throw damaged();
     const name = buffer.toString('utf8', at + 46, at + 46 + nameLength);
     at += 46 + nameLength + extraLength + commentLength;
     if (name.endsWith('/')) continue;
-    const dataAt = localAt + 30 + buffer.readUInt16LE(localAt + 26) + buffer.readUInt16LE(localAt + 28);
-    const body = buffer.subarray(dataAt, dataAt + compressedSize);
+    if (size > maxEntryBytes) throw new Error(`${name} is too large to import`);
+    totalBytes += size;
+    if (totalBytes > maxTotalBytes) throw new Error('This archive is too large to import');
     if (![STORED, DEFLATED].includes(method)) throw new Error(`${name} uses a compression this app cannot read`);
-    const data = method === DEFLATED ? zlib.inflateRawSync(body) : Buffer.from(body);
-    if (zlib.crc32(data) !== crc) throw new Error(`${name} is damaged in the archive`);
-    files.set(name, data);
+    if (!within(localAt, 30) || buffer.readUInt32LE(localAt) !== LOCAL_HEADER) throw damaged();
+    const dataAt = localAt + 30 + buffer.readUInt16LE(localAt + 26) + buffer.readUInt16LE(localAt + 28);
+    if (!within(dataAt, compressedSize)) throw damaged();
+    const body = buffer.subarray(dataAt, dataAt + compressedSize);
+    files.set(name, {
+      size,
+      read() {
+        let data;
+        try {
+          data = method === DEFLATED ? zlib.inflateRawSync(body, { maxOutputLength: Math.max(size, 1) }) : Buffer.from(body);
+        } catch {
+          throw damaged();
+        }
+        if (data.length !== size || zlib.crc32(data) !== crc) throw damaged();
+        return data;
+      },
+    });
   }
   return files;
 }
 
-module.exports = { createZip, readZip, isZip };
+module.exports = { createZip, readZip, isZip, DamagedArchiveError };
