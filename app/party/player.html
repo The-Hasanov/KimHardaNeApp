@@ -103,11 +103,15 @@ header .bar { gap: 6px; }
 .reaction-label { font-size: 12px; font-weight: 600; color: var(--muted); text-align: center; margin: 0 0 6px; }
 .flying { position: fixed; z-index: 30; font-size: 32px; pointer-events: none; animation: fly .9s ease-out forwards; }
 @keyframes fly { to { transform: translateY(-120px) scale(1.4); opacity: 0; } }
-.others-reactions { position: fixed; right: 4px; bottom: 140px; width: 64px; height: 24vh; overflow: hidden; pointer-events: none; z-index: 2; }
-.others-reactions .bubble { position: absolute; bottom: -60px; left: 0; right: 0; display: flex; flex-direction: column; align-items: center; opacity: .8; animation: float-up 3.4s ease-out forwards; }
-.others-reactions .bubble .emoji { font-size: 24px; line-height: 1.1; }
-.others-reactions .bubble .who { max-width: 62px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 10px; font-weight: 600; color: var(--muted); background: var(--card); border: 1px solid var(--border); border-radius: 99px; padding: 0 6px; }
-@keyframes float-up { 0% { transform: translateY(0) scale(.6); opacity: 0; } 15% { transform: translateY(-30px) scale(1); opacity: .8; } 70% { opacity: .8; } 100% { transform: translateY(-22vh); opacity: 0; } }
+.reaction-toasts { position: fixed; left: 50%; transform: translateX(-50%); bottom: 24px; z-index: 6; display: flex; flex-direction: column; align-items: center; gap: 6px; pointer-events: none; width: calc(100% - 32px); max-width: 608px; }
+.reaction-toasts.above-dock { bottom: 128px; }
+.reaction-toast { display: inline-flex; align-items: center; gap: 8px; max-width: 100%; padding: 6px 14px 6px 8px; border-radius: 99px; background: var(--card); border: 1px solid var(--border); box-shadow: 0 6px 20px rgb(0 0 0 / .25); font-size: 14px; font-weight: 600; animation: toast-in .25s ease-out, toast-out .35s ease-in 2.4s forwards; }
+.reaction-toast .emoji { font-size: 20px; line-height: 1; }
+.reaction-toast .who { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.reaction-toast.notice-toast { color: var(--warn); }
+@keyframes toast-in { from { transform: translateY(10px); opacity: 0; } }
+@keyframes toast-out { to { transform: translateY(6px); opacity: 0; } }
+.reactions-left { font-size: 12px; color: var(--muted); text-align: right; margin: 4px 6px -4px 0; }
 .react-toggle { position: relative; }
 .react-badge { position: absolute; top: -4px; right: -4px; min-width: 16px; height: 16px; padding: 0 4px; border-radius: 99px; background: var(--muted); color: var(--bg); font-size: 10px; font-weight: 700; line-height: 16px; text-align: center; }
 .switch-row { display: flex; align-items: center; gap: 12px; cursor: pointer; }
@@ -479,9 +483,10 @@ const icon = path => {
   return svg;
 };
 const SHOW_REACTIONS_KEY = 'party-show-reactions';
-const MAX_OTHERS_REACTIONS = 6;
-const othersReactions = el('div', { class: 'others-reactions' });
-document.body.append(othersReactions);
+const MAX_REACTION_TOASTS = 3;
+const reactionToasts = el('div', { class: 'reaction-toasts', role: 'status' });
+document.body.append(reactionToasts);
+let reactionsLeft = null;
 let unseenReactions = 0;
 
 function areReactionsShown() {
@@ -498,7 +503,7 @@ function setReactionsShown(areShown) {
   } catch {}
   if (!areShown) {
     isReactionTrayOpen = false;
-    othersReactions.replaceChildren();
+    reactionToasts.replaceChildren();
   }
   unseenReactions = 0;
   updateReactions();
@@ -510,11 +515,16 @@ function showOthersReaction(reaction) {
     unseenReactions += 1;
     return updateReactionBadge();
   }
-  const bubble = el('div', { class: 'bubble' }, el('span', { class: 'emoji' }, reaction.emoji), el('span', { class: 'who' }, reaction.name));
-  bubble.style.left = `${Math.round(Math.random() * 28) - 14}px`;
-  othersReactions.append(bubble);
-  while (othersReactions.childElementCount > MAX_OTHERS_REACTIONS) othersReactions.firstElementChild.remove();
-  setTimeout(() => bubble.remove(), 3500);
+  showReactionToast(el('span', { class: 'emoji' }, reaction.emoji), el('span', { class: 'who' }, reaction.name));
+}
+
+function showReactionToast(...children) {
+  const isNotice = children.length === 1;
+  const toast = el('div', { class: `reaction-toast${isNotice ? ' notice-toast' : ''}` }, ...children);
+  reactionToasts.classList.toggle('above-dock', !!document.getElementById('skip-dock') && !document.getElementById('skip-dock').hidden);
+  reactionToasts.append(toast);
+  while (reactionToasts.childElementCount > MAX_REACTION_TOASTS) reactionToasts.firstElementChild.remove();
+  setTimeout(() => toast.remove(), 2800);
 }
 
 function updateReactionBadge() {
@@ -548,13 +558,26 @@ async function sendReaction(button, emoji) {
   flyFrom(button, emoji);
   navigator.vibrate?.(15);
   try {
-    await fetch('/react', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token: session.token, emoji }) });
+    const response = await fetch('/react', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token: session.token, emoji }) });
+    const body = await response.json();
+    if (!response.ok) return showReactionToast(el('span', {}, body.error));
+    reactionsLeft = body.left;
+    updateReactionsLeft();
   } catch {}
 }
 
+function updateReactionsLeft() {
+  const label = document.getElementById('reactions-left');
+  if (label) label.textContent = reactionsLeft == null ? `${state.reactionsPerMinute} a minute` : `${reactionsLeft} of ${state.reactionsPerMinute} left this minute`;
+}
+
 function reactionTray() {
-  return el('div', { class: 'reaction-tray', id: 'reaction-tray', role: 'group', title: 'Reactions show on the TV' },
-    state.reactions.map(emoji => el('button', { type: 'button', title: `Send ${emoji}`, onclick: event => sendReaction(event.currentTarget, emoji) }, emoji)));
+  const tray = el('div', { id: 'reaction-tray' },
+    el('div', { class: 'reaction-tray', role: 'group', title: 'Reactions show on the TV and on the other players\' screens' },
+      state.reactions.map(emoji => el('button', { type: 'button', title: `Send ${emoji}`, onclick: event => sendReaction(event.currentTarget, emoji) }, emoji))),
+    el('p', { class: 'reactions-left', id: 'reactions-left' }));
+  setTimeout(updateReactionsLeft);
+  return tray;
 }
 
 function toggleReactionTray() {
@@ -582,7 +605,7 @@ function updateReactions() {
   if (existing) return;
   const tray = reactionTray();
   if (header) (notice.isConnected ? notice : header).after(tray);
-  else app.querySelector('.reactions-slot')?.replaceChildren(el('p', { class: 'reaction-label' }, 'Reactions · shown on the TV'), tray);
+  else app.querySelector('.reactions-slot')?.replaceChildren(el('p', { class: 'reaction-label' }, 'Reactions · everyone sees them'), tray);
 }
 
 const ICONS = {

@@ -21,6 +21,8 @@ const PAUSABLE_PHASES = ['waiting', 'question', 'reveal'];
 const SKIPPABLE_PHASES = ['waiting', 'question', 'reveal'];
 const REACTIONS = ['👏', '😂', '😮', '🤔', '🔥', '❤️', '😢', '🎉'];
 const REACTION_COOLDOWN_MS = 1000;
+const REACTIONS_PER_MINUTE = 10;
+const MINUTE_MS = 60000;
 const DEFAULT_RULES = { secondsPerQuestion: 60, secondsBetweenQuestions: 0, secondsOnAnswer: 0, pointsForCorrect: 1, pointsForWrong: 0 };
 
 class PartyError extends Error {
@@ -51,7 +53,7 @@ class PartyGame {
     this.onRoundFinished = onRoundFinished;
     this.onReaction = onReaction;
     this.areReactionsOn = true;
-    this.lastReactionAt = new Map();
+    this.reactionTimes = new Map();
     this.players = new Map();
     this.bankedScores = new Map();
     this.bankedTimes = new Map();
@@ -180,12 +182,18 @@ class PartyGame {
     if (!this.areReactionsOn) throw new PartyError(409, 'Reactions are off');
     if (!REACTIONS.includes(emoji)) throw new PartyError(400, 'Pick one of the reactions');
     const now = Date.now();
-    if (now - (this.lastReactionAt.get(player.id) ?? 0) < REACTION_COOLDOWN_MS) throw new PartyError(429, 'Wait a moment');
-    this.lastReactionAt.set(player.id, now);
-    const reaction = { id: crypto.randomUUID(), emoji, name: player.name };
+    const times = (this.reactionTimes.get(player.id) ?? []).filter(time => now - time < MINUTE_MS);
+    if (times.length >= REACTIONS_PER_MINUTE) {
+      const seconds = Math.ceil((MINUTE_MS - (now - times[0])) / 1000);
+      throw new PartyError(429, `${REACTIONS_PER_MINUTE} reactions a minute. More in ${seconds} s`);
+    }
+    if (now - (times.at(-1) ?? 0) < REACTION_COOLDOWN_MS) throw new PartyError(429, 'Wait a moment');
+    times.push(now);
+    this.reactionTimes.set(player.id, times);
+    const reaction = { id: crypto.randomUUID(), emoji, name: player.name, playerId: player.id };
     this.onReaction(reaction);
     for (const stream of this.streams) if (stream.playerId !== player.id) stream.sendEvent('reaction', reaction);
-    return reaction;
+    return { reaction, left: REACTIONS_PER_MINUTE - times.length };
   }
 
   setReactionsOn(areOn) {
@@ -523,6 +531,7 @@ class PartyGame {
       myAnswer: myAnswer?.given ?? null,
       skip: this.skipStatus(player.id),
       reactions: this.areReactionsOn ? REACTIONS : [],
+      reactionsPerMinute: REACTIONS_PER_MINUTE,
       announcement: this.announcement,
       reveal: this.phase === 'reveal' ? {
         answer: question.answer, acceptedAnswers: question.accepted_answers, comment: question.comment,
@@ -655,8 +664,8 @@ async function route(game, req, res) {
   }
   if (req.method === 'POST' && url.pathname === '/react') {
     const body = await readJson(req);
-    game.react(body.token, body.emoji);
-    return sendJson(res, 200, { ok: true });
+    const { left } = game.react(body.token, body.emoji);
+    return sendJson(res, 200, { left });
   }
   if (req.method === 'POST' && url.pathname === '/skip') {
     game.toggleSkip((await readJson(req)).token);

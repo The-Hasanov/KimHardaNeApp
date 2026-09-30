@@ -543,7 +543,11 @@ test('players send reactions from the list to the TV and the host, one a second,
   assert.deepEqual(shownToPlayers, [['Nicat', '🔥']], 'other players see it, the sender already did');
   assert.equal(shownToHost[0].emoji, '🔥');
   assert.throws(() => game.react(aysel.token, '👏'), /Wait/);
-  game.lastReactionAt.set(aysel.id, 0);
+  game.reactionTimes.set(aysel.id, Array.from({ length: 10 }, (_, i) => Date.now() - 50000 + i * 1000));
+  assert.throws(() => game.react(aysel.token, '👏'), /10 reactions a minute\. More in 10 s/);
+  game.reactionTimes.delete(aysel.id);
+  assert.equal(game.react(aysel.token, '👏').left, 9);
+  game.reactionTimes.delete(aysel.id);
   assert.throws(() => game.react(aysel.token, '💩'), /Pick one/);
   game.setReactionsOn(false);
   assert.deepEqual([game.playerView(aysel).reactions, game.hostView().areReactionsOn], [[], false]);

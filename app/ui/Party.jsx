@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import QRCode from 'qrcode';
 import { cn } from 'cn';
 import {
@@ -188,7 +188,7 @@ function Leaderboard({ entries, players = [], onKick, showsRoundScore = false })
         <li key={entry.id} className={cn('flex items-center gap-3 rounded-lg bg-muted/50 px-3 py-2', entry.rank === 1 && 'bg-amber-500/15')}>
           <span className="w-6 text-right font-semibold text-muted-foreground tabular-nums">{entry.rank}</span>
           {onKick && <OnlineDot isOnline={isOnline.get(entry.id)} />}
-          <span className="min-w-0 flex-1 truncate font-medium">{entry.name}</span>
+          <span className="flex min-w-0 flex-1 items-center gap-2 font-medium"><span className="truncate">{entry.name}</span><PlayerReaction playerId={entry.id} /></span>
           {showsRoundScore && <span className="text-xs text-muted-foreground tabular-nums">{pointsLabel(entry.roundScore)} this round</span>}
           <span className="flex w-16 items-center justify-end gap-1 text-xs text-muted-foreground tabular-nums" title="Average time of correct answers; breaks ties">
             {entry.avgSeconds != null && <><TimerIcon className="size-3" />{secondsLabel(entry.avgSeconds)}</>}
@@ -310,7 +310,7 @@ function LiveAnswers({ party, onKick }) {
             <li key={player.id} className="flex items-center gap-2 px-3 py-2">
               <OnlineDot isOnline={player.isOnline} />
               <div className="min-w-0 flex-1">
-                <p className="flex items-center gap-1.5 text-sm font-medium"><span className="truncate">{player.name}</span><AwayWarning timesAway={player.timesAway} /></p>
+                <p className="flex items-center gap-1.5 text-sm font-medium"><span className="truncate">{player.name}</span><AwayWarning timesAway={player.timesAway} /><PlayerReaction playerId={player.id} /></p>
                 {showsAnswers && (
                   <p className={cn('truncate text-sm', !answer?.given && 'text-muted-foreground')} title={answer?.given}>
                     {answer ? answer.given || 'Blank' : 'No answer yet'}
@@ -506,26 +506,29 @@ function TvMenu() {
   );
 }
 
-const REACTION_SECONDS = 4.2;
-const MAX_REACTIONS_ON_SCREEN = 12;
+const REACTION_SHOWN_MS = 6000;
+const RecentReactions = createContext(new Map());
 
-function FloatingReactions() {
-  const [reactions, setReactions] = useState([]);
+function useRecentReactions() {
+  const [recent, setRecent] = useState(new Map());
   useEffect(() => api.onPartyReaction(reaction => {
-    const shown = { ...reaction, left: Math.random() * 70 };
-    setReactions(current => [...current, shown].slice(-MAX_REACTIONS_ON_SCREEN));
-    setTimeout(() => setReactions(current => current.filter(other => other.id !== shown.id)), REACTION_SECONDS * 1000);
+    setRecent(current => new Map(current).set(reaction.playerId, reaction));
+    setTimeout(() => setRecent(current => {
+      if (current.get(reaction.playerId)?.id !== reaction.id) return current;
+      const next = new Map(current);
+      next.delete(reaction.playerId);
+      return next;
+    }), REACTION_SHOWN_MS);
   }), []);
+  return recent;
+}
+
+function PlayerReaction({ playerId }) {
+  const reaction = useContext(RecentReactions).get(playerId);
+  if (!reaction) return null;
   return (
-    <div className="pointer-events-none fixed left-6 bottom-20 z-40 h-72 w-56 overflow-hidden" aria-live="polite">
-      {reactions.map(reaction => (
-        <div key={reaction.id} className="absolute bottom-0 flex flex-col items-center gap-0.5"
-          style={{ left: `${reaction.left}%`, animation: `reaction-rise ${REACTION_SECONDS}s ease-out forwards` }}>
-          <span className="font-emoji text-4xl leading-none">{reaction.emoji}</span>
-          <span className="max-w-28 truncate rounded-full bg-background/90 px-2 py-0.5 text-xs font-medium shadow-sm ring-1 ring-border">{reaction.name}</span>
-        </div>
-      ))}
-    </div>
+    <span key={reaction.id} className="font-emoji shrink-0 text-lg leading-none" title={`Reaction from ${reaction.name}`}
+      style={{ animation: 'medal-pop .45s cubic-bezier(.2,1.6,.4,1) both' }}>{reaction.emoji}</span>
   );
 }
 
@@ -598,6 +601,7 @@ function PlayersInLobby({ players, onKick }) {
             <li key={player.id} className="flex items-center gap-1 rounded-full border py-1 pr-1 pl-3 text-sm animate-in fade-in-0 zoom-in-95">
               <OnlineDot isOnline={player.isOnline} />
               <span className="ml-1">{player.name}</span>
+              <PlayerReaction playerId={player.id} />
               <KickButton player={player} onKick={onKick} />
             </li>
           ))}
@@ -633,6 +637,7 @@ export default function PartyScreen({ party, isVisible, lobbySettings, onBackToL
   const [playerToKick, setPlayerToKick] = useState(null);
   const [isWritingMessage, setIsWritingMessage] = useState(false);
   useAwayToasts(party);
+  const recentReactions = useRecentReactions();
   const kick = player => (party.phase === 'lobby' && party.round === 0 ? api.partyKick(player.id) : setPlayerToKick(player));
   const handleKeyDown = useRef(null);
   const deadline = useMemo(() => (party.remainingMs == null || party.isPaused ? null : Date.now() + party.remainingMs), [party]);
@@ -668,143 +673,144 @@ export default function PartyScreen({ party, isVisible, lobbySettings, onBackToL
   const timerPercent = hasRunningClock ? (secondsLeft / secondsOfPhase[party.phase]) * 100 : 0;
 
   return (
-    <div className="flex h-full flex-col">
-      <div className="flex shrink-0 flex-wrap items-center gap-x-4 gap-y-2 border-b px-6 py-3">
-        <span className="flex items-center gap-2 text-sm font-medium"><UsersIcon className="size-4" />Party</span>
-        {isInRound && <span className="text-sm">Round {party.round} · Question {party.index + 1} of {party.total}</span>}
-        <span className="text-sm text-muted-foreground">{party.players.length} {party.players.length === 1 ? 'player' : 'players'}</span>
-        {party.urls[0] && isInRound && <span className="font-mono text-sm text-muted-foreground">Join: {hostOf(party.urls[0].url)}</span>}
-        <div className="ml-auto flex gap-2">
-          <Button variant="outline" size="sm" disabled={!party.players.length} onClick={() => setIsWritingMessage(true)}><MegaphoneIcon />Message</Button>
-          <Toggle variant="outline" size="sm" pressed={party.areReactionsOn} onPressedChange={areOn => api.partySetReactionsOn(areOn)}
-            title={party.areReactionsOn ? 'Players can send reactions to the TV. Click to turn them off.' : 'Reactions are off. Click to let players send them.'}
-            className="aria-pressed:bg-muted"><SmilePlusIcon />Reactions</Toggle>
-          {isInRound && <Button variant="outline" size="sm" onClick={() => api.partyFinishRound()}><FlagIcon />End round</Button>}
-          <ToggleGroup type="single" variant="outline" size="sm" spacing={0} value={party.screen} aria-label="What the TV shows"
-            onValueChange={screen => screen && api.partySetScreen(screen)}>
-            <ToggleGroupItem value="game" className="px-2.5 aria-checked:bg-muted" title="The TV follows the game"><GamepadIcon />Game</ToggleGroupItem>
-            <ToggleGroupItem value="leaderboard" className="px-2.5 aria-checked:bg-muted" title="Show the leaderboard on the TV"><TrophyIcon />Leaderboard</ToggleGroupItem>
-            <ToggleGroupItem value="join" className="px-2.5 aria-checked:bg-muted" title="Show the join QR code on the TV"><QrCodeIcon />Join code</ToggleGroupItem>
-          </ToggleGroup>
-          <TvMenu />
-          <Button variant="outline" size="sm" onClick={() => setIsConfirmingClose(true)}><DoorClosedIcon />Close party</Button>
+    <RecentReactions.Provider value={recentReactions}>
+      <div className="flex h-full flex-col">
+        <div className="flex shrink-0 flex-wrap items-center gap-x-4 gap-y-2 border-b px-6 py-3">
+          <span className="flex items-center gap-2 text-sm font-medium"><UsersIcon className="size-4" />Party</span>
+          {isInRound && <span className="text-sm">Round {party.round} · Question {party.index + 1} of {party.total}</span>}
+          <span className="text-sm text-muted-foreground">{party.players.length} {party.players.length === 1 ? 'player' : 'players'}</span>
+          {party.urls[0] && isInRound && <span className="font-mono text-sm text-muted-foreground">Join: {hostOf(party.urls[0].url)}</span>}
+          <div className="ml-auto flex gap-2">
+            <Button variant="outline" size="sm" disabled={!party.players.length} onClick={() => setIsWritingMessage(true)}><MegaphoneIcon />Message</Button>
+            <Toggle variant="outline" size="sm" pressed={party.areReactionsOn} onPressedChange={areOn => api.partySetReactionsOn(areOn)}
+              title={party.areReactionsOn ? 'Players can send reactions to the TV. Click to turn them off.' : 'Reactions are off. Click to let players send them.'}
+              className="aria-pressed:bg-muted"><SmilePlusIcon />Reactions</Toggle>
+            {isInRound && <Button variant="outline" size="sm" onClick={() => api.partyFinishRound()}><FlagIcon />End round</Button>}
+            <ToggleGroup type="single" variant="outline" size="sm" spacing={0} value={party.screen} aria-label="What the TV shows"
+              onValueChange={screen => screen && api.partySetScreen(screen)}>
+              <ToggleGroupItem value="game" className="px-2.5 aria-checked:bg-muted" title="The TV follows the game"><GamepadIcon />Game</ToggleGroupItem>
+              <ToggleGroupItem value="leaderboard" className="px-2.5 aria-checked:bg-muted" title="Show the leaderboard on the TV"><TrophyIcon />Leaderboard</ToggleGroupItem>
+              <ToggleGroupItem value="join" className="px-2.5 aria-checked:bg-muted" title="Show the join QR code on the TV"><QrCodeIcon />Join code</ToggleGroupItem>
+            </ToggleGroup>
+            <TvMenu />
+            <Button variant="outline" size="sm" onClick={() => setIsConfirmingClose(true)}><DoorClosedIcon />Close party</Button>
+          </div>
         </div>
-      </div>
-      {party.announcement && <AnnouncementStrip announcement={party.announcement} onOpen={() => setIsWritingMessage(true)} />}
-      {isInRound && (
-        <Progress value={timerPercent} className={cn('h-1 shrink-0 rounded-none', isRunningOut && '[&>[data-slot=progress-indicator]]:bg-amber-500')} />
-      )}
+        {party.announcement && <AnnouncementStrip announcement={party.announcement} onOpen={() => setIsWritingMessage(true)} />}
+        {isInRound && (
+          <Progress value={timerPercent} className={cn('h-1 shrink-0 rounded-none', isRunningOut && '[&>[data-slot=progress-indicator]]:bg-amber-500')} />
+        )}
 
-      <div className="min-h-0 flex-1 overflow-y-auto">
-        {party.phase === 'lobby' && (
-          <div className="mx-auto max-w-5xl space-y-6 px-6 py-8">
-            <div className="grid gap-6 md:grid-cols-[auto_1fr]">
-              <JoinCard urls={party.urls} />
+        <div className="min-h-0 flex-1 overflow-y-auto">
+          {party.phase === 'lobby' && (
+            <div className="mx-auto max-w-5xl space-y-6 px-6 py-8">
+              <div className="grid gap-6 md:grid-cols-[auto_1fr]">
+                <JoinCard urls={party.urls} />
+                <div className="space-y-6">
+                  <PlayersInLobby players={party.players} onKick={kick} />
+                  {party.round > 0 && (
+                    <div className="space-y-2">
+                      <h2 className="font-medium">Scores after round {party.round}</h2>
+                      <Leaderboard entries={party.leaderboard} />
+                    </div>
+                  )}
+                </div>
+              </div>
+              {lobbySettings}
+              <AllTimeLeaderboard />
+            </div>
+          )}
+          {['waiting', 'question', 'judging'].includes(party.phase) && <QuestionForHost party={party} onKick={kick} />}
+          {party.phase === 'reveal' && (
+            <div className="mx-auto grid max-w-6xl gap-8 px-8 py-8 lg:grid-cols-[1fr_20rem]">
               <div className="space-y-6">
-                <PlayersInLobby players={party.players} onKick={kick} />
-                {party.round > 0 && (
-                  <div className="space-y-2">
-                    <h2 className="font-medium">Scores after round {party.round}</h2>
-                    <Leaderboard entries={party.leaderboard} />
-                  </div>
-                )}
+                <p className="line-clamp-3 whitespace-pre-line text-muted-foreground">{withLineBreaks(party.question.text)}</p>
+                <CorrectAnswer question={party.question} />
+                <PlayerAnswers party={party} />
+              </div>
+              <div className="space-y-2">
+                <h2 className="text-sm font-medium text-muted-foreground">Leaderboard</h2>
+                <Leaderboard entries={party.leaderboard} players={party.players} onKick={kick} />
               </div>
             </div>
-            {lobbySettings}
-            <AllTimeLeaderboard />
-          </div>
-        )}
-        {['waiting', 'question', 'judging'].includes(party.phase) && <QuestionForHost party={party} onKick={kick} />}
-        {party.phase === 'reveal' && (
-          <div className="mx-auto grid max-w-6xl gap-8 px-8 py-8 lg:grid-cols-[1fr_20rem]">
-            <div className="space-y-6">
-              <p className="line-clamp-3 whitespace-pre-line text-muted-foreground">{withLineBreaks(party.question.text)}</p>
-              <CorrectAnswer question={party.question} />
-              <PlayerAnswers party={party} />
+          )}
+          {party.phase === 'finished' && (
+            <div className="mx-auto max-w-2xl space-y-6 px-6 py-10">
+              <Podium party={party} />
+              <Leaderboard entries={party.leaderboard} players={party.players} onKick={kick} showsRoundScore />
+              <div className="flex flex-wrap gap-2">
+                <Button size="lg" onClick={() => onBackToLobby(true)}><ArrowRightIcon />Next round (keep scores)</Button>
+                <Button size="lg" variant="outline" onClick={() => onBackToLobby(false)}><RotateCcwIcon />New game (reset scores)</Button>
+              </div>
             </div>
-            <div className="space-y-2">
-              <h2 className="text-sm font-medium text-muted-foreground">Leaderboard</h2>
-              <Leaderboard entries={party.leaderboard} players={party.players} onKick={kick} />
-            </div>
-          </div>
-        )}
-        {party.phase === 'finished' && (
-          <div className="mx-auto max-w-2xl space-y-6 px-6 py-10">
-            <Podium party={party} />
-            <Leaderboard entries={party.leaderboard} players={party.players} onKick={kick} showsRoundScore />
-            <div className="flex flex-wrap gap-2">
-              <Button size="lg" onClick={() => onBackToLobby(true)}><ArrowRightIcon />Next round (keep scores)</Button>
-              <Button size="lg" variant="outline" onClick={() => onBackToLobby(false)}><RotateCcwIcon />New game (reset scores)</Button>
-            </div>
-          </div>
-        )}
-      </div>
-
-      {isInRound && (
-        <div className="flex shrink-0 flex-wrap items-center gap-3 border-t px-6 py-3">
-          {hasRunningClock && (
-            <span className={cn('min-w-24 text-4xl font-semibold tabular-nums', party.phase !== 'question' && 'text-muted-foreground',
-              isRunningOut && 'text-amber-500')}>{formatClock(wholeSecondsLeft)}</span>
-          )}
-          {party.phase === 'reveal' && hasRunningClock && <span className="text-lg text-muted-foreground">until {isLastQuestion ? 'the round results' : party.rules.revealAtEnd ? 'the next answer' : 'the next question'} (autoplay)</span>}
-          {party.phase === 'waiting' && (
-            <Button size="lg" onClick={() => api.partySkipWait()}><SkipForwardIcon />Skip wait<Kbd className={KEY_HINT_ON_PRIMARY_BUTTON}>Space</Kbd></Button>
-          )}
-          {hasRunningClock && (
-            party.isPaused
-              ? <Button size="lg" variant="outline" onClick={() => api.partyResume()}><PlayIcon />Resume{party.phase !== 'waiting' && <Kbd>Space</Kbd>}</Button>
-              : <Button size="lg" variant="outline" onClick={() => api.partyPause()}><PauseIcon />Pause{party.phase !== 'waiting' && <Kbd>Space</Kbd>}</Button>
-          )}
-          {party.skips.isAvailable && party.skips.count > 0 && <SkipProgress skips={party.skips} />}
-          {party.phase === 'question' && <>
-            <span className="text-lg"><span className="font-semibold tabular-nums">{answeredCount}</span> of {party.players.length} answered</span>
-            <Button size="lg" variant="outline" className="ml-auto" onClick={() => api.partyCloseAnswers()}>Close answers now</Button>
-          </>}
-          {party.phase === 'judging' && !isWaitingToReveal(party) && <span className="flex items-center gap-2 text-lg"><Spinner />Checking answers…</span>}
-          {isWaitingToReveal(party) && (
-            <Button size="lg" className="ml-auto" onClick={() => api.partyNext()}>
-              <EyeIcon />Show the answers<Kbd className={KEY_HINT_ON_PRIMARY_BUTTON}>Enter</Kbd>
-            </Button>
-          )}
-          {party.phase === 'reveal' && (
-            <Button size="lg" className="ml-auto" onClick={() => api.partyNext()}>
-              {isLastQuestion ? <><TrophyIcon />Round results</> : <>{party.rules.revealAtEnd ? 'Next answer' : 'Next question'}<ArrowRightIcon /></>}
-              <Kbd className={KEY_HINT_ON_PRIMARY_BUTTON}>Enter</Kbd>
-            </Button>
           )}
         </div>
-      )}
 
-      <FloatingReactions />
-      <MessageDialog isOpen={isWritingMessage} onOpenChange={setIsWritingMessage} announcement={party.announcement} />
+        {isInRound && (
+          <div className="flex shrink-0 flex-wrap items-center gap-3 border-t px-6 py-3">
+            {hasRunningClock && (
+              <span className={cn('min-w-24 text-4xl font-semibold tabular-nums', party.phase !== 'question' && 'text-muted-foreground',
+                isRunningOut && 'text-amber-500')}>{formatClock(wholeSecondsLeft)}</span>
+            )}
+            {party.phase === 'reveal' && hasRunningClock && <span className="text-lg text-muted-foreground">until {isLastQuestion ? 'the round results' : party.rules.revealAtEnd ? 'the next answer' : 'the next question'} (autoplay)</span>}
+            {party.phase === 'waiting' && (
+              <Button size="lg" onClick={() => api.partySkipWait()}><SkipForwardIcon />Skip wait<Kbd className={KEY_HINT_ON_PRIMARY_BUTTON}>Space</Kbd></Button>
+            )}
+            {hasRunningClock && (
+              party.isPaused
+                ? <Button size="lg" variant="outline" onClick={() => api.partyResume()}><PlayIcon />Resume{party.phase !== 'waiting' && <Kbd>Space</Kbd>}</Button>
+                : <Button size="lg" variant="outline" onClick={() => api.partyPause()}><PauseIcon />Pause{party.phase !== 'waiting' && <Kbd>Space</Kbd>}</Button>
+            )}
+            {party.skips.isAvailable && party.skips.count > 0 && <SkipProgress skips={party.skips} />}
+            {party.phase === 'question' && <>
+              <span className="text-lg"><span className="font-semibold tabular-nums">{answeredCount}</span> of {party.players.length} answered</span>
+              <Button size="lg" variant="outline" className="ml-auto" onClick={() => api.partyCloseAnswers()}>Close answers now</Button>
+            </>}
+            {party.phase === 'judging' && !isWaitingToReveal(party) && <span className="flex items-center gap-2 text-lg"><Spinner />Checking answers…</span>}
+            {isWaitingToReveal(party) && (
+              <Button size="lg" className="ml-auto" onClick={() => api.partyNext()}>
+                <EyeIcon />Show the answers<Kbd className={KEY_HINT_ON_PRIMARY_BUTTON}>Enter</Kbd>
+              </Button>
+            )}
+            {party.phase === 'reveal' && (
+              <Button size="lg" className="ml-auto" onClick={() => api.partyNext()}>
+                {isLastQuestion ? <><TrophyIcon />Round results</> : <>{party.rules.revealAtEnd ? 'Next answer' : 'Next question'}<ArrowRightIcon /></>}
+                <Kbd className={KEY_HINT_ON_PRIMARY_BUTTON}>Enter</Kbd>
+              </Button>
+            )}
+          </div>
+        )}
 
-      <AlertDialog open={playerToKick != null} onOpenChange={isOpen => !isOpen && setPlayerToKick(null)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Remove {playerToKick?.name}?</AlertDialogTitle>
-            <AlertDialogDescription>
-              Their answers and score are removed from this party. They are not banned: they can join again by typing a name.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Keep</AlertDialogCancel>
-            <AlertDialogAction variant="destructive" onClick={() => api.partyKick(playerToKick.id)}>Remove</AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+        <MessageDialog isOpen={isWritingMessage} onOpenChange={setIsWritingMessage} announcement={party.announcement} />
 
-      <AlertDialog open={isConfirmingClose} onOpenChange={setIsConfirmingClose}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Close the party?</AlertDialogTitle>
-            <AlertDialogDescription>All players are disconnected and the scores are cleared.</AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Keep playing</AlertDialogCancel>
-            <AlertDialogAction variant="destructive" onClick={onClose}>Close party</AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-    </div>
+        <AlertDialog open={playerToKick != null} onOpenChange={isOpen => !isOpen && setPlayerToKick(null)}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Remove {playerToKick?.name}?</AlertDialogTitle>
+              <AlertDialogDescription>
+                Their answers and score are removed from this party. They are not banned: they can join again by typing a name.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Keep</AlertDialogCancel>
+              <AlertDialogAction variant="destructive" onClick={() => api.partyKick(playerToKick.id)}>Remove</AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+
+        <AlertDialog open={isConfirmingClose} onOpenChange={setIsConfirmingClose}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Close the party?</AlertDialogTitle>
+              <AlertDialogDescription>All players are disconnected and the scores are cleared.</AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Keep playing</AlertDialogCancel>
+              <AlertDialogAction variant="destructive" onClick={onClose}>Close party</AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      </div>
+    </RecentReactions.Provider>
   );
 }
