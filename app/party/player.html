@@ -90,6 +90,19 @@ button:disabled { opacity: .5; }
 .notice-label { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; opacity: .7; }
 .notice-text { font-size: 17px; font-weight: 600; line-height: 1.35; overflow-wrap: anywhere; }
 .notice-close { flex: none; width: 32px; height: 32px; padding: 0; display: grid; place-items: center; border-radius: 50%; background: transparent; color: inherit; opacity: .7; }
+.react-toggle { width: 32px; flex: none; padding: 0; justify-content: center; }
+.react-toggle.on { background: var(--primary); border-color: var(--primary); color: var(--primary-fg); }
+header .pill { padding: 0 10px; }
+header .bar { gap: 6px; }
+.name-pill { min-width: 64px; }
+.reaction-tray { display: flex; justify-content: space-between; gap: 4px; padding: 6px; border-radius: 16px; background: var(--card); border: 1px solid var(--border); animation: drop .2s ease-out; }
+.emoji, .reaction-tray button, .flying, .congrats-badge { font-family: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", "Twemoji Mozilla", sans-serif; }
+.reaction-tray button { flex: 1; min-width: 0; height: 44px; padding: 0; font-size: 24px; line-height: 1; background: transparent; border-radius: 12px; transition: transform .12s, opacity .2s; }
+.reaction-tray button:active { transform: scale(.85); background: var(--border); }
+.reaction-tray.cooling button { opacity: .45; }
+.reaction-label { font-size: 12px; font-weight: 600; color: var(--muted); text-align: center; margin: 0 0 6px; }
+.flying { position: fixed; z-index: 30; font-size: 32px; pointer-events: none; animation: fly .9s ease-out forwards; }
+@keyframes fly { to { transform: translateY(-120px) scale(1.4); opacity: 0; } }
 .danger { background: color-mix(in srgb, var(--bad) 12%, transparent); color: var(--bad); border: 1px solid color-mix(in srgb, var(--bad) 45%, transparent); }
 .sheet-overlay { align-items: flex-end; padding: 0; }
 .sheet { max-width: 640px !important; border-radius: 20px 20px 0 0; border-bottom: 0; padding: 16px 16px calc(24px + env(safe-area-inset-bottom)); gap: 16px; animation: rise .2s ease-out; }
@@ -441,6 +454,59 @@ const icon = path => {
   svg.innerHTML = path;
   return svg;
 };
+let isReactionTrayOpen = false;
+let reactionCoolsUntil = 0;
+const REACTION_COOLDOWN_MS = 1000;
+
+function flyFrom(button, emoji) {
+  const box = button.getBoundingClientRect();
+  const flying = el('span', { class: 'flying' }, emoji);
+  flying.style.left = `${box.left + box.width / 2 - 16}px`;
+  flying.style.top = `${box.top - 8}px`;
+  document.body.append(flying);
+  setTimeout(() => flying.remove(), 950);
+}
+
+async function sendReaction(button, emoji) {
+  if (Date.now() < reactionCoolsUntil) return;
+  reactionCoolsUntil = Date.now() + REACTION_COOLDOWN_MS;
+  const tray = button.closest('.reaction-tray');
+  tray?.classList.add('cooling');
+  setTimeout(() => tray?.classList.remove('cooling'), REACTION_COOLDOWN_MS);
+  flyFrom(button, emoji);
+  navigator.vibrate?.(15);
+  try {
+    await fetch('/react', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token: session.token, emoji }) });
+  } catch {}
+}
+
+function reactionTray() {
+  return el('div', { class: 'reaction-tray', id: 'reaction-tray', role: 'group', title: 'Reactions show on the TV' },
+    state.reactions.map(emoji => el('button', { type: 'button', title: `Send ${emoji}`, onclick: event => sendReaction(event.currentTarget, emoji) }, emoji)));
+}
+
+function toggleReactionTray() {
+  isReactionTrayOpen = !isReactionTrayOpen;
+  updateReactions();
+}
+
+function updateReactions() {
+  const toggle = document.getElementById('react-toggle');
+  const hasReactions = !!state?.reactions?.length;
+  if (toggle) {
+    toggle.hidden = !hasReactions;
+    toggle.classList.toggle('on', isReactionTrayOpen);
+  }
+  const header = app.querySelector('header');
+  const existing = document.getElementById('reaction-tray');
+  const wantsTray = hasReactions && (!header || isReactionTrayOpen);
+  if (!wantsTray) return existing?.remove();
+  if (existing) return;
+  const tray = reactionTray();
+  if (header) (notice.isConnected ? notice : header).after(tray);
+  else app.querySelector('.reactions-slot')?.replaceChildren(el('p', { class: 'reaction-label' }, 'Reactions · shown on the TV'), tray);
+}
+
 const ICONS = {
   skip: '<path d="m5 4 10 8-10 8z"/><path d="M19 5v14"/>',
   check: '<path d="M20 6 9 17l-5-5"/>',
@@ -448,6 +514,7 @@ const ICONS = {
   settings: '<path d="M12.2 2h-.4a2 2 0 0 0-2 2v.2a2 2 0 0 1-1 1.7l-.4.3a2 2 0 0 1-2 0l-.2-.1a2 2 0 0 0-2.7.7l-.2.4a2 2 0 0 0 .7 2.7l.2.1a2 2 0 0 1 1 1.7v.5a2 2 0 0 1-1 1.7l-.2.1a2 2 0 0 0-.7 2.7l.2.4a2 2 0 0 0 2.7.7l.2-.1a2 2 0 0 1 2 0l.4.3a2 2 0 0 1 1 1.7v.2a2 2 0 0 0 2 2h.4a2 2 0 0 0 2-2v-.2a2 2 0 0 1 1-1.7l.4-.3a2 2 0 0 1 2 0l.2.1a2 2 0 0 0 2.7-.7l.2-.4a2 2 0 0 0-.7-2.7l-.2-.1a2 2 0 0 1-1-1.7v-.5a2 2 0 0 1 1-1.7l.2-.1a2 2 0 0 0 .7-2.7l-.2-.4a2 2 0 0 0-2.7-.7l-.2.1a2 2 0 0 1-2 0l-.4-.3a2 2 0 0 1-1-1.7V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/>',
   close: '<path d="M18 6 6 18"/><path d="m6 6 12 12"/>',
   clock: '<circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>',
+  smile: '<circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><path d="M9 9h.01"/><path d="M15 9h.01"/>',
   hourglass: '<path d="M5 22h14"/><path d="M5 2h14"/><path d="M17 22v-4.2a2 2 0 0 0-.6-1.4L12 12l-4.4 4.4a2 2 0 0 0-.6 1.4V22"/><path d="M7 2v4.2a2 2 0 0 0 .6 1.4L12 12l4.4-4.4a2 2 0 0 0 .6-1.4V2"/>',
   megaphone: '<path d="m3 11 18-5v12L3 14v-3z"/><path d="M11.6 16.8a3 3 0 1 1-5.8-1.6"/>',
 };
@@ -505,7 +572,7 @@ function updateSkip() {
 
 function leaderboard(entries) {
   return el('ol', { class: 'board' }, entries.map(entry => el('li', { class: entry.name === state.me.name ? 'me' : '' },
-    el('span', { class: 'rank' }, MEDALS[entry.rank] ?? `${entry.rank}.`), el('span', { class: 'name' }, entry.name),
+    el('span', { class: 'rank' }, MEDALS[entry.rank] ? el('span', { class: 'emoji' }, MEDALS[entry.rank]) : `${entry.rank}.`), el('span', { class: 'name' }, entry.name),
     entry.avgSeconds != null && el('span', { class: 'time', title: 'Average time of correct answers' }, secondsLabel(entry.avgSeconds)),
     el('span', { class: 'score' }, entry.score))));
 }
@@ -519,7 +586,8 @@ function topBar() {
     el('div', { class: 'bar' },
       el('span', { class: 'pill' }, el('span', { class: 'label' }, 'Q'), `${state.index + 1}/${state.total}`),
       nameButton(),
-      el('span', { class: 'pill' }, el('span', { class: 'label' }, 'Score'), state.me.score),
+      el('span', { class: 'pill', title: 'Your score' }, state.me.score, el('span', { class: 'label' }, state.me.score === 1 ? 'pt' : 'pts')),
+      el('button', { type: 'button', class: 'pill react-toggle', id: 'react-toggle', title: 'Reactions', onclick: toggleReactionTray }, icon(ICONS.smile)),
       el('span', { class: 'spacer' }),
       timerElement),
     el('div', { class: 'time-track' }, timeFillElement));
@@ -570,8 +638,9 @@ function updateAnswerStatus() {
 
 function render(next) {
   renderScreen(next);
-  if (renderedScreen === 'join' || renderedScreen === 'closed') notice.hidden = true;
-  else updateAnnouncement();
+  if (renderedScreen === 'join' || renderedScreen === 'closed') return (notice.hidden = true);
+  updateAnnouncement();
+  updateReactions();
 }
 
 function renderScreen(next) {
@@ -610,13 +679,13 @@ function renderScreen(next) {
       el('h1', {}, `Round ${next.round} is over`),
       el('p', { class: 'muted' }, `Your score: ${next.me.score} · place ${next.me.rank} of ${next.playerCount}. Waiting for the next round…`),
       el('div', { style: 'margin-top:8px' }, settingsButton())),
-      leaderboard(next.leaderboard));
+      leaderboard(next.leaderboard), el('div', { class: 'reactions-slot' }));
   }
   if (next.phase === 'lobby') {
     return show(el('div', { class: 'center' },
       el('h1', {}, `You're in, ${next.me.name}!`),
       el('p', { class: 'muted' }, `Waiting for the host to start… ${next.playerCount} ${next.playerCount === 1 ? 'player' : 'players'} joined.`),
-      el('div', { style: 'margin-top:8px' }, settingsButton())));
+      el('div', { style: 'margin-top:8px' }, settingsButton())), el('div', { class: 'reactions-slot' }));
   }
   if (next.phase === 'waiting') {
     return done(show(topBar(), el('div', { class: 'center' },
@@ -671,6 +740,7 @@ function renderScreen(next) {
         el('span', { class: 'pill' }, el('span', { class: 'label' }, 'Total'), next.me.score),
         next.me.avgSeconds != null && el('span', { class: 'pill' }, el('span', { class: 'label' }, 'Avg'), secondsLabel(next.me.avgSeconds)))),
       leaderboard(next.leaderboard),
+      el('div', { class: 'reactions-slot' }),
       el('p', { class: 'muted', style: 'text-align:center' }, 'Waiting for the host…'));
   }
 }

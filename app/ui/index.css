@@ -137,3 +137,14 @@
 @keyframes medal-pop {
   from { transform: scale(0.4); opacity: 0; }
 }
+
+@keyframes reaction-rise {
+  0% { transform: translateY(24px) scale(0.6); opacity: 0; }
+  12% { transform: translateY(0) scale(1.1); opacity: 1; }
+  75% { opacity: 1; }
+  100% { transform: translateY(-260px) scale(1); opacity: 0; }
+}
+
+.font-emoji {
+  font-family: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", "Twemoji Mozilla", sans-serif;
+}

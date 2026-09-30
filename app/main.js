@@ -258,7 +258,7 @@ app.whenReady().then(() => {
   };
   handle('party-open', async () => {
     await closeParty();
-    party = await openParty({ judge: judgeNow, onChange: sendPartyState, onRoundFinished: results => {
+    party = await openParty({ judge: judgeNow, onChange: sendPartyState, onReaction: reaction => win.webContents.send('party-reaction', reaction), onRoundFinished: results => {
       store.addPartyResults(results);
       win.webContents.send('party-results', store.partyResults());
     } });
@@ -276,6 +276,7 @@ app.whenReady().then(() => {
   handle('party-set-correct', withParty((game, playerId, position, isCorrect) => game.setCorrect(playerId, position, isCorrect)));
   handle('party-kick', withParty((game, playerId) => game.kick(playerId)));
   handle('party-announce', withParty((game, text) => game.announce(text)));
+  handle('party-set-reactions-on', withParty((game, areOn) => game.setReactionsOn(areOn)));
   handle('party-back-to-lobby', withParty((game, keepScores) => game.backToLobby({ keepScores })));
   handle('party-close', closeParty);
   handle('party-results', () => store.partyResults());

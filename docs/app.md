@@ -106,7 +106,10 @@ time of correct answers; players with the same score are ranked by it, the faste
 a podium of the top three with *Congratulations, <winner>!* (shared first places name everyone), confetti and, on the TV,
 a short fanfare; each phone congratulates its player by place: a trophy and confetti for first, silver and bronze
 medals for second and third, and the place and winner for everyone else. Confetti is left out when the device asks
-for reduced motion. Windows
+for reduced motion. **Reactions**: players send one of eight emojis (👏 😂 😮 🤔 🔥 ❤️ 😢 🎉) from a tray,
+always shown in the lobby and on the results, and opened with the smile button in the top bar during a round. Each one
+floats up on the TV and on the host's screen with the player's name, at most one per player a second; *Reactions* in
+the party header turns them off and on for everyone. Windows
   Firewall asks once whether KimHardaNeApp may accept connections on private networks; allow it.
 - **Lists**: *Add to list* in the editor puts the open question into one or more of your lists, or creates a
   new list with it. The **Lists** tab shows each list in order: move questions up or down, open one in the

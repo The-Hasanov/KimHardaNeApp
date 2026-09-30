@@ -527,3 +527,40 @@ test('answer times are kept per answer, averaged over correct answers, and break
   assert.deepEqual(game.leaderboard().slice(0, 2).map(e => [e.name, e.score, e.avgSeconds, e.rank]), [['Nicat', 2, 9, 1], ['Aysel', 2, 11, 2]], 'kept scores keep their times too');
   game.finish();
 });
+
+test('players send reactions from the list to the TV and the host, one a second, unless the host turns them off', () => {
+  const shownToHost = [];
+  const shownOnTv = [];
+  const game = new PartyGame({ judge: judgeByText, onReaction: reaction => shownToHost.push(reaction) });
+  game.streams.add({ playerId: null, view: () => null, send() {}, sendEvent: (name, data) => shownOnTv.push([name, data.emoji, data.name]), end() {} });
+  const aysel = game.join('Aysel');
+  assert.deepEqual(game.playerView(aysel).reactions, ['👏', '😂', '😮', '🤔', '🔥', '❤️', '😢', '🎉']);
+  game.react(aysel.token, '🔥');
+  assert.deepEqual(shownOnTv, [['reaction', '🔥', 'Aysel']]);
+  assert.equal(shownToHost[0].emoji, '🔥');
+  assert.throws(() => game.react(aysel.token, '👏'), /Wait/);
+  game.lastReactionAt.set(aysel.id, 0);
+  assert.throws(() => game.react(aysel.token, '💩'), /Pick one/);
+  game.setReactionsOn(false);
+  assert.deepEqual([game.playerView(aysel).reactions, game.hostView().areReactionsOn], [[], false]);
+  assert.throws(() => game.react(aysel.token, '👏'), /off/);
+  assert.throws(() => game.react('forged', '👏'), /Join/);
+});
+
+test('the party server takes reactions and streams them to the TV', async () => {
+  const { game, close } = await openParty({ judge: judgeByText }, { port: 0 });
+  const base = `http://127.0.0.1:${game.port}`;
+  try {
+    const post = (route, body) => fetch(base + route, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    const { token } = await (await post('/join', { name: 'Aysel' })).json();
+    const tv = (await fetch(`${base}/tv/events`)).body.getReader();
+    await tv.read();
+    assert.equal((await post('/react', { token, emoji: '🎉' })).status, 200);
+    const event = new TextDecoder().decode((await tv.read()).value);
+    assert.match(event, /^event: reaction\ndata: .*"emoji":"🎉".*"name":"Aysel"/);
+    assert.equal((await post('/react', { token, emoji: '🎉' })).status, 429);
+    tv.cancel();
+  } finally {
+    await close();
+  }
+});

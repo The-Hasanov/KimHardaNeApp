@@ -19,6 +19,8 @@ const PHASES_WITH_QUESTION = ['question', 'judging', 'reveal'];
 const TV_SCREENS = ['game', 'leaderboard', 'join'];
 const PAUSABLE_PHASES = ['waiting', 'question', 'reveal'];
 const SKIPPABLE_PHASES = ['waiting', 'question', 'reveal'];
+const REACTIONS = ['👏', '😂', '😮', '🤔', '🔥', '❤️', '😢', '🎉'];
+const REACTION_COOLDOWN_MS = 1000;
 const DEFAULT_RULES = { secondsPerQuestion: 60, secondsBetweenQuestions: 0, secondsOnAnswer: 0, pointsForCorrect: 1, pointsForWrong: 0 };
 
 class PartyError extends Error {
@@ -42,11 +44,14 @@ function lanAddresses() {
 }
 
 class PartyGame {
-  constructor({ judge, onChange = () => {}, onRoundFinished = () => {} }) {
+  constructor({ judge, onChange = () => {}, onRoundFinished = () => {}, onReaction = () => {} }) {
     this.id = crypto.randomBytes(6).toString('hex');
     this.judge = judge;
     this.onChange = onChange;
     this.onRoundFinished = onRoundFinished;
+    this.onReaction = onReaction;
+    this.areReactionsOn = true;
+    this.lastReactionAt = new Map();
     this.players = new Map();
     this.bankedScores = new Map();
     this.bankedTimes = new Map();
@@ -167,6 +172,24 @@ class PartyGame {
   announce(text) {
     const message = String(text ?? '').replace(/\s+/g, ' ').trim().slice(0, PARTY_LIMITS.messageLength);
     this.announcement = message ? { id: crypto.randomUUID(), text: message } : null;
+    this.changed();
+  }
+
+  react(token, emoji) {
+    const player = this.playerByToken(token);
+    if (!this.areReactionsOn) throw new PartyError(409, 'Reactions are off');
+    if (!REACTIONS.includes(emoji)) throw new PartyError(400, 'Pick one of the reactions');
+    const now = Date.now();
+    if (now - (this.lastReactionAt.get(player.id) ?? 0) < REACTION_COOLDOWN_MS) throw new PartyError(429, 'Wait a moment');
+    this.lastReactionAt.set(player.id, now);
+    const reaction = { id: crypto.randomUUID(), emoji, name: player.name };
+    this.onReaction(reaction);
+    for (const stream of this.streams) if (!stream.playerId) stream.sendEvent('reaction', reaction);
+    return reaction;
+  }
+
+  setReactionsOn(areOn) {
+    this.areReactionsOn = !!areOn;
     this.changed();
   }
 
@@ -452,6 +475,7 @@ class PartyGame {
       players: [...this.players.values()].map(p => ({ id: p.id, name: p.name, hasAnswered: !!current?.has(p.id), isOnline: this.isOnline(p.id), timesAway: this.absencesOf(p.id) })),
       skips: this.skipStatus(),
       announcement: this.announcement,
+      areReactionsOn: this.areReactionsOn,
       answers: answerRows(this.index),
       previous: checkedIndex >= 0 ? { index: checkedIndex, question: this.questions[checkedIndex], answers: answerRows(checkedIndex) } : null,
       leaderboard: this.leaderboard(),
@@ -498,6 +522,7 @@ class PartyGame {
       } : null,
       myAnswer: myAnswer?.given ?? null,
       skip: this.skipStatus(player.id),
+      reactions: this.areReactionsOn ? REACTIONS : [],
       announcement: this.announcement,
       reveal: this.phase === 'reveal' ? {
         answer: question.answer, acceptedAnswers: question.accepted_answers, comment: question.comment,
@@ -559,6 +584,7 @@ function openEventStream(game, req, res, { playerId = null, view }) {
     playerId,
     view,
     send: view => res.write(`data: ${JSON.stringify(view)}\n\n`),
+    sendEvent: (name, data) => res.write(`event: ${name}\ndata: ${JSON.stringify(data)}\n\n`),
     end: view => {
       game.streams.delete(stream);
       res.write(`data: ${JSON.stringify(view)}\n\n`);
@@ -627,6 +653,11 @@ async function route(game, req, res) {
     game.leave((await readJson(req)).token);
     return sendJson(res, 200, { ok: true });
   }
+  if (req.method === 'POST' && url.pathname === '/react') {
+    const body = await readJson(req);
+    game.react(body.token, body.emoji);
+    return sendJson(res, 200, { ok: true });
+  }
   if (req.method === 'POST' && url.pathname === '/skip') {
     game.toggleSkip((await readJson(req)).token);
     return sendJson(res, 200, { ok: true });
@@ -688,4 +719,4 @@ async function openParty(settings, { port = PREFERRED_PORT } = {}) {
   };
 }
 
-module.exports = { PARTY_LIMITS, DEFAULT_RULES, PartyGame, PartyError, lanAddresses, openParty };
+module.exports = { PARTY_LIMITS, DEFAULT_RULES, REACTIONS, PartyGame, PartyError, lanAddresses, openParty };

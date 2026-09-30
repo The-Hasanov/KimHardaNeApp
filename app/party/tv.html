@@ -52,6 +52,12 @@ body { font-family: "Segoe UI", SamsungOne, "Tizen Sans", Roboto, Arial, sans-se
 .podium .place-3 .medal { background: #d08b53; }
 .podium .place-1 .who { font-size: 2.8vw; color: #fbbf24; }
 .celebration .rest { width: 60vw; margin-top: 2vw; font-size: 1.4vw; }
+.reactions { position: fixed; right: 2vw; bottom: 0; width: 22vw; height: 70vh; overflow: hidden; pointer-events: none; z-index: 15; }
+.reaction { position: absolute; bottom: -12vh; display: -webkit-flex; display: flex; -webkit-flex-direction: column; flex-direction: column; -webkit-align-items: center; align-items: center; -webkit-animation: rise 4.2s ease-out forwards; animation: rise 4.2s ease-out forwards; }
+.reaction .emoji { font-size: 5vw; line-height: 1.1; font-family: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", "Twemoji Mozilla", sans-serif; }
+.reaction .who { font-size: 1.1vw; font-weight: 600; background: rgba(23, 23, 23, .85); color: #fafafa; border-radius: 99px; padding: .15vw .8vw; max-width: 12vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+@-webkit-keyframes rise { 0% { -webkit-transform: translateY(0) scale(.6); opacity: 0; } 12% { -webkit-transform: translateY(-10vh) scale(1.1); opacity: 1; } 75% { opacity: 1; } 100% { -webkit-transform: translateY(-72vh) scale(1); opacity: 0; } }
+@keyframes rise { 0% { transform: translateY(0) scale(.6); opacity: 0; } 12% { transform: translateY(-10vh) scale(1.1); opacity: 1; } 75% { opacity: 1; } 100% { transform: translateY(-72vh) scale(1); opacity: 0; } }
 .confetti { position: fixed; top: 0; left: 0; right: 0; bottom: 0; overflow: hidden; pointer-events: none; z-index: 20; }
 .confetti i { position: absolute; top: -4vh; width: .7vw; height: 1.3vw; border-radius: .15vw; -webkit-animation: fall linear forwards; animation: fall linear forwards; }
 @-webkit-keyframes fall { to { -webkit-transform: translateY(112vh) rotate(760deg); } }
@@ -432,10 +438,26 @@ document.addEventListener('webkitfullscreenchange', function () {
   render(state);
 });
 
+var MAX_REACTIONS_ON_SCREEN = 14;
+var reactionLayer = el('div', 'reactions');
+document.body.appendChild(reactionLayer);
+
+function showReaction(reaction) {
+  var bubble = el('div', 'reaction', el('div', 'emoji', reaction.emoji), el('div', 'who', reaction.name));
+  bubble.style.left = (Math.random() * 60) + '%';
+  reactionLayer.appendChild(bubble);
+  while (reactionLayer.childNodes.length > MAX_REACTIONS_ON_SCREEN) reactionLayer.removeChild(reactionLayer.firstChild);
+  setTimeout(function () { if (bubble.parentNode) bubble.parentNode.removeChild(bubble); }, 4300);
+}
+
 setInterval(tick, 200);
-new EventSource('/tv/events').onmessage = function (message) {
+var tvEvents = new EventSource('/tv/events');
+tvEvents.onmessage = function (message) {
   render(JSON.parse(message.data));
 };
+tvEvents.addEventListener('reaction', function (message) {
+  showReaction(JSON.parse(message.data));
+});
 render(null);
 </script>
 </body>

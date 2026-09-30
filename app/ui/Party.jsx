@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import QRCode from 'qrcode';
 import { cn } from 'cn';
 import {
-  AppWindowIcon, ArrowRightIcon, CastIcon, MegaphoneIcon, SendIcon, CheckIcon, ChevronDownIcon, CircleHelpIcon, DoorClosedIcon, EyeIcon, EyeOffIcon, FlagIcon, GamepadIcon, PauseIcon, PlayIcon, QrCodeIcon,
+  AppWindowIcon, ArrowRightIcon, CastIcon, MegaphoneIcon, SendIcon, SmilePlusIcon, CheckIcon, ChevronDownIcon, CircleHelpIcon, DoorClosedIcon, EyeIcon, EyeOffIcon, FlagIcon, GamepadIcon, PauseIcon, PlayIcon, QrCodeIcon,
   RotateCcwIcon, SkipForwardIcon, TimerIcon, Trash2Icon, TriangleAlertIcon, TrophyIcon, TvIcon, UserXIcon, UsersIcon, WifiOffIcon, XIcon,
 } from 'lucide-react';
 import {
@@ -20,6 +20,7 @@ import { Progress } from '@/components/ui/progress';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Spinner } from '@/components/ui/spinner';
 import { Textarea } from '@/components/ui/textarea';
+import { Toggle } from '@/components/ui/toggle';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import {
   KEY_HINT_ON_PRIMARY_BUTTON, QuestionOnScreen, WARNING_AT_SECONDS_LEFT, formatClock, useCountdown, withLineBreaks,
@@ -505,6 +506,29 @@ function TvMenu() {
   );
 }
 
+const REACTION_SECONDS = 4.2;
+const MAX_REACTIONS_ON_SCREEN = 12;
+
+function FloatingReactions() {
+  const [reactions, setReactions] = useState([]);
+  useEffect(() => api.onPartyReaction(reaction => {
+    const shown = { ...reaction, left: Math.random() * 70 };
+    setReactions(current => [...current, shown].slice(-MAX_REACTIONS_ON_SCREEN));
+    setTimeout(() => setReactions(current => current.filter(other => other.id !== shown.id)), REACTION_SECONDS * 1000);
+  }), []);
+  return (
+    <div className="pointer-events-none fixed left-6 bottom-20 z-40 h-72 w-56 overflow-hidden" aria-live="polite">
+      {reactions.map(reaction => (
+        <div key={reaction.id} className="absolute bottom-0 flex flex-col items-center gap-0.5"
+          style={{ left: `${reaction.left}%`, animation: `reaction-rise ${REACTION_SECONDS}s ease-out forwards` }}>
+          <span className="font-emoji text-4xl leading-none">{reaction.emoji}</span>
+          <span className="max-w-28 truncate rounded-full bg-background/90 px-2 py-0.5 text-xs font-medium shadow-sm ring-1 ring-border">{reaction.name}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 const MESSAGE_LENGTH = 300;
 
 function MessageDialog({ isOpen, onOpenChange, announcement }) {
@@ -652,6 +676,9 @@ export default function PartyScreen({ party, isVisible, lobbySettings, onBackToL
         {party.urls[0] && isInRound && <span className="font-mono text-sm text-muted-foreground">Join: {hostOf(party.urls[0].url)}</span>}
         <div className="ml-auto flex gap-2">
           <Button variant="outline" size="sm" disabled={!party.players.length} onClick={() => setIsWritingMessage(true)}><MegaphoneIcon />Message</Button>
+          <Toggle variant="outline" size="sm" pressed={party.areReactionsOn} onPressedChange={areOn => api.partySetReactionsOn(areOn)}
+            title={party.areReactionsOn ? 'Players can send reactions to the TV. Click to turn them off.' : 'Reactions are off. Click to let players send them.'}
+            className="aria-pressed:bg-muted"><SmilePlusIcon />Reactions</Toggle>
           {isInRound && <Button variant="outline" size="sm" onClick={() => api.partyFinishRound()}><FlagIcon />End round</Button>}
           <ToggleGroup type="single" variant="outline" size="sm" spacing={0} value={party.screen} aria-label="What the TV shows"
             onValueChange={screen => screen && api.partySetScreen(screen)}>
@@ -748,6 +775,7 @@ export default function PartyScreen({ party, isVisible, lobbySettings, onBackToL
         </div>
       )}
 
+      <FloatingReactions />
       <MessageDialog isOpen={isWritingMessage} onOpenChange={setIsWritingMessage} announcement={party.announcement} />
 
       <AlertDialog open={playerToKick != null} onOpenChange={isOpen => !isOpen && setPlayerToKick(null)}>
