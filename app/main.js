@@ -306,15 +306,15 @@ app.whenReady().then(() => {
     return store.get(row.uid);
   });
   handle('delete-question', uid => store.deleteQuestion(uid));
-  const QUESTION_ARCHIVES = [{ name: 'KimHardaNeApp questions', extensions: ['zip'] }];
-  const QUESTION_FILES_TO_OPEN = [{ name: 'KimHardaNeApp questions', extensions: ['zip', 'json'] }];
+  const QUESTION_ARCHIVES = [{ name: 'KimHardaNeApp questions', extensions: ['quzip'] }];
+  const QUESTION_FILES_TO_OPEN = [{ name: 'KimHardaNeApp questions', extensions: ['quzip', 'zip', 'json'] }];
   const fileNameOf = name => String(name).replace(/[\\/:*?"<>|]+/g, '-').trim() || 'Questions';
   const embedCreated = async uids => {
     if (uids.length && isAiReady()) await ai.embedRows(store, uids.map(uid => store.rows[store.pos.get(uid)]));
   };
   const saveQuestionsFile = async (name, questions, options) => {
     const { canceled, filePath } = await dialog.showSaveDialog(win, {
-      title: 'Export questions', defaultPath: path.join(app.getPath('documents'), `${fileNameOf(name)}.zip`), filters: QUESTION_ARCHIVES,
+      title: 'Export questions', defaultPath: path.join(app.getPath('documents'), `${fileNameOf(name)}.quzip`), filters: QUESTION_ARCHIVES,
     });
     if (canceled) return null;
     const { archive, count, mediaCount } = transfer.exportArchive(questions, options);

@@ -150,9 +150,9 @@ the party header turns them off and on for everyone. Windows
   Like edits, they survive refreshes and version updates, and `npm run dist` leaves them out of the installer.
   Only your own questions can be deleted.
 - **Import and export**: *Export* on the *Custom* tab saves all your own questions, and *Export* on a list saves that list
-  with its questions in order, to a `.zip` file (`transfer.js`, written and read by `zip.js`): `questions.json` with every
+  with its questions in order, to a `.quzip` file, a ZIP archive under its own name (`transfer.js`, written and read by `zip.js`): `questions.json` with every
   text field and the sources, and a `media/` folder with the pictures, videos and audio stored on this computer (media
-  only known by a web link stay links). Import also reads the older `.json` exports. *Import* on the *Custom* tab adds the file's
+  only known by a web link stay links). Import also reads `.zip` copies of it and the older `.json` exports. *Import* on the *Custom* tab adds the file's
   questions to your own, skipping ones you already have (same text and answer, ignoring case, diacritics and spacing)
   and question bank questions already in this computer's bank. *Import* on the *Lists* tab (the icon next to *New list*)
   creates a new list from the file, named after it (with a number if the name is taken): question bank questions found
