@@ -35,6 +35,31 @@ body { font-family: "Segoe UI", SamsungOne, "Tizen Sans", Roboto, Arial, sans-se
 .board .time { width: 4.5em; text-align: right; font-size: .7em; color: #a3a3a3; }
 .standings { -webkit-flex: 1; flex: 1; display: -webkit-flex; display: flex; -webkit-flex-direction: column; flex-direction: column; -webkit-justify-content: center; justify-content: center; width: 70vw; margin: 0 auto; }
 .standings .title { margin-bottom: 1.5vw; }
+.celebration { -webkit-flex: 1; flex: 1; display: -webkit-flex; display: flex; -webkit-flex-direction: column; flex-direction: column; -webkit-align-items: center; align-items: center; -webkit-justify-content: center; justify-content: center; padding: 2vw 6vw; text-align: center; }
+.celebration .kicker { font-size: 1.6vw; letter-spacing: .2em; text-transform: uppercase; color: #fbbf24; font-weight: 700; }
+.celebration .winner { font-size: 4.6vw; font-weight: 800; margin: .3vw 0 2.4vw; line-height: 1.1; }
+.podium { display: -webkit-flex; display: flex; -webkit-align-items: flex-end; align-items: flex-end; -webkit-justify-content: center; justify-content: center; width: 100%; }
+.podium .step { width: 20vw; margin: 0 1vw; text-align: center; }
+.podium .who { font-size: 2.2vw; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 0 .5vw; }
+.podium .facts { font-size: 1.4vw; color: #a3a3a3; margin: .2vw 0 .8vw; }
+.podium .block { border-radius: 1vw 1vw 0 0; display: -webkit-flex; display: flex; -webkit-align-items: flex-start; align-items: flex-start; -webkit-justify-content: center; justify-content: center; padding-top: 1.2vw; }
+.podium .medal { width: 5vw; height: 5vw; line-height: 5vw; border-radius: 50%; font-size: 2.6vw; font-weight: 800; color: #0a0a0a; }
+.podium .place-1 .block { height: 17vw; background: #3a2a07; }
+.podium .place-2 .block { height: 12vw; background: #262626; }
+.podium .place-3 .block { height: 9vw; background: #2a1d12; }
+.podium .place-1 .medal { background: #fbbf24; }
+.podium .place-2 .medal { background: #d4d4d4; }
+.podium .place-3 .medal { background: #d08b53; }
+.podium .place-1 .who { font-size: 2.8vw; color: #fbbf24; }
+.celebration .rest { width: 60vw; margin-top: 2vw; font-size: 1.4vw; }
+.confetti { position: fixed; top: 0; left: 0; right: 0; bottom: 0; overflow: hidden; pointer-events: none; z-index: 20; }
+.confetti i { position: absolute; top: -4vh; width: .7vw; height: 1.3vw; border-radius: .15vw; -webkit-animation: fall linear forwards; animation: fall linear forwards; }
+@-webkit-keyframes fall { to { -webkit-transform: translateY(112vh) rotate(760deg); } }
+@keyframes fall { to { transform: translateY(112vh) rotate(760deg); } }
+.light .podium .place-1 .block { background: #fdf0d5; }
+.light .podium .place-2 .block { background: #ececec; }
+.light .podium .place-3 .block { background: #f6e3d3; }
+.light .podium .place-1 .who, .light .celebration .kicker { color: #b45309; }
 .top { display: -webkit-flex; display: flex; -webkit-align-items: center; align-items: center; height: 7.3vw; padding: .8vw 3vw 0; font-size: .81em; }
 .top > * + * { margin-left: 2vw; }
 .clock { margin-left: auto !important; font-size: 3.65vw; font-weight: 700; line-height: 1; }
@@ -255,8 +280,60 @@ function revealScreen() {
     el('div', 'side stack', el('div', 'muted', 'Leaderboard'), leaderboard(state.leaderboard.slice(0, 10), false)));
 }
 
+var CONFETTI_COLORS = ['#fbbf24', '#4ade80', '#60a5fa', '#f87171', '#c084fc', '#fafafa'];
+var celebratedRound = null;
+
+function celebrate() {
+  var layer = el('div', 'confetti');
+  for (var i = 0; i < 110; i++) {
+    var piece = el('i', '');
+    var duration = (3 + Math.random() * 3) + 's';
+    var delay = (Math.random() * 2.5) + 's';
+    piece.style.left = (Math.random() * 100) + '%';
+    piece.style.background = CONFETTI_COLORS[i % CONFETTI_COLORS.length];
+    piece.style.webkitAnimationDuration = duration;
+    piece.style.animationDuration = duration;
+    piece.style.webkitAnimationDelay = delay;
+    piece.style.animationDelay = delay;
+    layer.appendChild(piece);
+  }
+  document.body.appendChild(layer);
+  setTimeout(function () { if (layer.parentNode) layer.parentNode.removeChild(layer); }, 9000);
+  beep(523, 160, 0);
+  beep(659, 160, 170);
+  beep(784, 160, 340);
+  beep(1047, 520, 510);
+}
+
+function namesOf(entries) {
+  var names = entries.map(function (entry) { return entry.name; });
+  return names.length > 1 ? names.slice(0, -1).join(', ') + ' and ' + names[names.length - 1] : names[0];
+}
+
+function podiumStep(entry) {
+  return el('div', 'step place-' + Math.min(entry.rank, 3),
+    el('div', 'who', entry.name),
+    el('div', 'facts numbers', entry.score + (entry.score === 1 ? ' point' : ' points') + (entry.avgSeconds == null ? '' : ' · ' + entry.avgSeconds.toFixed(1) + ' s')),
+    el('div', 'block', el('div', 'medal numbers', entry.rank)));
+}
+
 function roundResultsScreen() {
-  return el('div', 'standings', el('h1', 'title', 'Round ' + state.round + ' results'), leaderboard(state.leaderboard.slice(0, 10), true));
+  var board = state.leaderboard;
+  if (!board.length) return el('div', 'standings', el('h1', 'title', 'Round ' + state.round + ' results'), leaderboard([], true));
+  var winners = board.filter(function (entry) { return entry.rank === 1; });
+  var top = board.slice(0, 3);
+  var podiumOrder = top.length === 3 ? [top[1], top[0], top[2]] : top.length === 2 ? [top[1], top[0]] : top;
+  if (celebratedRound !== state.round + ':' + state.id) {
+    celebratedRound = state.round + ':' + state.id;
+    celebrate();
+  }
+  var kicker = el('div', 'kicker', 'Round ' + state.round + (winners.length > 1 ? ' · shared first place' : ' · winner'));
+  kicker.lang = 'en';
+  return el('div', 'celebration',
+    kicker,
+    el('div', 'winner', 'Congratulations, ' + namesOf(winners) + '!'),
+    el('div', 'podium', podiumOrder.map(podiumStep)),
+    board.length > 3 && el('div', 'rest', leaderboard(board.slice(3, 8), false)));
 }
 
 function shownScreen() {

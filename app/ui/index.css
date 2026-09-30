@@ -130,3 +130,10 @@
     @apply font-sans;
     }
 }
+@keyframes confetti-fall {
+  to { transform: translateY(110vh) rotate(720deg); }
+}
+
+@keyframes medal-pop {
+  from { transform: scale(0.4); opacity: 0; }
+}

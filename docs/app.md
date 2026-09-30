@@ -101,7 +101,11 @@ each player's correct, wrong and unanswered questions (counted from the question
 updates; *Reset* there deletes them. Each answer keeps its time: seconds from the question's start to the last change of the
 answer, pauses left out (sending the same answer again keeps the first time). The host sees it next to every answer,
 phones see their own after the reveal, and every leaderboard (host, TV, phones, all-time) shows each player's average
-time of correct answers; players with the same score are ranked by it, the faster first. Windows
+time of correct answers; players with the same score are ranked by it, the faster first. When a round ends, the TV and the host show
+a podium of the top three with *Congratulations, <winner>!* (shared first places name everyone), confetti and, on the TV,
+a short fanfare; each phone congratulates its player by place: a trophy and confetti for first, silver and bronze
+medals for second and third, and the place and winner for everyone else. Confetti is left out when the device asks
+for reduced motion. Windows
   Firewall asks once whether KimHardaNeApp may accept connections on private networks; allow it.
 - **Lists**: *Add to list* in the editor puts the open question into one or more of your lists, or creates a
   new list with it. The **Lists** tab shows each list in order: move questions up or down, open one in the

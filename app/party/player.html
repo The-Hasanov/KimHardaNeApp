@@ -114,6 +114,21 @@ ol.board li.me { outline: 2px solid var(--primary); }
 ol.board .rank { width: 28px; font-weight: 700; color: var(--muted); font-variant-numeric: tabular-nums; }
 ol.board .name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 ol.board .score { font-weight: 700; font-variant-numeric: tabular-nums; }
+.congrats { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 6px; padding: 28px 16px 22px; border-radius: 20px; background: var(--card); border: 1px solid var(--border); margin-top: 8px; }
+.congrats.place-1 { background: linear-gradient(160deg, color-mix(in srgb, #fbbf24 30%, var(--card)), var(--card) 70%); border-color: color-mix(in srgb, #fbbf24 55%, transparent); }
+.congrats.place-2 { background: linear-gradient(160deg, color-mix(in srgb, #a3a3a3 22%, var(--card)), var(--card) 70%); }
+.congrats.place-3 { background: linear-gradient(160deg, color-mix(in srgb, #d08b53 24%, var(--card)), var(--card) 70%); }
+.congrats-badge { font-size: 64px; line-height: 1; animation: pop .6s cubic-bezier(.2, 1.6, .4, 1) both; }
+.congrats.place-1 .congrats-badge { font-size: 88px; }
+@keyframes pop { from { transform: scale(.3); opacity: 0; } }
+.congrats-kicker { font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); }
+.congrats.place-1 .congrats-kicker { color: #d97706; }
+.congrats-title { font-size: 28px; }
+.congrats-text { margin: 0; color: var(--muted); }
+.congrats-facts { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin-top: 10px; }
+.confetti { position: fixed; inset: 0; overflow: hidden; pointer-events: none; z-index: 20; }
+.confetti i { position: absolute; top: -20px; width: 8px; height: 14px; border-radius: 2px; animation: fall linear forwards; }
+@keyframes fall { to { transform: translateY(110vh) rotate(720deg); } }
 ol.board .time { font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
 .time-note { display: inline-flex; align-items: center; gap: 4px; font-size: 14px; color: var(--muted); }
 @media (min-width: 700px) {
@@ -181,6 +196,28 @@ const clock = ms => {
   const seconds = Math.ceil(ms / 1000);
   return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
 };
+const ORDINALS = { 1: '1st', 2: '2nd', 3: '3rd' };
+const ordinal = place => ORDINALS[place] ?? `${place}th`;
+const MEDALS = { 1: '🥇', 2: '🥈', 3: '🥉' };
+const CONGRATULATIONS = {
+  1: { badge: '🏆', title: 'Congratulations, champion!', text: 'You won the round. Take a bow!' },
+  2: { badge: '🥈', title: 'Great game!', text: 'So close to the top. Silver is yours.' },
+  3: { badge: '🥉', title: 'Well done!', text: 'You made the podium with bronze.' },
+  4: { badge: '👏', title: 'Round over', text: '' },
+};
+const CONFETTI_COLORS = ['#fbbf24', '#4ade80', '#60a5fa', '#f87171', '#c084fc', '#f472b6'];
+let celebratedRound = null;
+
+function celebrate(pieces) {
+  if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return;
+  const layer = el('div', { class: 'confetti' });
+  for (let i = 0; i < pieces; i++) {
+    layer.append(el('i', { style: `left:${Math.random() * 100}%;background:${CONFETTI_COLORS[i % CONFETTI_COLORS.length]};animation-duration:${2.8 + Math.random() * 2.8}s;animation-delay:${Math.random() * 1.8}s` }));
+  }
+  document.body.append(layer);
+  setTimeout(() => layer.remove(), 8000);
+}
+
 const secondsLabel = seconds => `${seconds.toFixed(1)} s`;
 const pointsLabel = points => (points > 0 ? `+${points}` : points < 0 ? `−${-points}` : '0');
 const rulesText = () => `Correct ${pointsLabel(state.rules.pointsForCorrect)} · Wrong ${pointsLabel(state.rules.pointsForWrong)} · No answer 0`;
@@ -322,10 +359,10 @@ function showSettings() {
       el('strong', { class: 'sheet-title' }, 'Settings'),
       el('button', { type: 'button', class: 'icon-button', onclick: close, title: 'Close' }, icon(ICONS.close))),
     el('form', { onsubmit: rename },
-      el('label', { class: 'field-label' }, 'Your name'),
+      el('label', { class: 'field-label', lang: 'en' }, 'Your name'),
       name, save, message),
     el('div', { class: 'sheet-section' },
-      el('label', { class: 'field-label' }, 'Leave'),
+      el('label', { class: 'field-label', lang: 'en' }, 'Leave'),
       el('p', { class: 'muted', style: 'margin:0;font-size:14px' }, 'Leaving removes you and your score from this game. You can join again with any free name.'),
       leave)));
   overlay.addEventListener('click', event => { if (event.target === overlay) close(); });
@@ -368,7 +405,7 @@ function updateAnnouncement() {
   shownAnnouncementId = announcement.id;
   notice.replaceChildren(
     el('span', { class: 'notice-icon' }, icon(ICONS.megaphone)),
-    el('span', { class: 'notice-body' }, el('span', { class: 'notice-label' }, 'From the host'), el('span', { class: 'notice-text' }, announcement.text)),
+    el('span', { class: 'notice-body' }, el('span', { class: 'notice-label', lang: 'en' }, 'From the host'), el('span', { class: 'notice-text' }, announcement.text)),
     el('button', { type: 'button', class: 'notice-close', title: 'Close', onclick: dismissAnnouncement }, icon(ICONS.close)));
   notice.hidden = false;
 }
@@ -468,7 +505,7 @@ function updateSkip() {
 
 function leaderboard(entries) {
   return el('ol', { class: 'board' }, entries.map(entry => el('li', { class: entry.name === state.me.name ? 'me' : '' },
-    el('span', { class: 'rank' }, `${entry.rank}.`), el('span', { class: 'name' }, entry.name),
+    el('span', { class: 'rank' }, MEDALS[entry.rank] ?? `${entry.rank}.`), el('span', { class: 'name' }, entry.name),
     entry.avgSeconds != null && el('span', { class: 'time', title: 'Average time of correct answers' }, secondsLabel(entry.avgSeconds)),
     el('span', { class: 'score' }, entry.score))));
 }
@@ -614,9 +651,25 @@ function renderScreen(next) {
       leaderboard(next.leaderboard), skipDock()));
   }
   if (next.phase === 'finished') {
-    return show(el('div', { class: 'center', style: 'flex:0;padding-top:24px' },
-      el('h1', {}, `Round ${next.round} results`),
-      el('p', { class: 'muted' }, `This round ${pointsLabel(next.me.roundScore)} · total ${next.me.score} · place ${next.me.rank} of ${next.playerCount}`)),
+    const place = next.me.rank;
+    const winners = next.leaderboard.filter(entry => entry.rank === 1).map(entry => entry.name);
+    const congratulation = CONGRATULATIONS[Math.min(place, 4)];
+    const title = place === 1 && winners.length > 1 ? 'You share first place!' : congratulation.title;
+    const celebrationKey = `${next.partyId}:${next.round}`;
+    if (place <= 3 && celebratedRound !== celebrationKey) {
+      celebratedRound = celebrationKey;
+      celebrate(place === 1 ? 140 : 60);
+      navigator.vibrate?.(place === 1 ? [120, 80, 120, 80, 300] : [120, 80, 120]);
+    }
+    return show(el('div', { class: `congrats place-${Math.min(place, 4)}` },
+      el('div', { class: 'congrats-badge' }, congratulation.badge),
+      el('div', { class: 'congrats-kicker', lang: 'en' }, place <= 3 ? `${ORDINALS[place]} place · round ${next.round}` : `Round ${next.round} results`),
+      el('h1', { class: 'congrats-title' }, place > 3 ? `You finished ${ordinal(place)} of ${next.playerCount}` : title),
+      el('p', { class: 'congrats-text' }, place === 1 ? congratulation.text : place <= 3 ? congratulation.text : `Thanks for playing! 🏆 ${winners.join(', ')} won this round.`),
+      el('div', { class: 'congrats-facts' },
+        el('span', { class: 'pill' }, el('span', { class: 'label' }, 'Round'), pointsLabel(next.me.roundScore)),
+        el('span', { class: 'pill' }, el('span', { class: 'label' }, 'Total'), next.me.score),
+        next.me.avgSeconds != null && el('span', { class: 'pill' }, el('span', { class: 'label' }, 'Avg'), secondsLabel(next.me.avgSeconds)))),
       leaderboard(next.leaderboard),
       el('p', { class: 'muted', style: 'text-align:center' }, 'Waiting for the host…'));
   }

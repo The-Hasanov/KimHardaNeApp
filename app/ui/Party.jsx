@@ -108,6 +108,76 @@ function KickButton({ player, onKick }) {
   );
 }
 
+const CONFETTI_COLORS = ['#fbbf24', '#4ade80', '#60a5fa', '#f87171', '#c084fc', '#f472b6'];
+const PODIUM_STYLES = {
+  1: { block: 'h-40 bg-amber-500/20 border-amber-500/40', medal: 'bg-amber-400 text-amber-950', name: 'text-xl text-amber-600 dark:text-amber-400' },
+  2: { block: 'h-28 bg-zinc-400/15 border-zinc-400/30', medal: 'bg-zinc-300 text-zinc-900', name: 'text-lg' },
+  3: { block: 'h-20 bg-orange-700/15 border-orange-700/30', medal: 'bg-orange-400 text-orange-950', name: 'text-lg' },
+};
+
+function Confetti({ pieces = 120 }) {
+  const [isVisible, setIsVisible] = useState(true);
+  const confetti = useMemo(() => Array.from({ length: pieces }, (_, i) => ({
+    left: Math.random() * 100, color: CONFETTI_COLORS[i % CONFETTI_COLORS.length], duration: 2.8 + Math.random() * 2.8, delay: Math.random() * 1.8,
+  })), [pieces]);
+  useEffect(() => {
+    const timer = setTimeout(() => setIsVisible(false), 8000);
+    return () => clearTimeout(timer);
+  }, []);
+  if (!isVisible || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return null;
+  return (
+    <div className="pointer-events-none fixed inset-0 z-50 overflow-hidden" aria-hidden>
+      {confetti.map((piece, i) => (
+        <i key={i} className="absolute -top-5 h-3.5 w-2 rounded-sm"
+          style={{ left: `${piece.left}%`, background: piece.color, animation: `confetti-fall ${piece.duration}s linear ${piece.delay}s forwards` }} />
+      ))}
+    </div>
+  );
+}
+
+const namesOf = entries => {
+  const names = entries.map(entry => entry.name);
+  return names.length > 1 ? `${names.slice(0, -1).join(', ')} and ${names.at(-1)}` : names[0];
+};
+
+function Podium({ party }) {
+  const board = party.leaderboard;
+  const winners = board.filter(entry => entry.rank === 1);
+  const top = board.slice(0, 3);
+  const podiumOrder = top.length === 3 ? [top[1], top[0], top[2]] : top.length === 2 ? [top[1], top[0]] : top;
+  if (!board.length) return <h1 className="text-3xl font-semibold">Round {party.round} results</h1>;
+  return (
+    <div className="space-y-6 text-center">
+      <Confetti key={`${party.id}:${party.round}`} />
+      <div className="space-y-1">
+        <p lang="en" className="text-sm font-semibold tracking-widest text-amber-600 uppercase dark:text-amber-400">
+          Round {party.round} · {winners.length > 1 ? 'shared first place' : 'winner'}
+        </p>
+        <h1 className="text-4xl font-bold">Congratulations, {namesOf(winners)}!</h1>
+        <p className="text-muted-foreground">Correct {pointsLabel(party.rules.pointsForCorrect)} · wrong {pointsLabel(party.rules.pointsForWrong)} · no answer 0 · ties go to the faster average</p>
+      </div>
+      <div className="flex items-end justify-center gap-3">
+        {podiumOrder.map(entry => {
+          const style = PODIUM_STYLES[Math.min(entry.rank, 3)];
+          return (
+            <div key={entry.id} className="w-44 space-y-1.5">
+              {entry.rank === 1 && <TrophyIcon className="mx-auto size-10 text-amber-500" style={{ animation: 'medal-pop .6s cubic-bezier(.2,1.6,.4,1) both' }} />}
+              <p className={cn('truncate font-semibold', style.name)} title={entry.name}>{entry.name}</p>
+              <p className="text-sm text-muted-foreground tabular-nums">
+                {entry.score} {entry.score === 1 ? 'point' : 'points'}{entry.avgSeconds != null && ` · ${secondsLabel(entry.avgSeconds)}`}
+              </p>
+              <div className={cn('flex justify-center rounded-t-xl border border-b-0 pt-3', style.block)}>
+                <span className={cn('grid size-11 place-items-center rounded-full text-xl font-bold tabular-nums', style.medal)}
+                  style={{ animation: 'medal-pop .5s ease-out both' }}>{entry.rank}</span>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 function Leaderboard({ entries, players = [], onKick, showsRoundScore = false }) {
   if (!entries.length) return <p className="text-sm text-muted-foreground">No players yet.</p>;
   const isOnline = new Map(players.map(player => [player.id, player.isOnline]));
@@ -611,13 +681,7 @@ export default function PartyScreen({ party, isVisible, lobbySettings, onBackToL
         )}
         {party.phase === 'finished' && (
           <div className="mx-auto max-w-2xl space-y-6 px-6 py-10">
-            <div className="flex items-center gap-4">
-              <TrophyIcon className="size-12 text-amber-500" />
-              <div>
-                <h1 className="text-3xl font-semibold">Round {party.round} results</h1>
-                <p className="text-muted-foreground">Correct {pointsLabel(party.rules.pointsForCorrect)} · wrong {pointsLabel(party.rules.pointsForWrong)} · no answer 0</p>
-              </div>
-            </div>
+            <Podium party={party} />
             <Leaderboard entries={party.leaderboard} players={party.players} onKick={kick} showsRoundScore />
             <div className="flex flex-wrap gap-2">
               <Button size="lg" onClick={() => onBackToLobby(true)}><ArrowRightIcon />Next round (keep scores)</Button>
