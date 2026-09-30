@@ -185,9 +185,14 @@ the party header turns them off and on for everyone. Windows
   Like edits, they survive refreshes and version updates, and `npm run dist` leaves them out of the installer.
   Only your own questions can be deleted.
 - **Import and export**: *Export* on the *Custom* tab saves all your own questions, and *Export* on a list saves that list
-  with its questions in order, to a `.quzip` file, a ZIP archive under its own name (`transfer.js`, written and read by `zip.js`): `questions.json` with every
-  text field and the sources, and a `media/` folder with the pictures, videos and audio stored on this computer (media
-  only known by a web link stay links). Import also reads `.zip` copies of it and the older `.json` exports. Import treats every file as untrusted: archives over 2 GB,
+  with its questions in order, to a `.quzip` file: KimHardaNeApp's own file type, a ZIP archive under its own extension
+  (`transfer.js`, written and read by `zip.js`). Every `.quzip` starts with **`meta.json`**, which says what the file is:
+  `app` (`KimHardaNeApp`), `format` (`quzip`), `version` (1), `type` (`questions` or `list` today; `dataset` is reserved for
+  data source datasets sold in the coming store, which has no server yet), `createdAt`, `contents` (question and media
+  counts, the list name) and `files` (where the data is). Next to it are `questions.json` with every text field and the
+  sources, and a `media/` folder with the pictures, videos and audio stored on this computer (media only known by a web
+  link stay links). Import opens only `.quzip` files whose `meta.json` is KimHardaNeApp's, of this version or older and of
+  a type it knows; a type it cannot import yet, such as a dataset, is refused with a message that names it. Import treats every file as untrusted: archives over 2 GB,
   more than 5,000 questions, media over 300 MB or files that unpack to more than they declare (ZIP bombs) are refused;
   archive entries are unpacked one at a time only when a question uses them and are never written under their own names
   (media is stored as `images/own/<sha256>.<ext>`, with the extension taken from an allowed type); only text is taken

@@ -6,13 +6,21 @@ const { fileURLToPath } = require('node:url');
 const { OWN_SOURCE_ID, MEDIA_TYPES, fold } = require('./store');
 const { createZip, readZip, isZip } = require('./zip');
 
-const FORMAT = 'kimhardaneapp-questions';
-const VERSION = 2;
-const MANIFEST = 'questions.json';
+const APP = 'KimHardaNeApp';
+const FORMAT = 'quzip';
+const VERSION = 1;
+const META = 'meta.json';
+const QUESTIONS_FILE = 'questions.json';
+const QUZIP_TYPES = {
+  questions: 'questions',
+  list: 'a question list',
+  dataset: 'a data source dataset',
+};
+const READABLE_TYPES = ['questions', 'list'];
 const TEXT_FIELDS = ['text', 'answer', 'accepted_answers', 'comment', 'note_before', 'rekvizit_text'];
 const MEDIA = [
-  { column: 'rekvizit_url', src: 'rekvizit_src', name: 'handoutMedia', legacyName: 'handoutPicture' },
-  { column: 'source_media_url', src: 'source_media_src', name: 'answerMedia', legacyName: 'answerPicture' },
+  { column: 'rekvizit_url', src: 'rekvizit_src', name: 'handoutMedia' },
+  { column: 'source_media_url', src: 'source_media_src', name: 'answerMedia' },
 ];
 const EXTENSION_OF_TYPE = Object.fromEntries(Object.entries(MEDIA_TYPES).reverse().map(([extension, type]) => [type, extension]));
 const ALREADY_COMPRESSED = /^(image\/(png|jpeg|gif|webp)|video\/|audio\/(mpeg|mp4|ogg))/;
@@ -58,25 +66,43 @@ function exportArchive(questions, { list = null } = {}) {
     }
     return entry;
   });
-  const manifest = { format: FORMAT, version: VERSION, exportedAt: new Date().toISOString(), ...(list && { list: { name: list.name } }), questions: exported };
-  const archive = createZip([{ name: MANIFEST, data: Buffer.from(JSON.stringify(manifest, null, 2)) }, ...mediaEntries.values()]);
+  const meta = {
+    app: APP, format: FORMAT, version: VERSION, type: list ? 'list' : 'questions', createdAt: new Date().toISOString(),
+    contents: { questions: exported.length, media: mediaEntries.size, ...(list && { listName: list.name }) }, files: { questions: QUESTIONS_FILE },
+  };
+  const archive = createZip([
+    { name: META, data: Buffer.from(JSON.stringify(meta, null, 2)) },
+    { name: QUESTIONS_FILE, data: Buffer.from(JSON.stringify({ questions: exported }, null, 2)) },
+    ...mediaEntries.values(),
+  ]);
   return { archive, count: exported.length, mediaCount: mediaEntries.size };
 }
 
-const notOurs = () => new Error('This is not a KimHardaNeApp questions file');
+const notOurs = () => new Error('This is not a KimHardaNeApp .quzip file');
 
-function parseManifest(text) {
-  let data;
+function jsonOf(file) {
+  if (!file || file.size > LIMITS.manifestBytes) throw notOurs();
   try {
-    data = JSON.parse(text);
+    return JSON.parse(file.read().toString('utf8'));
   } catch {
     throw notOurs();
   }
-  if (data?.format !== FORMAT || !Array.isArray(data.questions)) throw notOurs();
-  if (!(Number(data.version) <= VERSION)) throw new Error('This file comes from a newer KimHardaNeApp. Update the app to import it.');
+}
+
+function parseMeta(meta) {
+  if (meta?.app !== APP || meta.format !== FORMAT || typeof meta.type !== 'string') throw notOurs();
+  if (!(Number(meta.version) <= VERSION)) throw new Error('This file comes from a newer KimHardaNeApp. Update the app to open it.');
+  if (!READABLE_TYPES.includes(meta.type)) {
+    throw new Error(QUZIP_TYPES[meta.type] ? `This file holds ${QUZIP_TYPES[meta.type]}, which cannot be imported here yet.` : 'This file holds data this version of KimHardaNeApp does not know.');
+  }
+  const listName = typeof meta.contents?.listName === 'string' ? meta.contents.listName.replace(/\s+/g, ' ').trim().slice(0, LIMITS.listNameLength) : null;
+  return { type: meta.type, list: listName ? { name: listName } : null };
+}
+
+function parseQuestions(data) {
+  if (!Array.isArray(data?.questions)) throw notOurs();
   if (data.questions.length > LIMITS.questions) throw new Error(`A file can hold at most ${LIMITS.questions} questions`);
-  const listName = typeof data.list?.name === 'string' ? data.list.name.replace(/\s+/g, ' ').trim().slice(0, LIMITS.listNameLength) : null;
-  return { questions: data.questions.filter(question => question && typeof question === 'object' && !Array.isArray(question)), list: listName ? { name: listName } : null };
+  return data.questions.filter(question => question && typeof question === 'object' && !Array.isArray(question));
 }
 
 function mediaFrom(bytes, type) {
@@ -89,31 +115,22 @@ const linkMedia = entry => {
   return url ? { url } : null;
 };
 
-function legacyMedia(picture) {
-  if (typeof picture?.data === 'string') return mediaFrom(Buffer.from(picture.data, 'base64'), picture.type);
-  return linkMedia(picture);
-}
-
 function readArchive(buffer) {
   if (buffer.length > LIMITS.archiveBytes) throw new Error('This file is too large to import');
-  if (isZip(buffer)) {
-    const files = readZip(buffer, { maxEntryBytes: LIMITS.mediaBytes, maxTotalBytes: LIMITS.archiveBytes });
-    const manifest = files.get(MANIFEST);
-    if (!manifest || manifest.size > LIMITS.manifestBytes) throw notOurs();
-    const data = parseManifest(manifest.read().toString('utf8'));
-    const media = entry => {
-      const file = typeof entry?.file === 'string' && files.get(entry.file);
-      if (!file) return linkMedia(entry);
-      return file.size <= LIMITS.mediaBytes && EXTENSION_OF_TYPE[entry.type] ? mediaFrom(file.read(), entry.type) : null;
-    };
-    return { data, mediaOf: (question, index) => media(question[MEDIA[index].name]) };
-  }
-  if (buffer.length > LIMITS.manifestBytes * 4) throw notOurs();
-  const data = parseManifest(buffer.toString('utf8'));
-  return { data, mediaOf: (question, index) => legacyMedia(question[MEDIA[index].legacyName]) };
+  if (!isZip(buffer)) throw notOurs();
+  const files = readZip(buffer, { maxEntryBytes: LIMITS.mediaBytes, maxTotalBytes: LIMITS.archiveBytes });
+  const meta = parseMeta(jsonOf(files.get(META)));
+  const data = { ...meta, questions: parseQuestions(jsonOf(files.get(QUESTIONS_FILE))) };
+  const media = entry => {
+    const file = typeof entry?.file === 'string' && files.get(entry.file);
+    if (!file) return linkMedia(entry);
+    return file.size <= LIMITS.mediaBytes && EXTENSION_OF_TYPE[entry.type] ? mediaFrom(file.read(), entry.type) : null;
+  };
+  return { data, mediaOf: (question, index) => media(question[MEDIA[index].name]) };
 }
 
 function readArchiveFile(file) {
+  if (path.extname(file).toLowerCase() !== '.quzip') throw new Error('Only KimHardaNeApp .quzip files can be imported');
   if (fs.statSync(file).size > LIMITS.archiveBytes) throw new Error('This file is too large to import');
   return readArchive(fs.readFileSync(file));
 }
@@ -194,4 +211,4 @@ function importList(store, archive, { fileName = null } = {}) {
   return { listId, createdUids, summary: { ...summary, total: new Set(uids).size } };
 }
 
-module.exports = { FORMAT, MANIFEST, LIMITS, exportArchive, readArchive, readArchiveFile, importOwnQuestions, importList };
+module.exports = { APP, FORMAT, META, QUESTIONS_FILE, QUZIP_TYPES, LIMITS, exportArchive, readArchive, readArchiveFile, importOwnQuestions, importList };

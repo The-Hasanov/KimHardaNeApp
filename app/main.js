@@ -362,7 +362,7 @@ app.whenReady().then(() => {
   });
   handle('delete-question', uid => store.deleteQuestion(uid));
   const QUESTION_ARCHIVES = [{ name: 'KimHardaNeApp questions', extensions: ['quzip'] }];
-  const QUESTION_FILES_TO_OPEN = [{ name: 'KimHardaNeApp questions', extensions: ['quzip', 'zip', 'json'] }];
+
   const fileNameOf = name => String(name).replace(/[\\/:*?"<>|]+/g, '-').trim() || 'Questions';
   const embedCreated = async uids => {
     if (uids.length && isAiReady()) await ai.embedRows(store, uids.map(uid => store.rows[store.pos.get(uid)]));
@@ -377,7 +377,7 @@ app.whenReady().then(() => {
     return { file: filePath, count, mediaCount };
   };
   const openQuestionsFile = async () => {
-    const { canceled, filePaths } = await dialog.showOpenDialog(win, { title: 'Import questions', properties: ['openFile'], filters: QUESTION_FILES_TO_OPEN });
+    const { canceled, filePaths } = await dialog.showOpenDialog(win, { title: 'Import questions', properties: ['openFile'], filters: QUESTION_ARCHIVES });
     if (canceled) return null;
     return { archive: transfer.readArchiveFile(filePaths[0]), fileName: path.basename(filePaths[0], path.extname(filePaths[0])) };
   };

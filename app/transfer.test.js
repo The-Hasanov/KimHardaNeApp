@@ -7,7 +7,7 @@ const path = require('node:path');
 const { fileURLToPath } = require('node:url');
 const { Store } = require('./store');
 const { tempDb } = require('./testDb');
-const { exportArchive, readArchive, importOwnQuestions, importList, MANIFEST } = require('./transfer');
+const { exportArchive, readArchive, readArchiveFile, importOwnQuestions, importList, META, QUESTIONS_FILE } = require('./transfer');
 const { createZip, readZip } = require('./zip');
 
 const newStore = () => {
@@ -49,8 +49,9 @@ test('your own questions export as a zip with their media files and import on an
   const { archive, count, mediaCount } = exportArchive(ownQuestions(source));
   assert.deepEqual([count, mediaCount], [2, 2]);
   const files = readZip(archive);
-  const manifest = JSON.parse(files.get(MANIFEST).read());
-  assert.equal(manifest.version, 2);
+  const meta = JSON.parse(files.get(META).read());
+  assert.deepEqual([meta.app, meta.format, meta.version, meta.type, meta.contents, meta.files], ['KimHardaNeApp', 'quzip', 1, 'questions', { questions: 2, media: 2 }, { questions: 'questions.json' }]);
+  const manifest = JSON.parse(files.get(QUESTIONS_FILE).read());
   assert.deepEqual(manifest.questions[0].answerMedia.type, 'video/mp4');
   assert.equal(files.get(manifest.questions[0].answerMedia.file).read().toString(), 'mp4 bytes');
 
@@ -73,7 +74,8 @@ test('a list exports dataset and own questions, and imports as a new list that a
   source.addToList(listId, own.uid);
   source.addToList(listId, '1:question:1');
   const { archive } = exportArchive(source.listQuestions(listId), { list: { name: 'Friday' } });
-  const manifest = JSON.parse(readZip(archive).get(MANIFEST).read());
+  assert.deepEqual(JSON.parse(readZip(archive).get(META).read()).contents, { questions: 3, media: 2, listName: 'Friday' });
+  const manifest = JSON.parse(readZip(archive).get(QUESTIONS_FILE).read());
   assert.deepEqual(manifest.questions.map(q => [q.origin, q.uid ?? null]), [['dataset', '1:question:2'], ['own', null], ['dataset', '1:question:1']]);
 
   const target = newStore();
@@ -85,28 +87,25 @@ test('a list exports dataset and own questions, and imports as a new list that a
   assert.equal(importList(target, readArchive(archive)).summary.added, 0, 'a second import reuses the question it added');
 });
 
-test('older .json exports still import, and dataset questions missing here become your own', () => {
-  const legacy = {
-    format: 'kimhardaneapp-questions', version: 1, list: { name: 'Old' },
-    questions: [
-      { origin: 'dataset', uid: '999:question:1', text: 'Sual bazada yoxdur', answer: 'Yeni', sources: [], handoutPicture: { url: 'https://img.az/x.png' } },
-      { origin: 'own', text: 'Şəkilli sual', answer: 'Bəli', answerPicture: { type: 'image/png', data: Buffer.from('old png').toString('base64') } },
-      { origin: 'own', text: '', answer: 'boş' },
-    ],
-  };
-  const target = newStore();
-  const result = importList(target, readArchive(Buffer.from(JSON.stringify(legacy))));
-  assert.deepEqual(result.summary, { fromDataset: 0, alreadyYours: 0, added: 2, invalid: 1, total: 2 });
-  const [missing, withPicture] = target.listQuestions(result.listId);
-  assert.deepEqual([missing.package_id, missing.text, missing.rekvizit_src], [0, 'Sual bazada yoxdur', 'https://img.az/x.png']);
-  assert.equal(fs.readFileSync(fileURLToPath(withPicture.source_media_src), 'utf8'), 'old png');
-});
-
-test('only KimHardaNeApp files of this version or older are read', () => {
+test('only .quzip files with a meta.json of a known type and this version or older are read', () => {
+  const zipOf = (meta, questions = []) => createZip([
+    ...(meta ? [{ name: META, data: Buffer.from(JSON.stringify(meta)) }] : []),
+    { name: QUESTIONS_FILE, data: Buffer.from(JSON.stringify({ questions })) },
+  ]);
+  const good = { app: 'KimHardaNeApp', format: 'quzip', version: 1, type: 'questions' };
   assert.throws(() => readArchive(Buffer.from('{"questions":[]}')), /not a KimHardaNeApp/);
-  assert.throws(() => readArchive(Buffer.from('not json')), /not a KimHardaNeApp/);
   assert.throws(() => readArchive(createZip([{ name: 'other.txt', data: Buffer.from('x') }])), /not a KimHardaNeApp/);
-  assert.throws(() => readArchive(Buffer.from(JSON.stringify({ format: 'kimhardaneapp-questions', version: 99, questions: [] }))), /newer/);
+  assert.throws(() => readArchive(zipOf(null)), /not a KimHardaNeApp/);
+  assert.throws(() => readArchive(zipOf({ ...good, app: 'Other' })), /not a KimHardaNeApp/);
+  assert.throws(() => readArchive(zipOf({ ...good, version: 99 })), /newer/);
+  assert.throws(() => readArchive(zipOf({ ...good, type: 'dataset' })), /data source dataset, which cannot be imported here yet/);
+  assert.throws(() => readArchive(zipOf({ ...good, type: 'spaceship' })), /does not know/);
+  assert.deepEqual(readArchive(zipOf({ ...good, type: 'list', contents: { listName: ' Old ' } })).data.list, { name: 'Old' });
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'quzip-'));
+  fs.writeFileSync(path.join(dir, 'questions.zip'), zipOf(good));
+  fs.writeFileSync(path.join(dir, 'questions.quzip'), zipOf(good));
+  assert.throws(() => readArchiveFile(path.join(dir, 'questions.zip')), /Only KimHardaNeApp .quzip files/);
+  assert.equal(readArchiveFile(path.join(dir, 'questions.quzip')).data.type, 'questions');
 });
 
 test('own questions take pictures, videos and audio files, and say which kind each is', () => {
@@ -117,7 +116,9 @@ test('own questions take pictures, videos and audio files, and say which kind ea
   assert.throws(() => store.setOwnImage(uid, 'rekvizit_url', tempFile('clip.avi', 'avi')), /video \(MP4, WebM\)/);
 });
 
-const quzip = (manifest, media = []) => createZip([{ name: MANIFEST, data: Buffer.from(JSON.stringify({ format: 'kimhardaneapp-questions', version: 2, ...manifest })) }, ...media]);
+const quzip = ({ list, questions }, media = []) => createZip([
+  { name: META, data: Buffer.from(JSON.stringify({ app: 'KimHardaNeApp', format: 'quzip', version: 1, type: list ? 'list' : 'questions', contents: list ? { listName: list.name } : {} })) },
+  { name: QUESTIONS_FILE, data: Buffer.from(JSON.stringify({ questions })) }, ...media]);
 
 test('hostile archives: zip bombs, lying sizes, huge entries and broken offsets are refused', () => {
   const zeros = Buffer.alloc(4 * 1024 * 1024);
