@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { cn } from 'cn';
-import { CheckIcon, ChevronDownIcon, CopyIcon, LayoutTemplateIcon, PlusIcon, SaveIcon, Trash2Icon, TriangleAlertIcon } from 'lucide-react';
+import { ArrowLeftIcon, CheckIcon, ChevronDownIcon, CopyIcon, LayoutTemplateIcon, PlusIcon, ClapperboardIcon, SaveIcon, Settings2Icon, Trash2Icon, TriangleAlertIcon, XIcon } from 'lucide-react';
 import { toast } from 'sonner';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -17,7 +17,7 @@ const { api } = window;
 const MAX_ROUNDS = 20;
 const DEFAULT_SECONDS_ON_ANSWER = 10;
 export const NEW_ROUND = {
-  listId: null, randomCount: 10, games: [], secondsPerQuestion: 60, secondsBetweenQuestions: 0, revealAtEnd: false, secondsOnAnswer: 0, pointSystemId: null,
+  showPageIds: [], listId: null, randomCount: 10, games: [], secondsPerQuestion: 60, secondsBetweenQuestions: 0, revealAtEnd: false, secondsOnAnswer: 0, pointSystemId: null,
 };
 
 export const pointSystemOf = (round, pointSystems) => pointSystems?.find(system => system.id === round.pointSystemId) ?? pointSystems?.[0] ?? null;
@@ -48,11 +48,49 @@ export function roundSummary(round, lists, pointSystems, sources) {
   ].filter(Boolean).join(' · ');
 }
 
-function RoundEditor({ index, round, lists, pointSystems, sources, onChange }) {
+export const showPagesOf = (round, showPages) => (round.showPageIds ?? []).map(id => showPages?.find(page => page.id === id)).filter(Boolean);
+
+function ShowPagesBefore({ id, round, showPages, onChange, onManage }) {
+  const chosen = showPagesOf(round, showPages);
+  const ids = chosen.map(page => page.id);
+  const move = index => onChange([...ids.slice(0, index - 1), ids[index], ids[index - 1], ...ids.slice(index + 1)]);
+  return (
+    <div className="grid basis-full gap-2">
+      <Label htmlFor={id}>Show pages before this round</Label>
+      <div className="flex flex-wrap items-center gap-2">
+        {chosen.map((page, index) => (
+          <span key={page.id} className="inline-flex h-8 items-center gap-1 rounded-md border bg-muted/40 pr-1 pl-2.5 text-sm">
+            <span className="text-muted-foreground tabular-nums">{index + 1}.</span>
+            <span className="max-w-44 truncate">{page.title || 'Untitled'}</span>
+            <span className="text-xs text-muted-foreground tabular-nums">{page.seconds} s</span>
+            {index > 0 && (
+              <Button size="icon-xs" variant="ghost" aria-label={`Show ${page.title} earlier`} title="Show earlier" onClick={() => move(index)}><ArrowLeftIcon /></Button>
+            )}
+            <Button size="icon-xs" variant="ghost" aria-label={`Remove ${page.title}`} title="Remove" onClick={() => onChange(ids.filter(pageId => pageId !== page.id))}><XIcon /></Button>
+          </span>
+        ))}
+        <Select value="" onValueChange={value => onChange([...ids, Number(value)])} disabled={!showPages?.length || ids.length >= 10}>
+          <SelectTrigger id={id} size="sm" className="w-48">
+            <ClapperboardIcon /><SelectValue placeholder={showPages?.length ? 'Add a show page' : 'No show pages yet'} />
+          </SelectTrigger>
+          <SelectContent position="popper">
+            {showPages?.filter(page => !ids.includes(page.id)).map(page => (
+              <SelectItem key={page.id} value={String(page.id)}>{page.title || 'Untitled'}<span className="text-muted-foreground tabular-nums">{page.seconds} s</span></SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Button size="sm" variant="ghost" className="text-muted-foreground" onClick={onManage}><Settings2Icon />Manage show pages</Button>
+      </div>
+    </div>
+  );
+}
+
+function RoundEditor({ index, round, lists, pointSystems, sources, showPages, onManageShowPages, onChange }) {
   const id = name => `round-${index}-${name}`;
   const set = changes => onChange({ ...round, ...changes });
   return (
     <div className="flex flex-wrap items-end gap-x-6 gap-y-4 border-t px-4 py-4">
+      <ShowPagesBefore id={id('show-pages')} round={round} showPages={showPages} onChange={showPageIds => set({ showPageIds })} onManage={onManageShowPages} />
       <QuestionSourceSelect id={id('questions')} lists={lists} listId={round.listId} onListIdChange={listId => set({ listId })} className="w-56" />
       {round.listId == null && <>
         <GamePicker id={id('games')} sources={sources} games={round.games ?? []} onGamesChange={games => set({ games })} className="w-56" />
@@ -114,7 +152,7 @@ function SaveTemplateDialog({ isOpen, onOpenChange, rounds, templates, suggested
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>Save as template</DialogTitle>
-          <DialogDescription>Keeps these {rounds.length} {rounds.length === 1 ? 'round' : 'rounds'} with their questions, timers and point systems.</DialogDescription>
+          <DialogDescription>Keeps these {rounds.length} {rounds.length === 1 ? 'round' : 'rounds'} with their show pages, questions, timers and point systems.</DialogDescription>
         </DialogHeader>
         <div className="grid gap-2">
           <Label htmlFor="template-name">Name</Label>
@@ -133,7 +171,7 @@ function SaveTemplateDialog({ isOpen, onOpenChange, rounds, templates, suggested
   );
 }
 
-export default function RoundPlan({ rounds, onRoundsChange, lists, pointSystems, sources, templates, onTemplatesChange, templateName, onTemplateNameChange, playedCount = 0, action }) {
+export default function RoundPlan({ rounds, onRoundsChange, lists, pointSystems, sources, showPages, onManageShowPages, templates, onTemplatesChange, templateName, onTemplateNameChange, playedCount = 0, action }) {
   const [openIndex, setOpenIndex] = useState(null);
   const [isSaving, setIsSaving] = useState(false);
   const blockedCount = rounds.filter((round, index) => index >= playedCount && roundProblem(round, lists, pointSystems, sources)).length;
@@ -186,6 +224,7 @@ export default function RoundPlan({ rounds, onRoundsChange, lists, pointSystems,
           const isNext = index === playedCount;
           const isOpen = openIndex === index && !isPlayed;
           const problem = !isPlayed && roundProblem(round, lists, pointSystems, sources);
+          const shownFirst = showPagesOf(round, showPages);
           return (
             <li key={index} className={cn('rounded-lg border', isNext && 'border-primary/40', isPlayed && 'bg-muted/40')}>
               <div className="flex items-center gap-3 px-4 py-2.5">
@@ -204,6 +243,11 @@ export default function RoundPlan({ rounds, onRoundsChange, lists, pointSystems,
                   <span className={cn('block truncate text-sm text-muted-foreground', problem && !isOpen && 'text-destructive')}>
                     {problem && !isOpen ? problem : roundSummary(round, lists, pointSystems, sources)}
                   </span>
+                  {shownFirst.length > 0 && (
+                    <span className="flex items-center gap-1.5 truncate text-xs text-muted-foreground">
+                      <ClapperboardIcon className="size-3.5 shrink-0" />First shows {shownFirst.map(page => page.title || 'Untitled').join(' → ')}
+                    </span>
+                  )}
                 </button>
                 {!isPlayed && <>
                   <Button size="icon-sm" variant="ghost" className="text-muted-foreground" aria-label={`Duplicate round ${index + 1}`} title="Duplicate"
@@ -215,7 +259,7 @@ export default function RoundPlan({ rounds, onRoundsChange, lists, pointSystems,
                   </Button>
                 </>}
               </div>
-              {isOpen && <RoundEditor index={index} round={round} lists={lists} pointSystems={pointSystems} sources={sources} onChange={next => change(index, next)} />}
+              {isOpen && <RoundEditor index={index} round={round} lists={lists} pointSystems={pointSystems} sources={sources} showPages={showPages} onManageShowPages={onManageShowPages} onChange={next => change(index, next)} />}
             </li>
           );
         })}

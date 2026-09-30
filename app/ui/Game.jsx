@@ -3,13 +3,14 @@ import { toast } from 'sonner';
 import { cn } from 'cn';
 import {
   ArrowRightIcon, EyeIcon, FlagIcon, Gamepad2Icon, ImageIcon, PauseIcon, PlayIcon, PresentationIcon, RotateCcwIcon, SettingsIcon,
-  LayoutTemplateIcon, ShuffleIcon, SigmaIcon, SkipForwardIcon, SparklesIcon, TrophyIcon, UserRoundIcon, UsersIcon,
+  ClapperboardIcon, LayoutTemplateIcon, ShuffleIcon, SigmaIcon, SkipForwardIcon, SparklesIcon, TrophyIcon, UserRoundIcon, UsersIcon,
 } from 'lucide-react';
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter,
   AlertDialogHeader, AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { Badge } from '@/components/ui/badge';
+import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Kbd } from '@/components/ui/kbd';
 import { Label } from '@/components/ui/label';
@@ -26,6 +27,7 @@ import Profiles from './Profiles';
 import PointSystems, { usePointSystems } from './PointSystems';
 import RoundPlan, { NEW_ROUND, pointSystemOf, roundProblem } from './RoundPlan';
 import Templates from './Templates';
+import ShowPages, { useShowPages } from './ShowPages';
 import { PlayHistory, PlayResults, PlayRound } from './Play';
 
 const { api } = window;
@@ -50,9 +52,9 @@ function RoundSettings({ mode, questions, lists, sources, listId, onListIdChange
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-end gap-3">
-        <QuestionSourceSelect id="question-source" lists={lists} listId={listId} onListIdChange={onListIdChange} />
+        <QuestionSourceSelect id="question-source" lists={lists} listId={listId} onListIdChange={onListIdChange} className="w-52" />
         {!chosenList && <>
-          <GamePicker id="random-games" sources={sources} games={settings.games} onGamesChange={games => onSettingsChange({ games })} />
+          <GamePicker id="random-games" sources={sources} games={settings.games} onGamesChange={games => onSettingsChange({ games })} className="w-52" />
           <NumberField id="random-question-count" label="How many" value={settings.randomCount} min={1} max={MAX_RANDOM_COUNT}
             onChange={randomCount => onSettingsChange({ randomCount })} />
           <Button variant="outline" onClick={onNewSet} disabled={!questions}><ShuffleIcon />New set</Button>
@@ -126,7 +128,7 @@ function GameSetup({ mode, onModeChange, isAiReady, onOpenSettings, onStart, rou
   );
 }
 
-const GAME_SECTIONS = [['play', PlayIcon, 'Play'], ['templates', LayoutTemplateIcon, 'Templates'], ['points', SigmaIcon, 'Point systems'], ['profiles', UserRoundIcon, 'Profiles'], ['leaderboard', TrophyIcon, 'Leaderboard']];
+const GAME_SECTIONS = [['play', PlayIcon, 'Play'], ['templates', LayoutTemplateIcon, 'Templates'], ['shows', ClapperboardIcon, 'Show pages'], ['points', SigmaIcon, 'Point systems'], ['profiles', UserRoundIcon, 'Profiles'], ['leaderboard', TrophyIcon, 'Leaderboard']];
 
 function GameSections({ section, onSectionChange, children }) {
   return (
@@ -177,6 +179,8 @@ export default function Game({ isVisible, lists, sources, listId, onListIdChange
   const [secondsBetweenQuestions, setSecondsBetweenQuestions] = useState(0);
   const [shouldAutoStartTimer, setShouldAutoStartTimer] = useState(false);
   const [pointSystems, setPointSystems] = usePointSystems();
+  const [showPages, setShowPages] = useShowPages();
+  const [isManagingShowPages, setIsManagingShowPages] = useState(false);
   const [plan, setPlan] = useState(() => {
     try {
       const saved = JSON.parse(localStorage.getItem('partyPlan'));
@@ -273,7 +277,7 @@ export default function Game({ isVisible, lists, sources, listId, onListIdChange
   const planProblems = plan.map(round => roundProblem(round, lists, pointSystems, sources));
   const planSummary = `${plan.length} ${plan.length === 1 ? 'round' : 'rounds'}`;
   const roundPlan = (playedCount, action) => (
-    <RoundPlan rounds={plan} onRoundsChange={changePlan} lists={lists} pointSystems={pointSystems} sources={sources} templates={templates} onTemplatesChange={setTemplates}
+    <RoundPlan rounds={plan} onRoundsChange={changePlan} lists={lists} pointSystems={pointSystems} sources={sources} showPages={showPages} onManageShowPages={() => (phase === 'party' ? setIsManagingShowPages(true) : setSection('shows'))} templates={templates} onTemplatesChange={setTemplates}
       templateName={templateName} onTemplateNameChange={changeTemplateName} playedCount={playedCount} action={action} />
   );
   const roundSettingsValues = {
@@ -303,6 +307,7 @@ export default function Game({ isVisible, lists, sources, listId, onListIdChange
   useEffect(() => {
     api.pointSystems().then(setPointSystems);
     api.gameTemplates().then(setTemplates);
+    api.showPages().then(setShowPages);
   }, [section]);
   useEffect(() => { api.onParty(setPartyState); }, []);
   const openParty = async () => {
@@ -327,7 +332,7 @@ export default function Game({ isVisible, lists, sources, listId, onListIdChange
       await api.partyStartRound({
         uids: roundQuestions.map(question => question.uid), secondsPerQuestion: round.secondsPerQuestion, pointSystemId: pointSystemOf(round, pointSystems)?.id,
         secondsBetweenQuestions: round.revealAtEnd ? Math.max(round.secondsBetweenQuestions, MIN_SECONDS_TO_CHECK_ANSWERS) : round.secondsBetweenQuestions,
-        secondsOnAnswer: round.secondsOnAnswer, revealAtEnd: round.revealAtEnd,
+        secondsOnAnswer: round.secondsOnAnswer, revealAtEnd: round.revealAtEnd, showPageIds: round.showPageIds ?? [],
       });
     } catch (e) {
       toast.error('Could not start the round', { description: withoutIpcPrefix(e) });
@@ -423,9 +428,10 @@ export default function Game({ isVisible, lists, sources, listId, onListIdChange
     return (
       <GameSections section={section} onSectionChange={setSection}>
         {section === 'templates' ? (
-          <Templates templates={templates} onTemplatesChange={setTemplates} lists={lists} pointSystems={pointSystems} sources={sources} onUse={applyTemplate}
+          <Templates templates={templates} onTemplatesChange={setTemplates} lists={lists} pointSystems={pointSystems} sources={sources} showPages={showPages} onUse={applyTemplate}
             onPlanNew={() => { changeMode('party'); changeTemplateName(null); setSection('play'); }} />
-        ) : section === 'points' ? <PointSystems /> : section === 'profiles' ? <Profiles /> : section === 'leaderboard' ? (
+        ) : section === 'shows' ? <ShowPages showPages={showPages} onShowPagesChange={setShowPages} />
+        : section === 'points' ? <PointSystems /> : section === 'profiles' ? <Profiles /> : section === 'leaderboard' ? (
           <div className="mx-auto max-w-3xl px-6 py-8"><AllTimeLeaderboard /></div>
         ) : (
           <GameSetup mode={mode} onModeChange={changeMode} isAiReady={isAiReady} onOpenSettings={onOpenSettings} onStart={startGame}
@@ -437,12 +443,20 @@ export default function Game({ isVisible, lists, sources, listId, onListIdChange
 
   if (phase === 'party' && partyState) {
     return (
-      <PartyScreen party={partyState} isVisible={isVisible} onBackToLobby={partyBackToLobby} onClose={closeParty}
-        lobbySettings={roundPlan(partyState.round, (
-          <Button onClick={startPartyRound} disabled={isStartingRound || !plan[partyState.round] || !partyState.players.length || !!planProblems[partyState.round]}>
-            <PlayIcon />{plan[partyState.round] ? `Start round ${partyState.round + 1}` : 'No round left'}
-          </Button>
-        ))} />
+      <>
+        <PartyScreen party={partyState} isVisible={isVisible} onBackToLobby={partyBackToLobby} onClose={closeParty}
+          lobbySettings={roundPlan(partyState.round, (
+            <Button onClick={startPartyRound} disabled={isStartingRound || !plan[partyState.round] || !partyState.players.length || !!planProblems[partyState.round]}>
+              <PlayIcon />{plan[partyState.round] ? `Start round ${partyState.round + 1}` : 'No round left'}
+            </Button>
+          ))} />
+        <Dialog open={isManagingShowPages} onOpenChange={setIsManagingShowPages}>
+          <DialogContent className="max-h-[90vh] overflow-y-auto p-0 sm:max-w-3xl" aria-describedby={undefined}>
+            <DialogTitle className="sr-only">Show pages</DialogTitle>
+            <ShowPages showPages={showPages} onShowPagesChange={setShowPages} />
+          </DialogContent>
+        </Dialog>
+      </>
     );
   }
 

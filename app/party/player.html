@@ -58,6 +58,11 @@ header { position: sticky; top: 0; z-index: 3; margin: -16px -16px 0; padding: 1
 .center { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; gap: 8px; }
 h1 { font-size: 24px; line-height: 1.25; margin: 0; }
 .muted { color: var(--muted); }
+.show-page { padding: 16px 4px; }
+.show-page h1 { font-size: 26px; line-height: 1.2; }
+.show-text { margin: 0; white-space: pre-line; color: var(--muted); font-size: 17px; line-height: 1.45; }
+.show-text.large { color: inherit; font-size: 22px; font-weight: 600; }
+.show-image { display: block; max-width: 100%; max-height: 40vh; border-radius: 12px; }
 .big-number { font-size: 120px; font-weight: 700; line-height: 1; font-variant-numeric: tabular-nums; }
 .question { font-size: 20px; line-height: 1.45; font-weight: 500; white-space: pre-line; margin: 0; }
 .note { border: 1px solid color-mix(in srgb, var(--warn) 40%, transparent); background: color-mix(in srgb, var(--warn) 12%, transparent); border-radius: 10px; padding: 10px 12px; font-size: 14px; }
@@ -862,7 +867,7 @@ function holdToSkip(button) {
   return button;
 }
 
-const SKIP_TITLES = { waiting: 'Start the question', question: "I'm done", reveal: 'Next' };
+const SKIP_TITLES = { show: 'Next', waiting: 'Start the question', question: "I'm done", reveal: 'Next' };
 const MAX_SKIP_SEGMENTS = 12;
 
 function skipDock() {
@@ -935,7 +940,8 @@ function topBar() {
   timeFillElement = el('div', { class: 'time-fill' });
   return el('header', {},
     el('div', { class: 'bar' },
-      el('span', { class: 'pill' }, el('span', { class: 'label' }, 'Q'), `${state.index + 1}/${state.total}`),
+      state.phase === 'show' ? el('span', { class: 'pill' }, el('span', { class: 'label' }, 'Round'), state.round)
+        : el('span', { class: 'pill' }, el('span', { class: 'label' }, 'Q'), `${state.index + 1}/${state.total}`),
       nameButton(),
       el('span', { class: 'pill', title: 'Your score' }, state.me.score, el('span', { class: 'label' }, state.me.score === 1 ? 'pt' : 'pts')),
       el('button', { type: 'button', class: 'pill react-toggle', id: 'react-toggle', title: 'Reactions', onclick: toggleReactionTray }, icon(ICONS.smile)),
@@ -944,7 +950,7 @@ function topBar() {
     el('div', { class: 'time-track' }, timeFillElement));
 }
 
-const phaseSeconds = () => ({ waiting: state.rules.secondsBetweenQuestions, question: state.rules.secondsPerQuestion, reveal: state.rules.secondsOnAnswer })[state.phase];
+const phaseSeconds = () => ({ show: state.showPage?.seconds, waiting: state.rules.secondsBetweenQuestions, question: state.rules.secondsPerQuestion, reveal: state.rules.secondsOnAnswer })[state.phase];
 
 let mediaNodes = new Map();
 
@@ -1089,7 +1095,8 @@ function renderScreen(next) {
       el('p', { class: 'muted' }, 'Thanks for playing!')));
   }
   if (session && next.me && session.name !== next.me.name) saveSession({ ...session, name: next.me.name });
-  const screen = `${next.phase}:${next.index}`;
+  const screen = next.phase === 'show' ? `show:${next.round}:${next.showPage.index}` : `${next.phase}:${next.index}`;
+  if (screen === renderedScreen && next.phase === 'show') return updateSkip();
   if (screen === renderedScreen && next.phase === 'question') {
     const nameElement = document.getElementById('me-name');
     if (nameElement) nameElement.textContent = next.me.name;
@@ -1115,6 +1122,15 @@ function renderScreen(next) {
       el('h1', {}, `You're in, ${next.me.name}!`),
       el('p', { class: 'muted' }, `Waiting for the host to start… ${next.playerCount} ${next.playerCount === 1 ? 'player' : 'players'} joined.`),
       el('div', { style: 'margin-top:8px' }, settingsButton())), el('div', { class: 'reactions-slot' }));
+  }
+  if (next.phase === 'show') {
+    const page = next.showPage;
+    return done(show(topBar(), el('div', { class: 'center show-page' },
+      page.title && el('h1', {}, page.title),
+      page.blocks.map(block => (block.type === 'image'
+        ? el('img', { class: 'show-image', src: `${block.src}&token=${encodeURIComponent(session.token)}`, alt: '' })
+        : el('p', { class: block.isLarge ? 'show-text large' : 'show-text' }, block.text))),
+      page.total > 1 && el('p', { class: 'muted' }, `${page.index + 1} of ${page.total}`)), skipDock()));
   }
   if (next.phase === 'waiting') {
     return done(show(topBar(), el('div', { class: 'center' },

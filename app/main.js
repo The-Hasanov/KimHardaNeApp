@@ -13,6 +13,7 @@ const { openParty } = require('./party');
 const { PlayerProfiles } = require('./profiles');
 const { CLASSIC_POINT_SYSTEM, normalizePointSystem, summaryOf } = require('./scoring');
 const { normalizeTemplate } = require('./templates');
+const { normalizeShowPage } = require('./showPages');
 const transfer = require('./transfer');
 const { findSamsungTvs, openInTvBrowser, isLocalNetworkAddress } = require('./samsungTv');
 
@@ -252,9 +253,13 @@ app.whenReady().then(() => {
     openPartyDisplay(win, party.game.port);
     return party.game.hostView();
   });
-  handle('party-start-round', withParty((game, { uids, pointSystemId, ...rules }) => game.startRound({
-    questions: uids.map(uid => store.get(uid)).filter(Boolean), ...rules, pointSystem: store.pointSystems().find(system => system.id === pointSystemId),
-  })));
+  handle('party-start-round', withParty((game, { uids, pointSystemId, showPageIds = [], ...rules }) => {
+    const showPages = store.showPages();
+    game.startRound({
+      questions: uids.map(uid => store.get(uid)).filter(Boolean), ...rules, pointSystem: store.pointSystems().find(system => system.id === pointSystemId),
+      showPages: showPageIds.map(id => showPages.find(page => page.id === id)).filter(Boolean),
+    });
+  }));
   handle('party-skip-wait', withParty(game => game.skipWait()));
   handle('party-pause', withParty(game => game.pause()));
   handle('party-resume', withParty(game => game.resume()));
@@ -298,6 +303,27 @@ app.whenReady().then(() => {
   handle('delete-game-template', id => {
     store.deleteGameTemplate(id);
     return store.gameTemplates();
+  });
+  const showPagesWithUse = () => store.showPages().map(page => ({ ...page, usedBy: store.templatesUsingShowPage(page.id) }));
+  handle('show-pages', showPagesWithUse);
+  handle('save-show-page', page => {
+    const id = store.saveShowPage(normalizeShowPage(page));
+    return { id, showPages: showPagesWithUse() };
+  });
+  handle('delete-show-page', id => {
+    const usedBy = store.templatesUsingShowPage(id);
+    if (usedBy.length) throw new Error(`It is used by ${usedBy.length === 1 ? 'the template' : 'the templates'} ${usedBy.map(name => `“${name}”`).join(', ')}. Change those rounds first.`);
+    store.deleteShowPage(id);
+    return showPagesWithUse();
+  });
+  handle('pick-show-page-image', async () => {
+    const { canceled, filePaths } = await dialog.showOpenDialog(win, {
+      title: 'Add a picture', properties: ['openFile'], filters: [{ name: 'Pictures', extensions: ['png', 'jpg', 'jpeg', 'gif', 'webp'] }],
+    });
+    if (canceled) return null;
+    if (fs.statSync(filePaths[0]).size > 50 * 1024 * 1024) throw new Error('Pick a picture smaller than 50 MB');
+    const image = store.saveOwnMedia({ bytes: fs.readFileSync(filePaths[0]), extension: path.extname(filePaths[0]).toLowerCase() });
+    return { type: 'image', image, src: store.imageSrc(image) };
   });
   handle('party-profiles', () => store.partyProfiles());
   handle('clear-party-profile-pin', name => {

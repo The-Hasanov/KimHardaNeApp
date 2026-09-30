@@ -40,6 +40,9 @@ CREATE TABLE IF NOT EXISTS point_systems (
 const GAME_TEMPLATES_SCHEMA = `
 CREATE TABLE IF NOT EXISTS game_templates (
   id INTEGER PRIMARY KEY, name TEXT NOT NULL UNIQUE COLLATE NOCASE, rounds TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL);`;
+const SHOW_PAGES_SCHEMA = `
+CREATE TABLE IF NOT EXISTS show_pages (
+  id INTEGER PRIMARY KEY, title TEXT NOT NULL, blocks TEXT NOT NULL, seconds INTEGER NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL);`;
 const POOL = 500;
 const OWN_SOURCE_ID = 'own';
 const OWN_PACKAGE_ID = 0;
@@ -81,6 +84,7 @@ class Store {
     this.db.exec(PARTY_PROFILES_SCHEMA);
     this.db.exec(POINT_SYSTEMS_SCHEMA);
     this.db.exec(GAME_TEMPLATES_SCHEMA);
+    this.db.exec(SHOW_PAGES_SCHEMA);
     const resultColumns = this.db.prepare('PRAGMA table_info(party_results)').all().map(c => c.name);
     if (!resultColumns.includes('correct_ms')) this.db.exec('ALTER TABLE party_results ADD COLUMN correct_ms INTEGER NOT NULL DEFAULT 0');
     if (!resultColumns.includes('points')) this.db.exec('ALTER TABLE party_results ADD COLUMN points INTEGER NOT NULL DEFAULT 0; UPDATE party_results SET points = correct');
@@ -321,19 +325,46 @@ class Store {
       if (!/^https?:\/\//.test(picture.remoteUrl)) throw new Error('A picture link must start with http or https');
       url = picture.remoteUrl;
     } else if (picture) {
-      const { bytes, extension } = picture;
-      if (!MEDIA_TYPES[extension]) throw new Error(MEDIA_CHOICE);
-      const sha256 = crypto.createHash('sha256').update(bytes).digest('hex');
-      const relative = `images/own/${sha256}${extension}`;
-      fs.mkdirSync(path.join(this.roots[0], 'images', 'own'), { recursive: true });
-      fs.writeFileSync(path.join(this.roots[0], relative), bytes);
-      url = OWN_IMAGE_PREFIX + sha256 + extension;
-      this.db.prepare(`INSERT OR REPLACE INTO images (url, status, path, bytes, content_type, sha256, fetched_at)
-        VALUES (?, 'ok', ?, ?, ?, ?, datetime('now'))`).run(url, relative, bytes.length, MEDIA_TYPES[extension], sha256);
+      url = this.saveOwnMedia(picture);
     }
     this.db.prepare(`UPDATE questions SET ${column} = ?, edited_at = datetime('now') WHERE uid = ?`).run(url, uid);
     this.rows[i] = this.db.prepare(`SELECT ${LIST_COLS} FROM questions WHERE uid = ?`).get(uid);
     return this.get(uid);
+  }
+
+  saveOwnMedia({ bytes, extension }) {
+    if (!MEDIA_TYPES[extension]) throw new Error(MEDIA_CHOICE);
+    const sha256 = crypto.createHash('sha256').update(bytes).digest('hex');
+    const relative = `images/own/${sha256}${extension}`;
+    fs.mkdirSync(path.join(this.roots[0], 'images', 'own'), { recursive: true });
+    fs.writeFileSync(path.join(this.roots[0], relative), bytes);
+    const url = OWN_IMAGE_PREFIX + sha256 + extension;
+    this.db.prepare(`INSERT OR REPLACE INTO images (url, status, path, bytes, content_type, sha256, fetched_at)
+      VALUES (?, 'ok', ?, ?, ?, ?, datetime('now'))`).run(url, relative, bytes.length, MEDIA_TYPES[extension], sha256);
+    return url;
+  }
+
+  showPages() {
+    return this.db.prepare('SELECT id, title, blocks, seconds, updated_at FROM show_pages ORDER BY id').all()
+      .map(row => ({ ...row, blocks: JSON.parse(row.blocks).map(block => (block.type === 'image' ? { ...block, src: this.imageSrc(block.image) } : block)) }));
+  }
+
+  saveShowPage({ id = null, title, blocks, seconds }) {
+    const json = JSON.stringify(blocks.map(({ src, ...block }) => block));
+    if (id == null) {
+      return Number(this.db.prepare("INSERT INTO show_pages (title, blocks, seconds, created_at, updated_at) VALUES (?, ?, ?, datetime('now'), datetime('now'))")
+        .run(title, json, seconds).lastInsertRowid);
+    }
+    this.db.prepare("UPDATE show_pages SET title = ?, blocks = ?, seconds = ?, updated_at = datetime('now') WHERE id = ?").run(title, json, seconds, id);
+    return id;
+  }
+
+  deleteShowPage(id) {
+    this.db.prepare('DELETE FROM show_pages WHERE id = ?').run(id);
+  }
+
+  templatesUsingShowPage(showPageId) {
+    return this.gameTemplates().filter(template => template.rounds.some(round => round.showPageIds?.includes(showPageId))).map(template => template.name);
   }
 
   randomPlayableQuestions(games, count, excludedUids = []) {
@@ -545,4 +576,4 @@ class Store {
   }
 }
 
-module.exports = { Store, OWN_SOURCE_ID, OWN_IMAGE_PREFIX, MEDIA_TYPES, IMAGE_COLUMNS, mediaKind, TUNING, LISTS_SCHEMA, PLAY_SCHEMA, PARTY_RESULTS_SCHEMA, PARTY_PROFILES_SCHEMA, POINT_SYSTEMS_SCHEMA, GAME_TEMPLATES_SCHEMA, EMBEDDINGS_SCHEMA, fold, passage, embeddable, hashOf, DIM };
+module.exports = { Store, OWN_SOURCE_ID, OWN_IMAGE_PREFIX, MEDIA_TYPES, IMAGE_COLUMNS, mediaKind, TUNING, LISTS_SCHEMA, PLAY_SCHEMA, PARTY_RESULTS_SCHEMA, PARTY_PROFILES_SCHEMA, POINT_SYSTEMS_SCHEMA, GAME_TEMPLATES_SCHEMA, SHOW_PAGES_SCHEMA, EMBEDDINGS_SCHEMA, fold, passage, embeddable, hashOf, DIM };

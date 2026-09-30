@@ -19,8 +19,8 @@ const TV_PAGE = path.join(__dirname, 'party', 'tv.html');
 const VIRTUAL_ADAPTER = /vEthernet|VirtualBox|VMware|WSL|Hyper-V|Loopback|Tailscale|ZeroTier|VPN/i;
 const PHASES_WITH_QUESTION = ['question', 'judging', 'reveal'];
 const TV_SCREENS = ['game', 'leaderboard', 'join'];
-const PAUSABLE_PHASES = ['waiting', 'question', 'reveal'];
-const SKIPPABLE_PHASES = ['waiting', 'question', 'reveal'];
+const PAUSABLE_PHASES = ['show', 'waiting', 'question', 'reveal'];
+const SKIPPABLE_PHASES = ['show', 'waiting', 'question', 'reveal'];
 const REACTIONS = ['👏', '😂', '😮', '🤔', '🔥', '❤️', '😢', '🎉'];
 const REACTION_COOLDOWN_MS = 1000;
 const REACTIONS_PER_MINUTE = 10;
@@ -73,6 +73,8 @@ class PartyGame {
     this.bankedTimes = new Map();
     this.round = 0;
     this.questions = [];
+    this.showPages = [];
+    this.showIndex = -1;
     this.answers = [];
     this.stakes = [];
     this.rulings = [];
@@ -379,7 +381,7 @@ class PartyGame {
   }
 
   skipKey() {
-    return `${this.round}:${this.phase}:${this.index}`;
+    return `${this.round}:${this.phase}:${this.phase === 'show' ? `page${this.showIndex}` : this.index}`;
   }
 
   isHostChecking() {
@@ -417,10 +419,10 @@ class PartyGame {
     if (!this.canSkip() || this.pausedRemainingMs != null) return;
     const { count, of } = this.skipStatus();
     if (!of || count < of) return;
-    ({ waiting: () => this.openAnswers(), question: () => this.closeAnswers(), reveal: () => this.next() })[this.phase]();
+    ({ show: () => this.nextShowPage(), waiting: () => this.openAnswers(), question: () => this.closeAnswers(), reveal: () => this.next() })[this.phase]();
   }
 
-  startRound({ questions, secondsPerQuestion, secondsBetweenQuestions, secondsOnAnswer = 0, pointSystem, pointsForCorrect = 1, pointsForWrong = 0, revealAtEnd = false }) {
+  startRound({ questions, showPages = [], secondsPerQuestion, secondsBetweenQuestions, secondsOnAnswer = 0, pointSystem, pointsForCorrect = 1, pointsForWrong = 0, revealAtEnd = false }) {
     if (this.phase !== 'lobby' || !questions.length) return;
     const system = normalizePointSystem(pointSystem ?? { name: 'Classic', simple: { correct: pointsForCorrect, wrong: pointsForWrong, unanswered: 0 } });
     const problem = roundProblem(system, questions.length);
@@ -433,7 +435,38 @@ class PartyGame {
     this.rules = { secondsPerQuestion, secondsBetweenQuestions, secondsOnAnswer, pointSystem: system, pointsSummary: summaryOf(system), revealAtEnd: !!revealAtEnd };
     this.revealedCount = 0;
     this.round += 1;
+    this.showPages = showPages;
+    if (!showPages.length) return this.goTo(0);
+    this.showPage(0);
+  }
+
+  showPage(position) {
+    this.showIndex = position;
+    this.phase = 'show';
+    this.screen = 'game';
+    this.schedule(this.showPages[position].seconds, () => this.nextShowPage());
+    this.changed();
+  }
+
+  nextShowPage() {
+    if (this.phase !== 'show') return;
+    if (this.showIndex + 1 < this.showPages.length) return this.showPage(this.showIndex + 1);
     this.goTo(0);
+  }
+
+  showImageSrc(url) {
+    const page = this.phase === 'show' && Number(url.searchParams.get('page')) === this.showIndex ? this.showPages[this.showIndex] : null;
+    const block = page?.blocks[Number(url.searchParams.get('block'))];
+    if (block?.type !== 'image') throw new PartyError(404, 'No media');
+    return block.src;
+  }
+
+  showPageView(imageUrl) {
+    const page = this.phase === 'show' ? this.showPages[this.showIndex] : null;
+    return page && {
+      index: this.showIndex, total: this.showPages.length, title: page.title, seconds: page.seconds,
+      blocks: page.blocks.map((block, position) => (block.type === 'image' ? { type: 'image', src: imageUrl(block, position) } : block)),
+    };
   }
 
   backToLobby({ keepScores }) {
@@ -453,6 +486,7 @@ class PartyGame {
     this.answers = [];
     this.stakes = [];
     this.rulings = [];
+    this.showPages = [];
     this.index = -1;
     this.phase = 'lobby';
     this.screen = 'game';
@@ -470,7 +504,8 @@ class PartyGame {
   }
 
   skipWait() {
-    if (this.phase === 'waiting') this.openAnswers();
+    if (this.phase === 'show') this.nextShowPage();
+    else if (this.phase === 'waiting') this.openAnswers();
   }
 
   openAnswers() {
@@ -490,7 +525,7 @@ class PartyGame {
 
   resume() {
     if (this.pausedRemainingMs == null) return;
-    const whenTimeIsUp = { waiting: () => this.openAnswers(), question: () => this.closeAnswers(), reveal: () => this.next() };
+    const whenTimeIsUp = { show: () => this.nextShowPage(), waiting: () => this.openAnswers(), question: () => this.closeAnswers(), reveal: () => this.next() };
     this.schedule(this.pausedRemainingMs / 1000, whenTimeIsUp[this.phase]);
     this.changed();
     this.skipIfEveryoneAgrees();
@@ -662,6 +697,7 @@ class PartyGame {
       answers: answerRows(this.index),
       previous: checkedIndex >= 0 ? { index: checkedIndex, question: this.questions[checkedIndex], answers: answerRows(checkedIndex) } : null,
       leaderboard: this.leaderboard(),
+      showPage: this.showPageView(block => block.src),
     };
   }
 
@@ -682,6 +718,7 @@ class PartyGame {
         }),
       },
       answers: isRevealed ? view.answers.map(({ given, similarity, closestAnswer, hostCall, isDirectCall, ...result }) => result) : [],
+      showPage: this.showPageView((_block, position) => `/tv/show-image?page=${this.showIndex}&block=${position}`),
       isNightMode: this.isNightMode,
     };
   }
@@ -704,6 +741,7 @@ class PartyGame {
       question: PHASES_WITH_QUESTION.includes(this.phase) ? {
         text: question.text, noteBefore: question.note_before, handoutText: question.rekvizit_text, hasHandoutImage: !!question.rekvizit_src, handoutKind: question.rekvizit_kind ?? 'image',
       } : null,
+      showPage: this.showPageView((_block, position) => `/show-image?page=${this.showIndex}&block=${position}`),
       myAnswer: myAnswer?.given ?? null,
       skip: this.skipStatus(player.id),
       reactions: this.areReactionsOn ? REACTIONS : [],
@@ -831,6 +869,7 @@ function routeTv(game, req, res, url) {
     if (!PHASES_WITH_QUESTION.includes(game.phase)) throw new PartyError(404, 'No media');
     return sendMedia(req, res, game.questions[game.index].rekvizit_src);
   }
+  if (url.pathname === '/tv/show-image') return sendMedia(req, res, game.showImageSrc(url));
   if (url.pathname === '/tv/answer-image') {
     if (game.phase !== 'reveal') throw new PartyError(404, 'No media');
     return sendMedia(req, res, game.questions[game.index].source_media_src);
@@ -900,6 +939,10 @@ async function route(game, req, res) {
     game.playerByToken(token);
     if (!PHASES_WITH_QUESTION.includes(game.phase)) throw new PartyError(404, 'No media');
     return sendMedia(req, res, game.questions[game.index].rekvizit_src);
+  }
+  if (req.method === 'GET' && url.pathname === '/show-image') {
+    game.playerByToken(token);
+    return sendMedia(req, res, game.showImageSrc(url));
   }
   if (req.method === 'GET' && url.pathname === '/answer-image') {
     game.playerByToken(token);

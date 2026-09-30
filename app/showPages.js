@@ -1,0 +1,27 @@
+'use strict';
+
+const MAX_BLOCKS = 12;
+const MAX_TITLE_LENGTH = 80;
+const MAX_TEXT_LENGTH = 2000;
+const DEFAULT_SECONDS = 10;
+const OWN_IMAGE = /^own-image:[0-9a-f]{64}\.(png|jpe?g|gif|webp)$/;
+
+const whole = (value, min, max, fallback) => {
+  const number = Math.round(Number(value));
+  return Number.isFinite(number) ? Math.max(min, Math.min(max, number)) : fallback;
+};
+
+function normalizeBlock(block) {
+  if (block?.type === 'image') return OWN_IMAGE.test(block.image ?? '') ? { type: 'image', image: block.image } : null;
+  const text = String(block?.text ?? '').replace(/\r\n?/g, '\n').trim().slice(0, MAX_TEXT_LENGTH);
+  return text ? { type: 'text', text, isLarge: !!block.isLarge } : null;
+}
+
+function normalizeShowPage({ id = null, title, blocks, seconds } = {}) {
+  const cleanTitle = String(title ?? '').replace(/\s+/g, ' ').trim().slice(0, MAX_TITLE_LENGTH);
+  const cleanBlocks = (Array.isArray(blocks) ? blocks : []).map(normalizeBlock).filter(Boolean).slice(0, MAX_BLOCKS);
+  if (!cleanTitle && !cleanBlocks.length) throw new Error('Give the show page a title, a text or a picture');
+  return { id: Number.isInteger(id) && id > 0 ? id : null, title: cleanTitle, blocks: cleanBlocks, seconds: whole(seconds, 3, 600, DEFAULT_SECONDS) };
+}
+
+module.exports = { MAX_BLOCKS, DEFAULT_SECONDS, normalizeShowPage };

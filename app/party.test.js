@@ -734,3 +734,40 @@ test('streak bonuses and all or nothing count through a whole round and reach th
   assert.deepEqual(game.leaderboard().map(entry => [entry.name, entry.score]), [['Aysel', 2 + 3 + 3 + 5], ['Nicat', 0]]);
   assert.deepEqual(reports[0].map(({ name, points }) => [name, points]), [['Aysel', 13], ['Nicat', 0]]);
 });
+
+test('show pages play before the round, each for its seconds, can be skipped or paused, and serve their pictures', async () => {
+  const picture = path.join(fs.mkdtempSync(path.join(require('node:os').tmpdir(), 'show-')), 'welcome.png');
+  fs.writeFileSync(picture, Buffer.from('89504e470d0a1a0a', 'hex'));
+  const { game, close } = await openParty({ judge: judgeByText }, { port: 0 });
+  const base = `http://127.0.0.1:${game.port}`;
+  try {
+    const aysel = game.join('Aysel');
+    const pages = [
+      { title: 'Welcome', seconds: 5, blocks: [{ type: 'text', text: 'Hello everyone', isLarge: true }, { type: 'image', image: 'own-image:x.png', src: require('node:url').pathToFileURL(picture).href }] },
+      { title: 'Round 1 rules', seconds: 8, blocks: [{ type: 'text', text: 'No phones.' }] },
+    ];
+    game.startRound({ ...ROUND, showPages: pages });
+    assert.equal(game.phase, 'show');
+    assert.ok(game.remainingMs() > 4000 && game.remainingMs() <= 5000);
+    const tv = game.tvView().showPage;
+    assert.deepEqual([tv.index, tv.total, tv.title, tv.blocks[0].text, tv.blocks[1].src], [0, 2, 'Welcome', 'Hello everyone', '/tv/show-image?page=0&block=1']);
+    assert.equal(game.playerView(aysel).showPage.blocks[1].src, '/show-image?page=0&block=1');
+    assert.equal(game.playerView(aysel).question, null);
+    assert.equal((await fetch(`${base}/tv/show-image?page=0&block=1`)).status, 200);
+    assert.equal((await fetch(`${base}/tv/show-image?page=0&block=0`)).status, 404);
+    assert.equal((await fetch(`${base}/show-image?page=0&block=1`)).status, 401);
+    assert.equal((await fetch(`${base}/show-image?page=0&block=1&token=${aysel.token}`)).status, 200);
+    game.pause();
+    assert.ok(game.hostView().isPaused);
+    game.resume();
+    game.skipWait();
+    assert.deepEqual([game.phase, game.showIndex, game.hostView().showPage.title], ['show', 1, 'Round 1 rules']);
+    assert.equal((await fetch(`${base}/tv/show-image?page=0&block=1`)).status, 404);
+    assert.equal(game.skipStatus().isAvailable, true);
+    game.skipWait();
+    assert.equal(game.phase, 'question');
+    assert.equal(game.tvView().showPage, null);
+  } finally {
+    await close();
+  }
+});

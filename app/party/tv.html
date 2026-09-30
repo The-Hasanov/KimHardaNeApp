@@ -96,6 +96,14 @@ video.image { width: 100%; background: #000; }
 .image { display: block; max-width: 100%; max-height: 45vh; border-radius: .8vw; border: 1px solid #262626; }
 .caption { font-size: .8em; color: #a3a3a3; text-transform: uppercase; letter-spacing: .05em; }
 .pre { white-space: pre-line; }
+.show { -webkit-flex: 1; flex: 1; min-height: 0; overflow: hidden; display: -webkit-flex; display: flex; -webkit-flex-direction: column; flex-direction: column; -webkit-align-items: center; align-items: center; -webkit-justify-content: center; justify-content: center; text-align: center; padding: 3vw 8vw; }
+.show-title { font-size: 4.6vw; font-weight: 700; line-height: 1.15; margin: 0 0 2vw; }
+.show-text { font-size: 2.3vw; line-height: 1.4; color: #d4d4d4; margin: 0 0 1.6vw; max-width: 84vw; }
+.show-text.large { font-size: 3.4vw; font-weight: 600; color: inherit; }
+.show-image { display: block; max-width: 84vw; max-height: 42vh; border-radius: .8vw; margin: 0 0 1.6vw; }
+.show-count { position: fixed; bottom: 1.5vw; left: 2vw; font-size: 1.2vw; }
+.light .show-text { color: #404040; }
+.light .show-text.large { color: inherit; }
 .credits { font-size: .75em; color: #a3a3a3; }
 .reveal { -webkit-flex: 1; flex: 1; min-height: 0; display: -webkit-flex; display: flex; padding: 3vw; }
 .reveal .main { -webkit-flex: 1; flex: 1; min-width: 0; overflow: hidden; display: -webkit-flex; display: flex; -webkit-flex-direction: column; flex-direction: column; margin-right: 3vw; }
@@ -270,6 +278,16 @@ function standingsScreen() {
     leaderboard(state.leaderboard.slice(0, 12), isRoundUnderway));
 }
 
+function showScreen() {
+  var page = state.showPage;
+  return el('div', 'show',
+    page.title && el('h1', 'show-title', page.title),
+    page.blocks.map(function (block) {
+      return block.type === 'image' ? image('show-image', block.src, '') : el('p', block.isLarge ? 'show-text large pre' : 'show-text pre', block.text);
+    }),
+    page.total > 1 && el('div', 'show-count muted numbers', (page.index + 1) + ' / ' + page.total));
+}
+
 function waitingScreen() {
   return el('div', 'center', el('div', 'muted', 'Question'), el('div', 'big-number numbers', state.index + 1), el('div', 'muted', 'of ' + state.total));
 }
@@ -398,7 +416,7 @@ function render(next) {
   deadline = state && state.remainingMs != null && !state.isPaused ? Date.now() + state.remainingMs : null;
   var screen = shownScreen();
   if (state) document.title = state.title + ' · TV';
-  var key = screen === 'question' ? 'question:' + state.round + ':' + state.index : screen === 'none' ? 'none:' + partyTitle() : JSON.stringify(state);
+  var key = screen === 'question' ? 'question:' + state.round + ':' + state.index : screen === 'show' ? 'show:' + state.round + ':' + state.showPage.index : screen === 'none' ? 'none:' + partyTitle() : JSON.stringify(state);
   if (state && !hasChimed) {
     hasChimed = true;
     chime();
@@ -412,6 +430,7 @@ function render(next) {
   if (screen === 'none') show(el('div', 'center', el('h1', 'title', partyTitle()), el('p', 'muted', 'Waiting for the host…')));
   else if (screen === 'lobby' || screen === 'join') show(lobbyScreen());
   else if (screen === 'leaderboard') show(standingsScreen());
+  else if (screen === 'show') show(showScreen());
   else if (screen === 'waiting') show(waitingScreen());
   else if (screen === 'question') show(questionScreen());
   else if (screen === 'reveal') show(revealScreen());

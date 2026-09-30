@@ -30,9 +30,11 @@ import {
 import { toast } from 'sonner';
 import { CorrectAnswer } from './Play';
 import { useNightMode } from './theme';
+import { ShowPageSlide } from './ShowPages';
 
 const { api } = window;
-const PHASES_IN_ROUND = ['waiting', 'question', 'judging', 'reveal'];
+const PHASES_IN_ROUND = ['show', 'waiting', 'question', 'judging', 'reveal'];
+const SKIPPED_BY_HOST = ['show', 'waiting'];
 
 const secondsLabel = seconds => (seconds == null ? '—' : `${seconds.toFixed(1)} s`);
 const answerSeconds = answer => (answer?.ms == null || !answer.given ? null : answer.ms / 1000);
@@ -381,6 +383,18 @@ function PlayerAnswers({ party, answers = party.answers, position = party.index 
   );
 }
 
+function ShowForHost({ party }) {
+  const page = party.showPage;
+  const isLast = page.index + 1 === page.total;
+  return (
+    <div className="mx-auto max-w-4xl space-y-4 px-8 py-8">
+      <p className="text-sm font-medium text-muted-foreground">On the TV and phones · show page {page.index + 1} of {page.total}</p>
+      <div className="@container"><ShowPageSlide page={page} /></div>
+      <p className="text-sm text-muted-foreground">{isLast ? `Then question 1 of ${party.total}.` : 'Then the next show page.'}</p>
+    </div>
+  );
+}
+
 function QuestionForHost({ party, onKick }) {
   const isUpNext = party.phase === 'waiting';
   return (
@@ -683,7 +697,7 @@ export default function PartyScreen({ party, isVisible, lobbySettings, onBackToL
   const secondsLeft = party.isPaused ? party.remainingMs / 1000 : countdownSeconds;
   const wholeSecondsLeft = Math.ceil(secondsLeft);
   const isRunningOut = party.phase === 'question' && wholeSecondsLeft <= WARNING_AT_SECONDS_LEFT;
-  const hasRunningClock = ['waiting', 'question'].includes(party.phase) || (party.phase === 'reveal' && party.remainingMs != null);
+  const hasRunningClock = ['show', 'waiting', 'question'].includes(party.phase) || (party.phase === 'reveal' && party.remainingMs != null);
 
   const nightMode = useNightMode();
   useEffect(() => {
@@ -692,8 +706,8 @@ export default function PartyScreen({ party, isVisible, lobbySettings, onBackToL
 
   handleKeyDown.current = e => {
     if (!isVisible || e.target.closest?.('input, textarea, [role=dialog], [role=alertdialog], [role=listbox]')) return;
-    if (party.phase === 'waiting' && [' ', 'ArrowRight'].includes(e.key)) api.partySkipWait();
-    else if (hasRunningClock && party.phase !== 'waiting' && e.key === ' ') (party.isPaused ? api.partyResume : api.partyPause)();
+    if (SKIPPED_BY_HOST.includes(party.phase) && [' ', 'ArrowRight'].includes(e.key)) api.partySkipWait();
+    else if (hasRunningClock && !SKIPPED_BY_HOST.includes(party.phase) && e.key === ' ') (party.isPaused ? api.partyResume : api.partyPause)();
     else if ((party.phase === 'reveal' || isWaitingToReveal(party)) && ['Enter', 'ArrowRight'].includes(e.key)) api.partyNext();
     else return;
     e.preventDefault();
@@ -707,7 +721,7 @@ export default function PartyScreen({ party, isVisible, lobbySettings, onBackToL
   const isInRound = PHASES_IN_ROUND.includes(party.phase);
   const answeredCount = party.players.filter(player => player.hasAnswered).length;
   const isLastQuestion = party.index + 1 === party.total;
-  const secondsOfPhase = { waiting: party.rules.secondsBetweenQuestions, question: party.rules.secondsPerQuestion, reveal: party.rules.secondsOnAnswer };
+  const secondsOfPhase = { show: party.showPage?.seconds, waiting: party.rules.secondsBetweenQuestions, question: party.rules.secondsPerQuestion, reveal: party.rules.secondsOnAnswer };
   const timerPercent = hasRunningClock ? (secondsLeft / secondsOfPhase[party.phase]) * 100 : 0;
 
   return (
@@ -715,7 +729,7 @@ export default function PartyScreen({ party, isVisible, lobbySettings, onBackToL
       <div className="flex h-full flex-col">
         <div className="flex shrink-0 flex-wrap items-center gap-x-4 gap-y-2 border-b px-6 py-3">
           <span className="flex min-w-0 items-center gap-2 text-sm font-medium"><UsersIcon className="size-4 shrink-0" /><span className="truncate">{party.title}</span></span>
-          {isInRound && <span className="text-sm">Round {party.round} · Question {party.index + 1} of {party.total}</span>}
+          {isInRound && <span className="text-sm">Round {party.round} · {party.phase === 'show' ? `Show page ${party.showPage.index + 1} of ${party.showPage.total}` : `Question ${party.index + 1} of ${party.total}`}</span>}
           <span className="text-sm text-muted-foreground">{party.players.length} {party.players.length === 1 ? 'player' : 'players'}</span>
           {party.urls[0] && isInRound && <span className="font-mono text-sm text-muted-foreground">Join: {hostOf(party.urls[0].url)}</span>}
           <div className="ml-auto flex gap-2">
@@ -759,6 +773,7 @@ export default function PartyScreen({ party, isVisible, lobbySettings, onBackToL
               <AllTimeLeaderboard />
             </div>
           )}
+          {party.phase === 'show' && <ShowForHost party={party} />}
           {['waiting', 'question', 'judging'].includes(party.phase) && <QuestionForHost party={party} onKick={kick} />}
           {party.phase === 'reveal' && (
             <div className="mx-auto grid max-w-6xl gap-8 px-8 py-8 lg:grid-cols-[1fr_20rem]">
@@ -792,13 +807,18 @@ export default function PartyScreen({ party, isVisible, lobbySettings, onBackToL
                 isRunningOut && 'text-amber-500')}>{formatClock(wholeSecondsLeft)}</span>
             )}
             {party.phase === 'reveal' && hasRunningClock && <span className="text-lg text-muted-foreground">until {isLastQuestion ? 'the round results' : party.rules.revealAtEnd ? 'the next answer' : 'the next question'} (autoplay)</span>}
+            {party.phase === 'show' && (
+              <Button size="lg" onClick={() => api.partySkipWait()}>
+                <SkipForwardIcon />{party.showPage.index + 1 === party.showPage.total ? 'Start the questions' : 'Next show page'}<Kbd className={KEY_HINT_ON_PRIMARY_BUTTON}>Space</Kbd>
+              </Button>
+            )}
             {party.phase === 'waiting' && (
               <Button size="lg" onClick={() => api.partySkipWait()}><SkipForwardIcon />Skip wait<Kbd className={KEY_HINT_ON_PRIMARY_BUTTON}>Space</Kbd></Button>
             )}
             {hasRunningClock && (
               party.isPaused
-                ? <Button size="lg" variant="outline" onClick={() => api.partyResume()}><PlayIcon />Resume{party.phase !== 'waiting' && <Kbd>Space</Kbd>}</Button>
-                : <Button size="lg" variant="outline" onClick={() => api.partyPause()}><PauseIcon />Pause{party.phase !== 'waiting' && <Kbd>Space</Kbd>}</Button>
+                ? <Button size="lg" variant="outline" onClick={() => api.partyResume()}><PlayIcon />Resume{!SKIPPED_BY_HOST.includes(party.phase) && <Kbd>Space</Kbd>}</Button>
+                : <Button size="lg" variant="outline" onClick={() => api.partyPause()}><PauseIcon />Pause{!SKIPPED_BY_HOST.includes(party.phase) && <Kbd>Space</Kbd>}</Button>
             )}
             {party.skips.isAvailable && party.skips.count > 0 && <SkipProgress skips={party.skips} />}
             {party.phase === 'question' && <>
