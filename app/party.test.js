@@ -399,3 +399,43 @@ test('the party server lets a phone check its place, rename and skip', async () 
     await close();
   }
 });
+
+test('leaving the page during a question warns the host only, counts each time and starts again at each question', async () => {
+  const game = newGame();
+  const aysel = game.join('Aysel');
+  const nicat = game.join('Nicat');
+  const nicatStream = { playerId: nicat.id, view: () => null, send() {}, end() {} };
+  game.streams.add(nicatStream);
+  game.reportAway(aysel.token);
+  assert.equal(game.hostView().players[0].timesAway, 0, 'the lobby is not watched');
+  game.startRound(ROUND);
+  game.reportAway(aysel.token);
+  game.reportAway(aysel.token);
+  game.streams.delete(nicatStream);
+  game.presenceChanged(nicat.id);
+  assert.deepEqual(game.hostView().players.map(p => [p.name, p.timesAway]), [['Aysel', 2], ['Nicat', 1]]);
+  assert.ok(!JSON.stringify(game.tvView()).includes('timesAway'));
+  assert.ok(!('timesAway' in game.playerView(aysel)));
+  await game.closeAnswers();
+  game.reportAway(aysel.token);
+  assert.equal(game.hostView().players[0].timesAway, 2, 'the answer screen is not watched, the count stays for review');
+  game.next();
+  assert.deepEqual(game.hostView().players.map(p => p.timesAway), [0, 0]);
+  game.finish();
+});
+
+test('a player can leave the game from the phone and join again', async () => {
+  const { game, close } = await openParty({ judge: judgeByText }, { port: 0 });
+  const base = `http://127.0.0.1:${game.port}`;
+  try {
+    const post = (route, body) => fetch(base + route, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    const { token } = await (await post('/join', { name: 'Aysel' })).json();
+    assert.equal((await post('/away', { token })).status, 200);
+    assert.equal((await post('/leave', { token })).status, 200);
+    assert.equal(game.players.size, 0);
+    assert.equal((await post('/leave', { token })).status, 401);
+    assert.equal((await post('/join', { name: 'Aysel' })).status, 200);
+  } finally {
+    await close();
+  }
+});

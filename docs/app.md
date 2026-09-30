@@ -85,8 +85,10 @@ npm test         # offline tests for the scraper, search, ranking, edits, data u
   length-limited, and the host can remove a player at any time, online or not (a green dot marks who is online):
 their answers and score leave the party, and their phone asks for a name again, so it is not a ban. A phone that
 loses the connection keeps its place and reconnects by itself, even after minutes or a page reload; only a removed
-player or a closed party has to join again. Players can change their name from the phone (tap it), never to a name
-someone else has. Phones have a small *Skip* button while the next question's number, a question or an answer is
+player or a closed party has to join again. The phone's *Settings* (tap the name, or the button in the lobby) change the name, never to a name
+someone else has, and *Leave the game* removes the player and their score, as if the host had removed them. While a
+question runs, a phone that switches to another tab or app, or loses the connection, gets a warning sign on the
+host's screen only, with how many times; the count starts again at each question. Phones have a small *Skip* button while the next question's number, a question or an answer is
 shown: when every online player has tapped it (tap again to take it back), the game moves on, unless the host has
 paused; phones and the host see how many tapped, and the count starts again at each step. Every finished round adds
 each player's correct, wrong and unanswered questions (counted from the question they joined at) to the

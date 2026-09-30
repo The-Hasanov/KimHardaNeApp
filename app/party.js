@@ -55,6 +55,7 @@ class PartyGame {
     this.rulings = [];
     this.closedCount = 0;
     this.skips = { key: null, playerIds: new Set() };
+    this.absences = { key: null, counts: new Map() };
     this.rules = { ...DEFAULT_RULES };
     this.phase = 'lobby';
     this.index = -1;
@@ -97,8 +98,9 @@ class PartyGame {
     return [...this.streams].some(stream => stream.playerId === playerId);
   }
 
-  presenceChanged() {
+  presenceChanged(playerId = null) {
     if (this.isClosed) return;
+    if (playerId && !this.isOnline(playerId)) this.recordAbsence(playerId);
     this.changed();
     this.skipIfEveryoneAgrees();
   }
@@ -136,6 +138,31 @@ class PartyGame {
     if (isBlank(given)) return null;
     const rulings = this.rulings[position] ?? [];
     return rulings.find(ruling => ruling.given === given) ?? rulings.find(ruling => matchesAsText(given, ruling.given)) ?? null;
+  }
+
+  questionKey() {
+    return `${this.round}:${this.index}`;
+  }
+
+  recordAbsence(playerId) {
+    if (this.phase !== 'question' || !this.players.has(playerId)) return;
+    if (this.absences.key !== this.questionKey()) this.absences = { key: this.questionKey(), counts: new Map() };
+    this.absences.counts.set(playerId, (this.absences.counts.get(playerId) ?? 0) + 1);
+  }
+
+  reportAway(token) {
+    const player = this.playerByToken(token);
+    if (this.phase !== 'question') return;
+    this.recordAbsence(player.id);
+    this.changed();
+  }
+
+  absencesOf(playerId) {
+    return this.absences.key === this.questionKey() ? this.absences.counts.get(playerId) ?? 0 : 0;
+  }
+
+  leave(token) {
+    this.kick(this.playerByToken(token).id);
   }
 
   skipKey() {
@@ -380,7 +407,7 @@ class PartyGame {
       id: this.id, phase: this.phase, round: this.round, index: this.index, total: this.questions.length,
       remainingMs: this.remainingMs(), isPaused: this.pausedRemainingMs != null, screen: this.screen,
       rules: this.rules, urls: this.urls, port: this.port, question: this.questions[this.index] ?? null,
-      players: [...this.players.values()].map(p => ({ id: p.id, name: p.name, hasAnswered: !!current?.has(p.id), isOnline: this.isOnline(p.id) })),
+      players: [...this.players.values()].map(p => ({ id: p.id, name: p.name, hasAnswered: !!current?.has(p.id), isOnline: this.isOnline(p.id), timesAway: this.absencesOf(p.id) })),
       skips: this.skipStatus(),
       answers: answerRows(this.index),
       previous: checkedIndex >= 0 ? { index: checkedIndex, question: this.questions[checkedIndex], answers: answerRows(checkedIndex) } : null,
@@ -389,11 +416,12 @@ class PartyGame {
   }
 
   tvView() {
-    const { previous, skips, ...view } = this.hostView();
+    const { previous, skips, players, ...view } = this.hostView();
     const question = PHASES_WITH_QUESTION.includes(this.phase) ? this.questions[this.index] : null;
     const isRevealed = this.phase === 'reveal';
     return {
       ...view,
+      players: players.map(({ timesAway, ...player }) => player),
       question: question && {
         text: question.text, note_before: question.note_before, rekvizit_text: question.rekvizit_text,
         package_name: question.package_name, tournament_name: question.tournament_name, authors: question.authors,
@@ -497,7 +525,7 @@ function openEventStream(game, req, res, { playerId = null, view }) {
   req.on('close', () => {
     clearInterval(heartbeat);
     const wasOpen = game.streams.delete(stream);
-    if (playerId && wasOpen) game.presenceChanged();
+    if (playerId && wasOpen) game.presenceChanged(playerId);
   });
   if (playerId) game.presenceChanged();
   else stream.send(view());
@@ -545,6 +573,14 @@ async function route(game, req, res) {
     const body = await readJson(req);
     const player = game.rename(body.token, body.name);
     return sendJson(res, 200, { name: player.name });
+  }
+  if (req.method === 'POST' && url.pathname === '/away') {
+    game.reportAway((await readJson(req)).token);
+    return sendJson(res, 200, { ok: true });
+  }
+  if (req.method === 'POST' && url.pathname === '/leave') {
+    game.leave((await readJson(req)).token);
+    return sendJson(res, 200, { ok: true });
   }
   if (req.method === 'POST' && url.pathname === '/skip') {
     game.toggleSkip((await readJson(req)).token);

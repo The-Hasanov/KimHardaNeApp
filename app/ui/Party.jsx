@@ -3,7 +3,7 @@ import QRCode from 'qrcode';
 import { cn } from 'cn';
 import {
   AppWindowIcon, ArrowRightIcon, CastIcon, CheckIcon, ChevronDownIcon, CircleHelpIcon, DoorClosedIcon, EyeIcon, EyeOffIcon, FlagIcon, GamepadIcon, PauseIcon, PlayIcon, QrCodeIcon,
-  RotateCcwIcon, SkipForwardIcon, Trash2Icon, TrophyIcon, TvIcon, UserXIcon, UsersIcon, WifiOffIcon, XIcon,
+  RotateCcwIcon, SkipForwardIcon, Trash2Icon, TriangleAlertIcon, TrophyIcon, TvIcon, UserXIcon, UsersIcon, WifiOffIcon, XIcon,
 } from 'lucide-react';
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter,
@@ -84,6 +84,17 @@ function OnlineDot({ isOnline }) {
   return (
     <span className={cn('size-2 shrink-0 rounded-full', isOnline ? 'bg-emerald-500' : 'bg-muted-foreground/40')}
       title={isOnline ? 'Online' : 'Offline'} aria-label={isOnline ? 'Online' : 'Offline'} />
+  );
+}
+
+function AwayWarning({ timesAway }) {
+  if (!timesAway) return null;
+  const label = `Left the game screen ${timesAway === 1 ? 'once' : `${timesAway} times`} during this question`;
+  return (
+    <span className="inline-flex shrink-0 items-center gap-0.5 text-amber-600 dark:text-amber-400" title={label} aria-label={label}>
+      <TriangleAlertIcon className="size-4" />
+      {timesAway > 1 && <span className="text-xs font-semibold tabular-nums">{timesAway}</span>}
+    </span>
   );
 }
 
@@ -220,7 +231,7 @@ function LiveAnswers({ party, onKick }) {
             <li key={player.id} className="flex items-center gap-2 px-3 py-2">
               <OnlineDot isOnline={player.isOnline} />
               <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-medium">{player.name}</p>
+                <p className="flex items-center gap-1.5 text-sm font-medium"><span className="truncate">{player.name}</span><AwayWarning timesAway={player.timesAway} /></p>
                 {showsAnswers && (
                   <p className={cn('truncate text-sm', !answer?.given && 'text-muted-foreground')} title={answer?.given}>
                     {answer ? answer.given || 'Blank' : 'No answer yet'}
@@ -247,6 +258,7 @@ function LiveAnswers({ party, onKick }) {
 
 function PlayerAnswers({ party, answers = party.answers, position = party.index }) {
   const answeredIds = new Set(answers.map(answer => answer.playerId));
+  const timesAway = new Map(position === party.index ? party.players.map(player => [player.id, player.timesAway]) : []);
   const silentPlayers = party.players.filter(player => !answeredIds.has(player.id));
   return (
     <div className="space-y-2">
@@ -256,7 +268,7 @@ function PlayerAnswers({ party, answers = party.answers, position = party.index 
           const { label, Icon, className } = OUTCOMES[outcomeOf(answer)];
           return (
             <li key={answer.playerId} className="flex flex-wrap items-center gap-x-4 gap-y-1 px-4 py-2.5">
-              <span className="w-32 truncate font-medium">{answer.name}</span>
+              <span className="flex w-32 items-center gap-1.5 font-medium"><span className="truncate">{answer.name}</span><AwayWarning timesAway={timesAway.get(answer.playerId)} /></span>
               <span className="min-w-0 flex-1 truncate">{answer.given || '—'}</span>
               <span className={cn('flex items-center gap-1 text-sm font-semibold', className)}><Icon className="size-4" />{label}</span>
               <span className="w-8 text-right text-sm tabular-nums">{pointsLabel(answer.points)}</span>
