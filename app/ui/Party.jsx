@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import QRCode from 'qrcode';
 import { cn } from 'cn';
 import {
-  AppWindowIcon, ArrowRightIcon, CastIcon, CheckIcon, ChevronDownIcon, CircleHelpIcon, DoorClosedIcon, EyeIcon, EyeOffIcon, FlagIcon, GamepadIcon, PauseIcon, PlayIcon, QrCodeIcon,
+  AppWindowIcon, ArrowRightIcon, CastIcon, MegaphoneIcon, SendIcon, CheckIcon, ChevronDownIcon, CircleHelpIcon, DoorClosedIcon, EyeIcon, EyeOffIcon, FlagIcon, GamepadIcon, PauseIcon, PlayIcon, QrCodeIcon,
   RotateCcwIcon, SkipForwardIcon, Trash2Icon, TriangleAlertIcon, TrophyIcon, TvIcon, UserXIcon, UsersIcon, WifiOffIcon, XIcon,
 } from 'lucide-react';
 import {
@@ -19,6 +19,7 @@ import { Kbd } from '@/components/ui/kbd';
 import { Progress } from '@/components/ui/progress';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Spinner } from '@/components/ui/spinner';
+import { Textarea } from '@/components/ui/textarea';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import {
   KEY_HINT_ON_PRIMARY_BUTTON, QuestionOnScreen, WARNING_AT_SECONDS_LEFT, formatClock, useCountdown, withLineBreaks,
@@ -425,6 +426,65 @@ function TvMenu() {
   );
 }
 
+const MESSAGE_LENGTH = 300;
+
+function MessageDialog({ isOpen, onOpenChange, announcement }) {
+  const [text, setText] = useState('');
+  const send = async () => {
+    if (!text.trim()) return;
+    await api.partyAnnounce(text);
+    setText('');
+    toast.success('Sent to every phone');
+    onOpenChange(false);
+  };
+  return (
+    <Dialog open={isOpen} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-lg">
+        <DialogHeader>
+          <DialogTitle>Message to all players</DialogTitle>
+          <DialogDescription>
+            A clue or an announcement shown on every phone. Players cannot reply. It stays until the next question or until you
+            clear it.
+          </DialogDescription>
+        </DialogHeader>
+        {announcement && (
+          <div className="flex items-start gap-3 rounded-lg border bg-muted/50 p-3">
+            <MegaphoneIcon className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
+            <p className="min-w-0 flex-1 text-sm break-words"><span className="text-muted-foreground">On the phones now: </span>{announcement.text}</p>
+            <Button size="sm" variant="ghost" onClick={() => api.partyAnnounce('')}><XIcon />Clear</Button>
+          </div>
+        )}
+        <div className="space-y-1.5">
+          <Textarea autoFocus rows={3} maxLength={MESSAGE_LENGTH} value={text} placeholder="For example: Think about the year, not the city."
+            onChange={e => setText(e.target.value)}
+            onKeyDown={e => {
+              if (e.key !== 'Enter' || e.shiftKey) return;
+              e.preventDefault();
+              send();
+            }} />
+          <p className="text-right text-xs text-muted-foreground tabular-nums">{text.length}/{MESSAGE_LENGTH}</p>
+        </div>
+        <DialogFooter>
+          <DialogClose asChild><Button variant="outline">Cancel</Button></DialogClose>
+          <Button disabled={!text.trim()} onClick={send}><SendIcon />{announcement ? 'Replace message' : 'Send to all phones'}<Kbd className={KEY_HINT_ON_PRIMARY_BUTTON}>Enter</Kbd></Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function AnnouncementStrip({ announcement, onOpen }) {
+  return (
+    <div className="flex shrink-0 items-center gap-3 border-b bg-muted/40 px-6 py-1.5 text-sm animate-in fade-in-0 slide-in-from-top-1">
+      <MegaphoneIcon className="size-4 shrink-0 text-muted-foreground" />
+      <span className="shrink-0 text-muted-foreground">On every phone:</span>
+      <span className="min-w-0 flex-1 truncate font-medium" title={announcement.text}>{announcement.text}</span>
+      <Button size="xs" variant="ghost" onClick={onOpen}>Change</Button>
+      <Button size="xs" variant="ghost" onClick={() => api.partyAnnounce('')}><XIcon />Clear</Button>
+    </div>
+  );
+}
+
 function PlayersInLobby({ players, onKick }) {
   return (
     <div className="space-y-3">
@@ -447,6 +507,7 @@ function PlayersInLobby({ players, onKick }) {
 export default function PartyScreen({ party, isVisible, lobbySettings, onBackToLobby, onClose }) {
   const [isConfirmingClose, setIsConfirmingClose] = useState(false);
   const [playerToKick, setPlayerToKick] = useState(null);
+  const [isWritingMessage, setIsWritingMessage] = useState(false);
   const kick = player => (party.phase === 'lobby' && party.round === 0 ? api.partyKick(player.id) : setPlayerToKick(player));
   const handleKeyDown = useRef(null);
   const deadline = useMemo(() => (party.remainingMs == null || party.isPaused ? null : Date.now() + party.remainingMs), [party]);
@@ -489,6 +550,7 @@ export default function PartyScreen({ party, isVisible, lobbySettings, onBackToL
         <span className="text-sm text-muted-foreground">{party.players.length} {party.players.length === 1 ? 'player' : 'players'}</span>
         {party.urls[0] && isInRound && <span className="font-mono text-sm text-muted-foreground">Join: {hostOf(party.urls[0].url)}</span>}
         <div className="ml-auto flex gap-2">
+          <Button variant="outline" size="sm" disabled={!party.players.length} onClick={() => setIsWritingMessage(true)}><MegaphoneIcon />Message</Button>
           {isInRound && <Button variant="outline" size="sm" onClick={() => api.partyFinishRound()}><FlagIcon />End round</Button>}
           <ToggleGroup type="single" variant="outline" size="sm" spacing={0} value={party.screen} aria-label="What the TV shows"
             onValueChange={screen => screen && api.partySetScreen(screen)}>
@@ -500,6 +562,7 @@ export default function PartyScreen({ party, isVisible, lobbySettings, onBackToL
           <Button variant="outline" size="sm" onClick={() => setIsConfirmingClose(true)}><DoorClosedIcon />Close party</Button>
         </div>
       </div>
+      {party.announcement && <AnnouncementStrip announcement={party.announcement} onOpen={() => setIsWritingMessage(true)} />}
       {isInRound && (
         <Progress value={timerPercent} className={cn('h-1 shrink-0 rounded-none', isRunningOut && '[&>[data-slot=progress-indicator]]:bg-amber-500')} />
       )}
@@ -589,6 +652,8 @@ export default function PartyScreen({ party, isVisible, lobbySettings, onBackToL
           )}
         </div>
       )}
+
+      <MessageDialog isOpen={isWritingMessage} onOpenChange={setIsWritingMessage} announcement={party.announcement} />
 
       <AlertDialog open={playerToKick != null} onOpenChange={isOpen => !isOpen && setPlayerToKick(null)}>
         <AlertDialogContent>

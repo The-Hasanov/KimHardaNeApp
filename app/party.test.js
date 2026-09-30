@@ -439,3 +439,26 @@ test('a player can leave the game from the phone and join again', async () => {
     await close();
   }
 });
+
+test('the host sends one-way messages to every phone; they clear at the next question and never reach the TV', async () => {
+  const game = newGame();
+  const aysel = game.join('Aysel');
+  game.announce('  Starting   in two minutes  ');
+  assert.equal(game.playerView(aysel).announcement.text, 'Starting in two minutes');
+  game.startRound(ROUND);
+  assert.equal(game.playerView(aysel).announcement, null);
+  game.announce('Think about the year');
+  const { id } = game.playerView(aysel).announcement;
+  assert.equal(game.hostView().announcement.id, id);
+  assert.ok(!JSON.stringify(game.tvView()).includes('Think about'));
+  game.announce('x'.repeat(1000));
+  assert.equal(game.playerView(aysel).announcement.text.length, 300);
+  assert.notEqual(game.playerView(aysel).announcement.id, id);
+  game.announce('');
+  assert.equal(game.playerView(aysel).announcement, null);
+  game.announce('Clue');
+  await game.closeAnswers();
+  game.next();
+  assert.equal(game.playerView(aysel).announcement, null);
+  game.finish();
+});

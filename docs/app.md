@@ -88,7 +88,9 @@ loses the connection keeps its place and reconnects by itself, even after minute
 player or a closed party has to join again. The phone's *Settings* (tap the name, or the button in the lobby) change the name, never to a name
 someone else has, and *Leave the game* removes the player and their score, as if the host had removed them. While a
 question runs, a phone that switches to another tab or app, or loses the connection, gets a warning sign on the
-host's screen only, with how many times; the count starts again at each question. Phones have a small *Skip* button while the next question's number, a question or an answer is
+host's screen only, with how many times; the count starts again at each question. *Message* in the party header sends a clue or
+an announcement (up to 300 characters) to every phone, never to the TV; players cannot reply. It shows at the top of each
+phone, which vibrates where it can, until the player closes it, the host clears or replaces it, or the next question starts. Phones have a small *Skip* button while the next question's number, a question or an answer is
 shown: when every online player has tapped it (tap again to take it back), the game moves on, unless the host has
 paused; phones and the host see how many tapped, and the count starts again at each step. Every finished round adds
 each player's correct, wrong and unanswered questions (counted from the question they joined at) to the

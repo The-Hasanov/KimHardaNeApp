@@ -274,6 +274,7 @@ app.whenReady().then(() => {
   handle('party-finish-round', withParty(game => game.finish()));
   handle('party-set-correct', withParty((game, playerId, position, isCorrect) => game.setCorrect(playerId, position, isCorrect)));
   handle('party-kick', withParty((game, playerId) => game.kick(playerId)));
+  handle('party-announce', withParty((game, text) => game.announce(text)));
   handle('party-back-to-lobby', withParty((game, keepScores) => game.backToLobby({ keepScores })));
   handle('party-close', closeParty);
   handle('party-results', () => store.partyResults());

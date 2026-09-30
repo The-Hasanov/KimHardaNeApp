@@ -79,6 +79,15 @@ button:disabled { opacity: .5; }
 .row { display: flex; gap: 8px; }
 .row button { flex: 1; }
 .secondary { background: var(--card); color: var(--fg); border: 1px solid var(--border); }
+.notice { display: flex; gap: 12px; align-items: flex-start; padding: 12px 12px 12px 14px; border-radius: 14px; background: var(--primary); color: var(--primary-fg); }
+.notice.is-new { animation: drop .25s ease-out; }
+.notice[hidden] { display: none; }
+@keyframes drop { from { transform: translateY(-8px); opacity: 0; } }
+.notice-icon { flex: none; width: 32px; height: 32px; border-radius: 50%; display: grid; place-items: center; background: color-mix(in srgb, var(--primary-fg) 14%, transparent); }
+.notice-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.notice-label { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; opacity: .7; }
+.notice-text { font-size: 17px; font-weight: 600; line-height: 1.35; overflow-wrap: anywhere; }
+.notice-close { flex: none; width: 32px; height: 32px; padding: 0; display: grid; place-items: center; border-radius: 50%; background: transparent; color: inherit; opacity: .7; }
 .danger { background: color-mix(in srgb, var(--bad) 12%, transparent); color: var(--bad); border: 1px solid color-mix(in srgb, var(--bad) 45%, transparent); }
 .sheet-overlay { align-items: flex-end; padding: 0; }
 .sheet { max-width: 640px !important; border-radius: 20px 20px 0 0; border-bottom: 0; padding: 16px 16px calc(24px + env(safe-area-inset-bottom)); gap: 16px; animation: rise .2s ease-out; }
@@ -165,6 +174,7 @@ function show(...children) {
 function showJoin(errorText = '', { previousName = session?.name ?? '', note = 'Type your name to join the game.' } = {}) {
   renderedScreen = 'join';
   banner.hidden = true;
+  notice.hidden = true;
   const name = el('input', { placeholder: 'Your name', maxLength: 24, autocomplete: 'nickname', required: true, value: previousName });
   const error = el('p', { class: 'error' }, errorText);
   const button = el('button', { type: 'submit' }, 'Join the game');
@@ -303,6 +313,47 @@ function showSettings() {
   document.body.append(overlay);
 }
 
+const DISMISSED_KEY = 'party-dismissed-announcement';
+const notice = el('div', { class: 'notice', hidden: true, role: 'status' });
+let shownAnnouncementId = null;
+
+function dismissedAnnouncementId() {
+  try {
+    return sessionStorage.getItem(DISMISSED_KEY);
+  } catch {
+    return null;
+  }
+}
+
+function dismissAnnouncement() {
+  try {
+    sessionStorage.setItem(DISMISSED_KEY, shownAnnouncementId);
+  } catch {}
+  notice.hidden = true;
+}
+
+function updateAnnouncement() {
+  const announcement = state?.announcement;
+  if (!announcement || announcement.id === dismissedAnnouncementId()) {
+    notice.hidden = true;
+    shownAnnouncementId = null;
+    return;
+  }
+  const header = app.querySelector('header');
+  if (header) header.after(notice);
+  else app.prepend(notice);
+  if (announcement.id === shownAnnouncementId && !notice.hidden) return;
+  const isNew = announcement.id !== shownAnnouncementId;
+  if (isNew) navigator.vibrate?.([80, 60, 80]);
+  notice.classList.toggle('is-new', isNew);
+  shownAnnouncementId = announcement.id;
+  notice.replaceChildren(
+    el('span', { class: 'notice-icon' }, icon(ICONS.megaphone)),
+    el('span', { class: 'notice-body' }, el('span', { class: 'notice-label' }, 'From the host'), el('span', { class: 'notice-text' }, announcement.text)),
+    el('button', { type: 'button', class: 'notice-close', title: 'Close', onclick: dismissAnnouncement }, icon(ICONS.close)));
+  notice.hidden = false;
+}
+
 let isAway = false;
 
 function reportAway() {
@@ -340,6 +391,7 @@ const ICONS = {
   pencil: '<path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/>',
   settings: '<path d="M12.2 2h-.4a2 2 0 0 0-2 2v.2a2 2 0 0 1-1 1.7l-.4.3a2 2 0 0 1-2 0l-.2-.1a2 2 0 0 0-2.7.7l-.2.4a2 2 0 0 0 .7 2.7l.2.1a2 2 0 0 1 1 1.7v.5a2 2 0 0 1-1 1.7l-.2.1a2 2 0 0 0-.7 2.7l.2.4a2 2 0 0 0 2.7.7l.2-.1a2 2 0 0 1 2 0l.4.3a2 2 0 0 1 1 1.7v.2a2 2 0 0 0 2 2h.4a2 2 0 0 0 2-2v-.2a2 2 0 0 1 1-1.7l.4-.3a2 2 0 0 1 2 0l.2.1a2 2 0 0 0 2.7-.7l.2-.4a2 2 0 0 0-.7-2.7l-.2-.1a2 2 0 0 1-1-1.7v-.5a2 2 0 0 1 1-1.7l.2-.1a2 2 0 0 0 .7-2.7l-.2-.4a2 2 0 0 0-2.7-.7l-.2.1a2 2 0 0 1-2 0l-.4-.3a2 2 0 0 1-1-1.7V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/>',
   close: '<path d="M18 6 6 18"/><path d="m6 6 12 12"/>',
+  megaphone: '<path d="m3 11 18-5v12L3 14v-3z"/><path d="M11.6 16.8a3 3 0 1 1-5.8-1.6"/>',
 };
 
 const nameButton = () => el('button', { type: 'button', class: 'pill name-pill', onclick: showSettings, title: 'Settings' },
@@ -446,6 +498,12 @@ function updateAnswerStatus() {
 }
 
 function render(next) {
+  renderScreen(next);
+  if (renderedScreen === 'join' || renderedScreen === 'closed') notice.hidden = true;
+  else updateAnnouncement();
+}
+
+function renderScreen(next) {
   state = next;
   if ('isNightMode' in next) document.documentElement.dataset.theme = next.isNightMode ? 'dark' : 'light';
   deadline = next.remainingMs == null || next.isPaused ? null : Date.now() + next.remainingMs;

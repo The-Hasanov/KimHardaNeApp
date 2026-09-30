@@ -8,7 +8,7 @@ const { fileURLToPath } = require('node:url');
 const QRCode = require('qrcode');
 const { matchesAsText } = require('./judge');
 
-const PARTY_LIMITS = { players: 100, nameLength: 24, answerLength: 200, bodyBytes: 4096 };
+const PARTY_LIMITS = { players: 100, nameLength: 24, answerLength: 200, messageLength: 300, bodyBytes: 4096 };
 const PREFERRED_PORT = 8765;
 const HEARTBEAT_MS = 20000;
 const PLAYER_PAGE = path.join(__dirname, 'party', 'player.html');
@@ -56,6 +56,7 @@ class PartyGame {
     this.closedCount = 0;
     this.skips = { key: null, playerIds: new Set() };
     this.absences = { key: null, counts: new Map() };
+    this.announcement = null;
     this.rules = { ...DEFAULT_RULES };
     this.phase = 'lobby';
     this.index = -1;
@@ -161,6 +162,12 @@ class PartyGame {
     return this.absences.key === this.questionKey() ? this.absences.counts.get(playerId) ?? 0 : 0;
   }
 
+  announce(text) {
+    const message = String(text ?? '').replace(/\s+/g, ' ').trim().slice(0, PARTY_LIMITS.messageLength);
+    this.announcement = message ? { id: crypto.randomUUID(), text: message } : null;
+    this.changed();
+  }
+
   leave(token) {
     this.kick(this.playerByToken(token).id);
   }
@@ -225,6 +232,7 @@ class PartyGame {
 
   goTo(position) {
     this.index = position;
+    this.announcement = null;
     this.screen = 'game';
     if (!this.rules.secondsBetweenQuestions) return this.openAnswers();
     this.phase = 'waiting';
@@ -409,6 +417,7 @@ class PartyGame {
       rules: this.rules, urls: this.urls, port: this.port, question: this.questions[this.index] ?? null,
       players: [...this.players.values()].map(p => ({ id: p.id, name: p.name, hasAnswered: !!current?.has(p.id), isOnline: this.isOnline(p.id), timesAway: this.absencesOf(p.id) })),
       skips: this.skipStatus(),
+      announcement: this.announcement,
       answers: answerRows(this.index),
       previous: checkedIndex >= 0 ? { index: checkedIndex, question: this.questions[checkedIndex], answers: answerRows(checkedIndex) } : null,
       leaderboard: this.leaderboard(),
@@ -416,7 +425,7 @@ class PartyGame {
   }
 
   tvView() {
-    const { previous, skips, players, ...view } = this.hostView();
+    const { previous, skips, players, announcement, ...view } = this.hostView();
     const question = PHASES_WITH_QUESTION.includes(this.phase) ? this.questions[this.index] : null;
     const isRevealed = this.phase === 'reveal';
     return {
@@ -455,6 +464,7 @@ class PartyGame {
       } : null,
       myAnswer: myAnswer?.given ?? null,
       skip: this.skipStatus(player.id),
+      announcement: this.announcement,
       reveal: this.phase === 'reveal' ? {
         answer: question.answer, acceptedAnswers: question.accepted_answers, comment: question.comment,
         hasAnswerImage: !!question.source_media_src, isCorrect: myAnswer ? !!myAnswer.isCorrect : null, points: this.pointsFor(myAnswer),
