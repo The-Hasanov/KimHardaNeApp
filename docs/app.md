@@ -73,7 +73,7 @@ npm test         # offline tests for the scraper, search, ranking, edits, data u
   has been shown for *Seconds on the answer*; the host can still press *Next question* early or *Pause* (Space)
   to look at the answers longer. Each question and its images appear on every phone with a countdown and, at the bottom where
   thumbs are, a chat-style answer bar (answer box and round send button) with the reactions above it and the answer's
-  status and a small *Done* chip (the Skip vote) under it. When the time is up (or *Close answers now*),
+  status and a small *Done* chip (the Skip vote, held for a second) under it. When the time is up (or *Close answers now*),
   AI search checks every answer as in Play mode (with AI search off the host marks each one, and phones show
   *The host is checking* until then); phones then show their verdict, the answer and the
   leaderboard, and the host sees every answer and can overrule it. The host sets the points for a correct
@@ -94,8 +94,8 @@ question runs, a phone that switches to another tab or app, or loses the connect
 host's screen only, with how many times, and a short toast there names the player as it happens (one toast per
 player and question, updated with the count); the count starts again at each question. *Message* in the party header sends a clue or
 an announcement (up to 300 characters) to every phone, never to the TV; players cannot reply. It shows at the top of each
-phone, which vibrates where it can, until the player closes it, the host clears or replaces it, or the next question starts. Phones have a small *Skip* button while the next question's number, a question or an answer is
-shown: when every online player has tapped it (tap again to take it back), the game moves on, unless the host has
+phone, which vibrates where it can, until the player closes it, the host clears or replaces it, or the next question starts. Phones have a small *Skip* button that must be held for a second (a ring fills while holding; a quick tap only shows "Hold to skip", so it is not pressed by accident) while the next question's number, a question or an answer is
+shown: when every online player has held it (hold again to take it back), the game moves on, unless the host has
 paused, and never while the host checks answers (between questions when the answers show at the end of the round, or
 while an answer is still *not sure*): phones then show that the host is checking, and only the host moves on. Phones
 and the host see how many tapped, and the count starts again at each step. Every finished round adds

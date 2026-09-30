@@ -139,6 +139,20 @@ header .bar { gap: 6px; }
 .skip-chip .count { color: var(--muted); font-weight: 600; }
 .skip-chip.on { background: color-mix(in srgb, var(--good) 16%, var(--card)); border-color: color-mix(in srgb, var(--good) 55%, transparent); color: var(--good); }
 .skip-chip.on .count { color: var(--good); }
+.hold { touch-action: manipulation; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
+.hold-icon { position: relative; flex: none; display: grid; place-items: center; }
+.hold-icon > :not(.hold-ring) { grid-area: 1 / 1; }
+.hold-ring { grid-area: 1 / 1; width: 44px; height: 44px; margin: -4px; transform: rotate(-90deg); pointer-events: none; }
+.hold-ring circle { fill: none; stroke: var(--good); stroke-width: 3; stroke-linecap: round; stroke-dasharray: 100; stroke-dashoffset: 100; opacity: 0; transition: none; }
+.hold.holding .hold-ring circle { stroke-dashoffset: 0; opacity: 1; transition: stroke-dashoffset 1s linear; }
+.skip.hold.holding, .skip-chip.hold.holding { transform: scale(.97); }
+.chip-icon { display: grid; place-items: center; width: 18px; height: 18px; }
+.skip-chip.hold { position: relative; overflow: hidden; isolation: isolate; gap: 9px; padding: 8px 16px 8px 12px; font-size: 14px; }
+.skip.hold, .skip-chip.hold { position: relative; overflow: hidden; isolation: isolate; }
+.skip.hold::before, .skip-chip.hold::before { content: ''; position: absolute; inset: 0; z-index: -1; background: color-mix(in srgb, var(--good) 24%, transparent); transform: scaleX(0); transform-origin: left; transition: none; }
+.skip.hold.holding::before, .skip-chip.hold.holding::before { transform: scaleX(1); transition: transform 1s linear; }
+.skip-chip .hold-ring { width: 28px; height: 28px; margin: -5px; }
+.skip-chip .hold-ring circle { stroke-width: 3.5; }
 .danger { background: color-mix(in srgb, var(--bad) 12%, transparent); color: var(--bad); border: 1px solid color-mix(in srgb, var(--bad) 45%, transparent); }
 .sheet-overlay { align-items: flex-end; padding: 0; }
 .sheet { max-width: 640px !important; border-radius: 20px 20px 0 0; border-bottom: 0; padding: 16px 16px calc(24px + env(safe-area-inset-bottom)); gap: 16px; animation: rise .2s ease-out; }
@@ -636,17 +650,68 @@ async function toggleSkip() {
   } catch {}
 }
 
+const SKIP_HOLD_MS = 1000;
+const holdHint = () => (state.skip?.isMine ? 'Hold to take it back' : 'Hold to skip');
+
+function holdRing(...inside) {
+  const ring = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  ring.setAttribute('class', 'hold-ring');
+  ring.setAttribute('viewBox', '0 0 40 40');
+  ring.innerHTML = '<circle cx="20" cy="20" r="18" pathLength="100"/>';
+  return el('span', { class: 'hold-icon' }, ring, ...inside);
+}
+
+function holdToSkip(button) {
+  let timer = null;
+  const stop = () => {
+    clearTimeout(timer);
+    timer = null;
+    button.classList.remove('holding');
+  };
+  const start = () => {
+    if (timer || button.disabled) return;
+    button.classList.add('holding');
+    timer = setTimeout(() => {
+      stop();
+      navigator.vibrate?.(30);
+      toggleSkip();
+    }, SKIP_HOLD_MS);
+  };
+  const release = () => {
+    if (!timer) return;
+    stop();
+    showReactionToast(el('span', {}, holdHint()));
+  };
+  button.addEventListener('pointerdown', event => event.button === 0 && start());
+  button.addEventListener('pointerup', release);
+  button.addEventListener('pointerleave', stop);
+  button.addEventListener('pointercancel', stop);
+  button.addEventListener('contextmenu', event => event.preventDefault());
+  button.addEventListener('keydown', event => {
+    if (event.key !== 'Enter' && event.key !== ' ') return;
+    event.preventDefault();
+    if (!event.repeat) start();
+  });
+  button.addEventListener('keyup', event => (event.key === 'Enter' || event.key === ' ') && release());
+  return button;
+}
+
 const SKIP_TITLES = { waiting: 'Start the question', question: "I'm done", reveal: 'Next' };
 const MAX_SKIP_SEGMENTS = 12;
 
 function skipDock() {
   return el('div', { class: 'dock', id: 'skip-dock' },
-    el('button', { type: 'button', class: 'skip', id: 'skip-button', onclick: toggleSkip },
+    holdToSkip(el('button', { type: 'button', class: 'skip hold', id: 'skip-button' },
       el('span', { class: 'skip-main' },
-        el('span', { class: 'skip-icon', id: 'skip-icon' }),
+        holdRing(el('span', { class: 'skip-icon', id: 'skip-icon' })),
         el('span', { class: 'skip-text' }, el('span', { class: 'skip-title', id: 'skip-title' }), el('span', { class: 'skip-hint', id: 'skip-hint' })),
         el('span', { class: 'skip-count', id: 'skip-count' })),
-      el('span', { class: 'skip-segments', id: 'skip-segments' })));
+      el('span', { class: 'skip-segments', id: 'skip-segments' }))));
+}
+
+function skipChip() {
+  return holdToSkip(el('button', { type: 'button', class: 'skip-chip hold', id: 'skip-chip' },
+    holdRing(el('span', { class: 'chip-icon', id: 'skip-chip-icon' })), 'Done', el('span', { class: 'count', id: 'skip-chip-count' })));
 }
 
 function updateSkipChip() {
@@ -656,8 +721,9 @@ function updateSkipChip() {
   chip.hidden = !skip?.isAvailable;
   if (chip.hidden) return;
   chip.classList.toggle('on', !!skip.isMine);
-  chip.title = skip.isMine ? 'Tap again to take it back' : 'Moves on when everyone taps Done';
-  chip.replaceChildren(icon(skip.isMine ? ICONS.check : ICONS.skip), 'Done', el('span', { class: 'count' }, `${skip.count}/${skip.of}`));
+  chip.title = skip.isMine ? 'Hold to take it back' : 'Hold to skip. Moves on when everyone is done';
+  document.getElementById('skip-chip-icon').replaceChildren(icon(skip.isMine ? ICONS.check : ICONS.skip));
+  document.getElementById('skip-chip-count').textContent = `${skip.count}/${skip.of}`;
 }
 
 function updateSkip() {
@@ -682,7 +748,7 @@ function updateSkip() {
   button.classList.toggle('on', !!skip.isMine);
   document.getElementById('skip-icon').replaceChildren(icon(skip.isMine ? ICONS.check : ICONS.skip));
   document.getElementById('skip-title').textContent = skip.isMine ? `Waiting for ${others} ${others === 1 ? 'player' : 'players'}` : SKIP_TITLES[state.phase];
-  document.getElementById('skip-hint').textContent = skip.isMine ? 'Press again to undo' : 'Moves on when everyone skips';
+  document.getElementById('skip-hint').textContent = skip.isMine ? 'Hold to take it back' : 'Hold to skip · moves on when everyone skips';
   document.getElementById('skip-count').textContent = `${skip.count}/${skip.of}`;
   const segmentCount = Math.min(skip.of, MAX_SKIP_SEGMENTS);
   const filled = Math.round((skip.count / Math.max(skip.of, 1)) * segmentCount);
@@ -755,11 +821,10 @@ function composerDock() {
   };
   const emojis = el('div', { class: 'composer-emojis', id: 'composer-emojis', role: 'group', title: 'Reactions: everyone sees them' },
     state.reactions.map(emoji => el('button', { type: 'button', title: `Send ${emoji}`, onclick: event => sendReaction(event.currentTarget, emoji) }, emoji)));
-  const skipChip = el('button', { type: 'button', class: 'skip-chip', id: 'skip-chip', onclick: toggleSkip });
   return el('div', { class: 'composer-dock', id: 'composer-dock' },
     emojis,
     el('form', { class: 'composer', onsubmit: send }, input, button),
-    el('div', { class: 'composer-meta' }, status, skipChip));
+    el('div', { class: 'composer-meta' }, status, skipChip()));
 }
 
 function updateAnswerStatus() {
