@@ -3,8 +3,8 @@ import { toast } from 'sonner';
 import { useDefaultLayout } from 'react-resizable-panels';
 import { cn } from 'cn';
 import {
-  DownloadIcon, EyeIcon, FileDownIcon, FileUpIcon, FileTextIcon, ImagePlusIcon, LayersIcon, PencilIcon, RefreshCwIcon, RotateCcwIcon, SaveIcon, SearchIcon,
-  ListIcon, ListPlusIcon, MoonIcon, NotebookPenIcon, PlusIcon, SearchXIcon, SettingsIcon, SparklesIcon, SquareIcon, TimerIcon, Trash2Icon, UserIcon, XIcon, ZapIcon,
+  DownloadIcon, EyeIcon, FileDownIcon, FileUpIcon, FileTextIcon, ImagePlusIcon, PencilIcon, RotateCcwIcon, SaveIcon, SearchIcon,
+  ListIcon, ListPlusIcon, MoonIcon, NotebookPenIcon, PlusIcon, SearchXIcon, SettingsIcon, SparklesIcon, TimerIcon, Trash2Icon, UserIcon, XIcon,
 } from 'lucide-react';
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter,
@@ -12,15 +12,12 @@ import {
 } from '@/components/ui/alert-dialog';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import {
-  Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
-} from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from '@/components/ui/empty';
 import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput } from '@/components/ui/input-group';
 import { Kbd, KbdGroup } from '@/components/ui/kbd';
 import { Label } from '@/components/ui/label';
 import { Progress } from '@/components/ui/progress';
-import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '@/components/ui/resizable';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Spinner } from '@/components/ui/spinner';
@@ -48,10 +45,6 @@ const MODES = [
   ['hybrid', 'Hybrid', 'Keyword matches re-ranked with AI similarity'],
   ['keyword', 'Keyword', 'Exact words (BM25), tolerant of small typos'],
   ['ai', 'AI', 'Similar meaning, even without shared words'],
-];
-const REFRESH_MODES = [
-  ['quick', ZapIcon, 'Quick', 'about 2 min', 'Download packages published since the last refresh.'],
-  ['full', LayersIcon, 'Full', 'about 20 min', 'Re-check every package for changes made on 3sual.az.'],
 ];
 const STAGES = { list: 'Listing packages', packages: 'Downloading packages', audit: 'Checking authors',
   images: 'Downloading images', index: 'Rebuilding search index', embed: 'Computing AI vectors' };
@@ -318,7 +311,6 @@ export default function App() {
   const [savedAt, setSavedAt] = useState(null);
   const [progress, setProgress] = useState(null);
   const [stopping, setStopping] = useState(false);
-  const [refreshOpen, setRefreshOpen] = useState(false);
   const [refreshMode, setRefreshMode] = useState('quick');
   const [ask, setAsk] = useState(null);
   const [zoom, setZoom] = useState(null);
@@ -515,7 +507,6 @@ export default function App() {
   }
 
   async function startRefresh() {
-    setRefreshOpen(false);
     setProgress({ stage: 'start' });
     const r = await api.refresh(refreshMode).catch(e => ({ error: e.message }));
     setProgress(null);
@@ -664,16 +655,6 @@ export default function App() {
           <Switch id="with-image" checked={withImage} onCheckedChange={filter(setWithImage)} />
           <Label htmlFor="with-image" className="font-normal">With image</Label>
         </div>
-        {progress ? (
-          <Button variant="outline" onClick={stopRefresh} disabled={stopping}><SquareIcon className="fill-current" />Stop refresh</Button>
-        ) : (
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button variant="outline" onClick={() => setRefreshOpen(true)}><RefreshCwIcon />Refresh data</Button>
-            </TooltipTrigger>
-            <TooltipContent>Download new or changed questions from 3sual.az</TooltipContent>
-          </Tooltip>
-        )}
         </>}
         <Tooltip>
           <TooltipTrigger asChild>
@@ -774,7 +755,9 @@ export default function App() {
         <Game key={gameSession} isVisible={view === 'game'} lists={lists} listId={gameListId} onListIdChange={setGameListId}
           isAiReady={isAiReady} onOpenSettings={() => setIsSettingsOpen(true)} />
       </div>
-      <SettingsDialog open={isSettingsOpen} onOpenChange={setIsSettingsOpen} aiStatus={aiStatus} onAiSearchChange={changeAiSearch} />
+      <SettingsDialog open={isSettingsOpen} onOpenChange={setIsSettingsOpen} aiStatus={aiStatus} onAiSearchChange={changeAiSearch}
+        refresh={{ stage, isRunning: !!progress, isStopping: stopping, percent: progress?.total ? (progress.done / progress.total) * 100 : null,
+          mode: refreshMode, dataDate: info?.dataDate, onModeChange: setRefreshMode, onStart: startRefresh, onStop: stopRefresh }} />
       <ListNameDialog open={isCreatingListForCurrent} title="New list" confirmLabel="Create and add"
         onOpenChange={setIsCreatingListForCurrent} onSubmit={createListWithCurrent} />
 
@@ -805,36 +788,6 @@ export default function App() {
           )}
         </div>
       </footer>
-
-      <Dialog open={refreshOpen} onOpenChange={setRefreshOpen}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Refresh data from 3sual.az</DialogTitle>
-            <DialogDescription>
-              The built-in scraper downloads politely, one request per second. Keep searching and editing while it runs;
-              your edits are never overwritten.
-            </DialogDescription>
-          </DialogHeader>
-          <RadioGroup value={refreshMode} onValueChange={setRefreshMode}>
-            {REFRESH_MODES.map(([value, Icon, title, time, description]) => (
-              <Label key={value} htmlFor={`refresh-${value}`}
-                className="flex cursor-pointer items-start gap-3 rounded-lg border p-3 font-normal transition-colors hover:bg-muted/50 has-[[data-state=checked]]:border-primary has-[[data-state=checked]]:bg-muted/50">
-                <RadioGroupItem id={`refresh-${value}`} value={value} className="mt-0.5" />
-                <div className="grid gap-1">
-                  <div className="flex items-center gap-2 font-medium"><Icon className="size-4" />{title}
-                    <Badge variant="secondary" className="font-normal">{time}</Badge>
-                  </div>
-                  <p className="text-muted-foreground">{description}</p>
-                </div>
-              </Label>
-            ))}
-          </RadioGroup>
-          <DialogFooter>
-            <DialogClose asChild><Button variant="outline">Cancel</Button></DialogClose>
-            <Button onClick={startRefresh}><RefreshCwIcon />Start refresh</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
 
       <AlertDialog open={!!ask} onOpenChange={o => { if (!o) { ask?.(false); setAsk(null); } }}>
         <AlertDialogContent>

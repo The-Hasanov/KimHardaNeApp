@@ -72,7 +72,7 @@ phones cannot join a party.
 ## Question bank
 
 The installer comes with about 68,000 Azerbaijani questions from [3sual.az](https://3sual.az/), collected
-from its public API by the included scraper (*Refresh data* in the app fetches new ones). The questions
+from its public API by the included scraper (*Refresh data* in Settings fetches new ones). The questions
 belong to their authors and to 3sual.az. Your own questions and edits are kept apart from refreshes and
 updates.
 

@@ -155,7 +155,7 @@ the party header turns them off and on for everyone. Windows
   here are used as they are, your own questions already here are reused, and every other question, custom or from a
   question bank this computer lacks, is added to your own questions first. A message sums up what was added.
 - **Images** are shown from `data/images/` when `scraper.js images` has fetched them, otherwise from the site.
-- **Refresh data** (header button) runs the scraper inside the app and brings the open database up to date.
+- **Refresh data** (in Settings, the gear icon top right) runs the scraper inside the app and brings the open database up to date.
   *Quick* (~2 min) lists every package, fetches the ones not stored yet and runs the author check. *Full*
   (~20 min) also refetches every stored package, which picks up upstream edits. Both then download new
   images, rebuild the index and embed new or changed questions. Search and editing keep working meanwhile, and

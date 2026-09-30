@@ -1,17 +1,23 @@
 import { useState } from 'react';
-import { CircleAlertIcon, CircleCheckIcon, MoonIcon, RotateCcwIcon, SparklesIcon } from 'lucide-react';
+import { CircleAlertIcon, CircleCheckIcon, DatabaseIcon, LayersIcon, MoonIcon, RefreshCwIcon, RotateCcwIcon, SparklesIcon, SquareIcon, ZapIcon } from 'lucide-react';
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter,
   AlertDialogHeader, AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Badge } from '@/components/ui/badge';
 import { Label } from '@/components/ui/label';
 import { Progress } from '@/components/ui/progress';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Spinner } from '@/components/ui/spinner';
 import { Switch } from '@/components/ui/switch';
 import { setNightMode, useNightMode } from './theme';
 
+const REFRESH_MODES = [
+  ['quick', ZapIcon, 'Quick', 'about 2 min', 'Download packages published since the last refresh.'],
+  ['full', LayersIcon, 'Full', 'about 20 min', 'Re-check every package for changes made on 3sual.az.'],
+];
 const formatCount = n => n.toLocaleString('en');
 const megabytes = bytes => formatCount(Math.round(bytes / 1e6));
 const timeLeft = seconds => (seconds == null ? '' : seconds < 90 ? ' · about a minute left' : ` · about ${Math.round(seconds / 60)} min left`);
@@ -38,7 +44,49 @@ export function describeAiWork(status) {
   }
 }
 
-export default function SettingsDialog({ open, onOpenChange, aiStatus, onAiSearchChange }) {
+function RefreshSection({ refresh }) {
+  return (
+    <section className="grid gap-3 rounded-lg border p-4">
+      <div className="grid gap-1">
+        <Label className="text-base"><DatabaseIcon className="size-4" />Refresh data</Label>
+        <p className="text-muted-foreground">
+          Download new or changed questions from 3sual.az, one request per second. Keep searching and editing while it
+          runs; your edits are never overwritten.
+        </p>
+        {refresh.dataDate && <p className="text-xs text-muted-foreground">Last checked {refresh.dataDate.slice(0, 10)}</p>}
+      </div>
+      {refresh.isRunning ? (
+        <div className="grid gap-2">
+          <span className="flex items-center gap-2"><Spinner />{refresh.stage}</span>
+          {refresh.percent != null && <Progress value={refresh.percent} />}
+          <Button variant="outline" className="justify-self-start" onClick={refresh.onStop} disabled={refresh.isStopping}>
+            <SquareIcon className="fill-current" />Stop refresh
+          </Button>
+        </div>
+      ) : (
+        <>
+          <RadioGroup value={refresh.mode} onValueChange={refresh.onModeChange} className="grid-cols-2">
+            {REFRESH_MODES.map(([value, Icon, title, time, description]) => (
+              <Label key={value} htmlFor={`refresh-${value}`}
+                className="flex cursor-pointer items-start gap-3 rounded-lg border p-3 font-normal transition-colors hover:bg-muted/50 has-[[data-state=checked]]:border-primary has-[[data-state=checked]]:bg-muted/50">
+                <RadioGroupItem id={`refresh-${value}`} value={value} className="mt-0.5" />
+                <div className="grid gap-1">
+                  <div className="flex flex-wrap items-center gap-2 font-medium"><Icon className="size-4" />{title}
+                    <Badge variant="secondary" className="font-normal">{time}</Badge>
+                  </div>
+                  <p className="text-xs text-muted-foreground">{description}</p>
+                </div>
+              </Label>
+            ))}
+          </RadioGroup>
+          <Button className="justify-self-start" onClick={refresh.onStart}><RefreshCwIcon />Start refresh</Button>
+        </>
+      )}
+    </section>
+  );
+}
+
+export default function SettingsDialog({ open, onOpenChange, aiStatus, onAiSearchChange, refresh }) {
   const [isConfirmingTurnOff, setIsConfirmingTurnOff] = useState(false);
   const nightMode = useNightMode();
   const isAiOn = !['off', 'stopping'].includes(aiStatus.state);
@@ -47,7 +95,7 @@ export default function SettingsDialog({ open, onOpenChange, aiStatus, onAiSearc
   return (
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="sm:max-w-lg" aria-describedby={undefined}>
+        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg" aria-describedby={undefined}>
           <DialogHeader><DialogTitle>Settings</DialogTitle></DialogHeader>
           <section className="flex items-start justify-between gap-4 rounded-lg border p-4">
             <div className="grid gap-1">
@@ -93,6 +141,7 @@ export default function SettingsDialog({ open, onOpenChange, aiStatus, onAiSearc
               </div>
             )}
           </section>
+          <RefreshSection refresh={refresh} />
         </DialogContent>
       </Dialog>
       <AlertDialog open={isConfirmingTurnOff} onOpenChange={setIsConfirmingTurnOff}>
