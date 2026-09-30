@@ -434,7 +434,7 @@ function MessageDialog({ isOpen, onOpenChange, announcement }) {
     if (!text.trim()) return;
     await api.partyAnnounce(text);
     setText('');
-    toast.success('Sent to every phone');
+    toast.success('Sent to all players');
     onOpenChange(false);
   };
   return (
@@ -443,14 +443,14 @@ function MessageDialog({ isOpen, onOpenChange, announcement }) {
         <DialogHeader>
           <DialogTitle>Message to all players</DialogTitle>
           <DialogDescription>
-            A clue or an announcement shown on every phone. Players cannot reply. It stays until the next question or until you
+            A clue or an announcement for all players. Players cannot reply. It stays until the next question or until you
             clear it.
           </DialogDescription>
         </DialogHeader>
         {announcement && (
           <div className="flex items-start gap-3 rounded-lg border bg-muted/50 p-3">
             <MegaphoneIcon className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
-            <p className="min-w-0 flex-1 text-sm break-words"><span className="text-muted-foreground">On the phones now: </span>{announcement.text}</p>
+            <p className="min-w-0 flex-1 text-sm break-words"><span className="text-muted-foreground">Shown to all players now: </span>{announcement.text}</p>
             <Button size="sm" variant="ghost" onClick={() => api.partyAnnounce('')}><XIcon />Clear</Button>
           </div>
         )}
@@ -466,7 +466,7 @@ function MessageDialog({ isOpen, onOpenChange, announcement }) {
         </div>
         <DialogFooter>
           <DialogClose asChild><Button variant="outline">Cancel</Button></DialogClose>
-          <Button disabled={!text.trim()} onClick={send}><SendIcon />{announcement ? 'Replace message' : 'Send to all phones'}<Kbd className={KEY_HINT_ON_PRIMARY_BUTTON}>Enter</Kbd></Button>
+          <Button disabled={!text.trim()} onClick={send}><SendIcon />{announcement ? 'Replace message' : 'Send to all players'}<Kbd className={KEY_HINT_ON_PRIMARY_BUTTON}>Enter</Kbd></Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -477,7 +477,7 @@ function AnnouncementStrip({ announcement, onOpen }) {
   return (
     <div className="flex shrink-0 items-center gap-3 border-b bg-muted/40 px-6 py-1.5 text-sm animate-in fade-in-0 slide-in-from-top-1">
       <MegaphoneIcon className="size-4 shrink-0 text-muted-foreground" />
-      <span className="shrink-0 text-muted-foreground">On every phone:</span>
+      <span className="shrink-0 text-muted-foreground">Shown to all players:</span>
       <span className="min-w-0 flex-1 truncate font-medium" title={announcement.text}>{announcement.text}</span>
       <Button size="xs" variant="ghost" onClick={onOpen}>Change</Button>
       <Button size="xs" variant="ghost" onClick={() => api.partyAnnounce('')}><XIcon />Clear</Button>
