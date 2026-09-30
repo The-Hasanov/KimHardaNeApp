@@ -234,10 +234,10 @@ test('pictures on your own questions are saved next to the database, shown from 
 
 test('party results add up per player name across rounds and can be reset', () => {
   const s = store();
-  s.addPartyResults([{ name: 'Aysel', correct: 3, wrong: 1, unanswered: 1 }, { name: 'Nicat', correct: 1, wrong: 0, unanswered: 4 }]);
-  s.addPartyResults([{ name: 'aysel', correct: 2, wrong: 2, unanswered: 0 }]);
-  assert.deepEqual(s.partyResults().map(({ name, correct, wrong, unanswered, rounds }) => [name, correct, wrong, unanswered, rounds]),
-    [['aysel', 5, 3, 1, 2], ['Nicat', 1, 0, 4, 1]]);
+  s.addPartyResults([{ name: 'Aysel', correct: 3, wrong: 1, unanswered: 1, correctMs: 30000 }, { name: 'Nicat', correct: 1, wrong: 0, unanswered: 4, correctMs: 5000 }]);
+  s.addPartyResults([{ name: 'aysel', correct: 2, wrong: 2, unanswered: 0, correctMs: 15500 }, { name: 'Leyla', correct: 1, wrong: 0, unanswered: 0, correctMs: 2000 }]);
+  assert.deepEqual(s.partyResults().map(({ name, correct, wrong, unanswered, rounds, avg_seconds }) => [name, correct, wrong, unanswered, rounds, avg_seconds]),
+    [['aysel', 5, 3, 1, 2, 9.1], ['Leyla', 1, 0, 0, 1, 2], ['Nicat', 1, 0, 4, 1, 5]]);
   s.resetPartyResults();
   assert.deepEqual(s.partyResults(), []);
 });

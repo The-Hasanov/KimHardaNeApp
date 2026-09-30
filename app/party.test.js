@@ -130,7 +130,7 @@ test('points per correct and wrong answer; rounds keep or reset the scores', asy
   assert.deepEqual(game.playerView(nicat).leaderboard.map(e => e.score), [4, 0, -2]);
   game.startRound(ROUND);
   await playRound([[nicat, ['Bakı', 'Nizami Gəncəvi']]]);
-  assert.deepEqual(game.leaderboard().map(e => [e.name, e.score, e.roundScore]), [['Aysel', 4, 0], ['Leila', 0, 0], ['Nicat', 0, 2]]);
+  assert.deepEqual(game.leaderboard().map(e => [e.name, e.score, e.roundScore]), [['Aysel', 4, 0], ['Nicat', 0, 2], ['Leila', 0, 0]]);
   game.backToLobby({ keepScores: false });
   assert.deepEqual([game.round, game.leaderboard().map(e => e.score)], [0, [0, 0, 0]]);
 });
@@ -366,7 +366,8 @@ test('a finished round reports correct, wrong and unanswered questions per playe
   game.submitAnswer(leyla.token, 'Nizami Gəncəvi');
   await game.closeAnswers();
   game.next();
-  assert.deepEqual(reports, [[
+  assert.ok(reports[0].every(result => result.correctMs >= 0));
+  assert.deepEqual(reports.map(results => results.map(({ correctMs, ...result }) => result)), [[
     { name: 'Aysel', correct: 1, wrong: 0, unanswered: 1 },
     { name: 'Nicat', correct: 0, wrong: 1, unanswered: 1 },
     { name: 'Leyla', correct: 1, wrong: 0, unanswered: 0 },
@@ -490,5 +491,39 @@ test('players cannot skip while the host checks answers, but the host can still 
   assert.throws(() => game.toggleSkip(nicat.token), /checking/);
   game.skipWait();
   assert.equal(game.phase, 'question', 'the host skips the wait as before');
+  game.finish();
+});
+
+test('answer times are kept per answer, averaged over correct answers, and break ties on the leaderboard', async () => {
+  const game = newGame();
+  const aysel = game.join('Aysel');
+  const nicat = game.join('Nicat');
+  const leyla = game.join('Leyla');
+  game.startRound(ROUND);
+  const answerAt = (player, given, secondsIn) => {
+    game.endsAt = Date.now() + (60 - secondsIn) * 1000;
+    game.submitAnswer(player.token, given);
+  };
+  answerAt(aysel, 'Bakı', 20);
+  answerAt(nicat, 'Bakı', 8);
+  answerAt(leyla, 'Gəncə', 3);
+  game.pause();
+  answerAt(aysel, 'Bakı', 50);
+  assert.equal(game.hostView().answers.find(a => a.name === 'Aysel').ms, 20000, 'sending the same answer again keeps its time');
+  game.resume();
+  await game.closeAnswers();
+  assert.deepEqual(game.leaderboard().map(e => [e.name, e.score, e.avgSeconds, e.rank]), [['Nicat', 1, 8, 1], ['Aysel', 1, 20, 2], ['Leyla', 0, null, 3]]);
+  assert.equal(game.playerView(nicat).reveal.seconds, 8);
+  assert.equal(game.playerView(leyla).reveal.seconds, 3);
+  game.next();
+  answerAt(aysel, 'Nizami Gəncəvi', 2);
+  await game.closeAnswers();
+  assert.deepEqual(game.leaderboard().slice(0, 2).map(e => [e.name, e.score, e.avgSeconds]), [['Aysel', 2, 11], ['Nicat', 1, 8]]);
+  game.next();
+  game.backToLobby({ keepScores: true });
+  game.startRound(ROUND);
+  answerAt(nicat, 'Bakı', 10);
+  await game.closeAnswers();
+  assert.deepEqual(game.leaderboard().slice(0, 2).map(e => [e.name, e.score, e.avgSeconds, e.rank]), [['Nicat', 2, 9, 1], ['Aysel', 2, 11, 2]], 'kept scores keep their times too');
   game.finish();
 });

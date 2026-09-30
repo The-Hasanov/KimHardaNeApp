@@ -3,7 +3,7 @@ import QRCode from 'qrcode';
 import { cn } from 'cn';
 import {
   AppWindowIcon, ArrowRightIcon, CastIcon, MegaphoneIcon, SendIcon, CheckIcon, ChevronDownIcon, CircleHelpIcon, DoorClosedIcon, EyeIcon, EyeOffIcon, FlagIcon, GamepadIcon, PauseIcon, PlayIcon, QrCodeIcon,
-  RotateCcwIcon, SkipForwardIcon, Trash2Icon, TriangleAlertIcon, TrophyIcon, TvIcon, UserXIcon, UsersIcon, WifiOffIcon, XIcon,
+  RotateCcwIcon, SkipForwardIcon, TimerIcon, Trash2Icon, TriangleAlertIcon, TrophyIcon, TvIcon, UserXIcon, UsersIcon, WifiOffIcon, XIcon,
 } from 'lucide-react';
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter,
@@ -31,6 +31,8 @@ import { useNightMode } from './theme';
 const { api } = window;
 const PHASES_IN_ROUND = ['waiting', 'question', 'judging', 'reveal'];
 
+const secondsLabel = seconds => (seconds == null ? '—' : `${seconds.toFixed(1)} s`);
+const answerSeconds = answer => (answer?.ms == null || !answer.given ? null : answer.ms / 1000);
 const pointsLabel = points => (points > 0 ? `+${points}` : points < 0 ? `−${-points}` : '0');
 const hostOf = url => url.replace(/^http:\/\//, '').replace(/\/$/, '');
 const isWaitingToReveal = party => party.phase === 'judging' && party.rules.revealAtEnd && party.answers.every(answer => answer.isCorrect !== undefined);
@@ -117,6 +119,9 @@ function Leaderboard({ entries, players = [], onKick, showsRoundScore = false })
           {onKick && <OnlineDot isOnline={isOnline.get(entry.id)} />}
           <span className="min-w-0 flex-1 truncate font-medium">{entry.name}</span>
           {showsRoundScore && <span className="text-xs text-muted-foreground tabular-nums">{pointsLabel(entry.roundScore)} this round</span>}
+          <span className="flex w-16 items-center justify-end gap-1 text-xs text-muted-foreground tabular-nums" title="Average time of correct answers; breaks ties">
+            {entry.avgSeconds != null && <><TimerIcon className="size-3" />{secondsLabel(entry.avgSeconds)}</>}
+          </span>
           <span className="w-10 text-right text-lg font-semibold tabular-nums">{entry.score}</span>
           {onKick && <KickButton player={entry} onKick={onKick} />}
         </li>
@@ -152,6 +157,7 @@ function AllTimeLeaderboard() {
                 <th className="px-3 py-2 text-right font-medium">Correct</th>
                 <th className="px-3 py-2 text-right font-medium">Wrong</th>
                 <th className="px-3 py-2 text-right font-medium">No answer</th>
+                <th className="px-3 py-2 text-right font-medium" title="Average time of correct answers; breaks ties">Avg time</th>
                 <th className="px-3 py-2 text-right font-medium">Rounds</th>
               </tr>
             </thead>
@@ -163,13 +169,14 @@ function AllTimeLeaderboard() {
                   <td className="px-3 py-2 text-right font-semibold tabular-nums text-emerald-600 dark:text-emerald-400">{result.correct}</td>
                   <td className="px-3 py-2 text-right tabular-nums text-destructive">{result.wrong}</td>
                   <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">{result.unanswered}</td>
+                  <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">{secondsLabel(result.avg_seconds)}</td>
                   <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">{result.rounds}</td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
-      ) : <p className="text-sm text-muted-foreground">Every finished round adds each player's correct, wrong and unanswered questions here.</p>}
+      ) : <p className="text-sm text-muted-foreground">Every finished round adds each player's correct, wrong and unanswered questions and answer times here.</p>}
       <AlertDialog open={isConfirmingReset} onOpenChange={setIsConfirmingReset}>
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -236,6 +243,7 @@ function LiveAnswers({ party, onKick }) {
                 {showsAnswers && (
                   <p className={cn('truncate text-sm', !answer?.given && 'text-muted-foreground')} title={answer?.given}>
                     {answer ? answer.given || 'Blank' : 'No answer yet'}
+                    {answerSeconds(answer) != null && <span className="ml-1.5 text-xs text-muted-foreground tabular-nums">· {secondsLabel(answerSeconds(answer))}</span>}
                     {answer?.hostCall !== undefined && !answer.isDirectCall && <span className="ml-1.5 text-xs text-muted-foreground">· same as your call</span>}
                   </p>
                 )}
@@ -271,6 +279,7 @@ function PlayerAnswers({ party, answers = party.answers, position = party.index 
             <li key={answer.playerId} className="flex flex-wrap items-center gap-x-4 gap-y-1 px-4 py-2.5">
               <span className="flex w-32 items-center gap-1.5 font-medium"><span className="truncate">{answer.name}</span><AwayWarning timesAway={timesAway.get(answer.playerId)} /></span>
               <span className="min-w-0 flex-1 truncate">{answer.given || '—'}</span>
+              <span className="w-14 text-right text-sm text-muted-foreground tabular-nums" title="Answer time">{answerSeconds(answer) != null && secondsLabel(answerSeconds(answer))}</span>
               <span className={cn('flex items-center gap-1 text-sm font-semibold', className)}><Icon className="size-4" />{label}</span>
               <span className="w-8 text-right text-sm tabular-nums">{pointsLabel(answer.points)}</span>
               <CallButtons answer={answer} position={position} isCalledNow={answer.isCorrect ? true : outcomeOf(answer) === 'wrong' ? false : null} />

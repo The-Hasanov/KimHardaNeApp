@@ -114,6 +114,8 @@ ol.board li.me { outline: 2px solid var(--primary); }
 ol.board .rank { width: 28px; font-weight: 700; color: var(--muted); font-variant-numeric: tabular-nums; }
 ol.board .name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 ol.board .score { font-weight: 700; font-variant-numeric: tabular-nums; }
+ol.board .time { font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.time-note { display: inline-flex; align-items: center; gap: 4px; font-size: 14px; color: var(--muted); }
 @media (min-width: 700px) {
   main { max-width: 760px; padding-top: 24px; gap: 20px; }
   header { margin-top: -24px; padding-top: 20px; }
@@ -179,6 +181,7 @@ const clock = ms => {
   const seconds = Math.ceil(ms / 1000);
   return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
 };
+const secondsLabel = seconds => `${seconds.toFixed(1)} s`;
 const pointsLabel = points => (points > 0 ? `+${points}` : points < 0 ? `−${-points}` : '0');
 const rulesText = () => `Correct ${pointsLabel(state.rules.pointsForCorrect)} · Wrong ${pointsLabel(state.rules.pointsForWrong)} · No answer 0`;
 const imageUrl = (route) => `${route}?token=${encodeURIComponent(session.token)}&question=${state.index}`;
@@ -407,6 +410,7 @@ const ICONS = {
   pencil: '<path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/>',
   settings: '<path d="M12.2 2h-.4a2 2 0 0 0-2 2v.2a2 2 0 0 1-1 1.7l-.4.3a2 2 0 0 1-2 0l-.2-.1a2 2 0 0 0-2.7.7l-.2.4a2 2 0 0 0 .7 2.7l.2.1a2 2 0 0 1 1 1.7v.5a2 2 0 0 1-1 1.7l-.2.1a2 2 0 0 0-.7 2.7l.2.4a2 2 0 0 0 2.7.7l.2-.1a2 2 0 0 1 2 0l.4.3a2 2 0 0 1 1 1.7v.2a2 2 0 0 0 2 2h.4a2 2 0 0 0 2-2v-.2a2 2 0 0 1 1-1.7l.4-.3a2 2 0 0 1 2 0l.2.1a2 2 0 0 0 2.7-.7l.2-.4a2 2 0 0 0-.7-2.7l-.2-.1a2 2 0 0 1-1-1.7v-.5a2 2 0 0 1 1-1.7l.2-.1a2 2 0 0 0 .7-2.7l-.2-.4a2 2 0 0 0-2.7-.7l-.2.1a2 2 0 0 1-2 0l-.4-.3a2 2 0 0 1-1-1.7V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/>',
   close: '<path d="M18 6 6 18"/><path d="m6 6 12 12"/>',
+  clock: '<circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>',
   hourglass: '<path d="M5 22h14"/><path d="M5 2h14"/><path d="M17 22v-4.2a2 2 0 0 0-.6-1.4L12 12l-4.4 4.4a2 2 0 0 0-.6 1.4V22"/><path d="M7 2v4.2a2 2 0 0 0 .6 1.4L12 12l4.4-4.4a2 2 0 0 0 .6-1.4V2"/>',
   megaphone: '<path d="m3 11 18-5v12L3 14v-3z"/><path d="M11.6 16.8a3 3 0 1 1-5.8-1.6"/>',
 };
@@ -464,7 +468,9 @@ function updateSkip() {
 
 function leaderboard(entries) {
   return el('ol', { class: 'board' }, entries.map(entry => el('li', { class: entry.name === state.me.name ? 'me' : '' },
-    el('span', { class: 'rank' }, `${entry.rank}.`), el('span', { class: 'name' }, entry.name), el('span', { class: 'score' }, entry.score))));
+    el('span', { class: 'rank' }, `${entry.rank}.`), el('span', { class: 'name' }, entry.name),
+    entry.avgSeconds != null && el('span', { class: 'time', title: 'Average time of correct answers' }, secondsLabel(entry.avgSeconds)),
+    el('span', { class: 'score' }, entry.score))));
 }
 
 let timeFillElement = null;
@@ -599,6 +605,7 @@ function renderScreen(next) {
     return done(show(topBar(), el('div', { class: 'card' },
       verdict,
       next.myAnswer != null && el('span', { class: 'muted' }, `Your answer: ${next.myAnswer || '—'}`),
+      reveal.seconds != null && el('span', { class: 'time-note' }, icon(ICONS.clock), `Answered in ${secondsLabel(reveal.seconds)}`),
       el('p', { class: 'answer' }, reveal.answer),
       reveal.acceptedAnswers && el('span', {}, el('span', { class: 'muted' }, 'Also accepted: '), reveal.acceptedAnswers),
       reveal.comment && el('p', { class: 'pre muted', style: 'margin:0;font-size:14px' }, reveal.comment),

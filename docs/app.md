@@ -98,7 +98,10 @@ while an answer is still *not sure*): phones then show that the host is checking
 and the host see how many tapped, and the count starts again at each step. Every finished round adds
 each player's correct, wrong and unanswered questions (counted from the question they joined at) to the
 **all-time leaderboard** in the party lobby, kept per name in the `party_results` table and carried through
-updates; *Reset* there deletes them. Windows
+updates; *Reset* there deletes them. Each answer keeps its time: seconds from the question's start to the last change of the
+answer, pauses left out (sending the same answer again keeps the first time). The host sees it next to every answer,
+phones see their own after the reveal, and every leaderboard (host, TV, phones, all-time) shows each player's average
+time of correct answers; players with the same score are ranked by it, the faster first. Windows
   Firewall asks once whether KimHardaNeApp may accept connections on private networks; allow it.
 - **Lists**: *Add to list* in the editor puts the open question into one or more of your lists, or creates a
   new list with it. The **Lists** tab shows each list in order: move questions up or down, open one in the

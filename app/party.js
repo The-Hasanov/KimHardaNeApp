@@ -49,6 +49,7 @@ class PartyGame {
     this.onRoundFinished = onRoundFinished;
     this.players = new Map();
     this.bankedScores = new Map();
+    this.bankedTimes = new Map();
     this.round = 0;
     this.questions = [];
     this.answers = [];
@@ -115,6 +116,7 @@ class PartyGame {
   kick(playerId) {
     this.players.delete(playerId);
     this.bankedScores.delete(playerId);
+    this.bankedTimes.delete(playerId);
     for (const answers of this.answers) answers.delete(playerId);
     this.skips.playerIds.delete(playerId);
     for (const stream of this.streams) if (stream.playerId === playerId) stream.end({ phase: 'kicked' });
@@ -128,7 +130,7 @@ class PartyGame {
     const cleanGiven = String(given ?? '').trim().slice(0, PARTY_LIMITS.answerLength);
     const answers = this.answers[this.index];
     if (answers.get(player.id)?.given === cleanGiven) return;
-    const answer = { given: cleanGiven };
+    const answer = { given: cleanGiven, ms: Math.max(0, Math.round(this.rules.secondsPerQuestion * 1000 - (this.remainingMs() ?? 0))) };
     const ruling = this.rulingFor(this.index, cleanGiven);
     if (ruling) answer.hostCall = ruling.isCorrect;
     answers.set(player.id, answer);
@@ -228,9 +230,15 @@ class PartyGame {
 
   backToLobby({ keepScores }) {
     if (this.phase !== 'finished') return;
-    if (keepScores) for (const entry of this.leaderboard()) this.bankedScores.set(entry.id, entry.score);
+    if (keepScores) {
+      for (const entry of this.leaderboard()) {
+        this.bankedScores.set(entry.id, entry.score);
+        this.bankedTimes.set(entry.id, this.correctTimes(entry.id));
+      }
+    }
     else {
       this.bankedScores.clear();
+      this.bankedTimes.clear();
       this.round = 0;
     }
     this.questions = [];
@@ -384,11 +392,14 @@ class PartyGame {
 
   roundResults() {
     return [...this.players.values()].map(player => {
-      const result = { name: player.name, correct: 0, wrong: 0, unanswered: 0 };
+      const result = { name: player.name, correct: 0, wrong: 0, unanswered: 0, correctMs: 0 };
       const firstPosition = player.countsFrom.round === this.round ? player.countsFrom.position : 0;
       for (const answers of this.answers.slice(firstPosition, this.closedCount)) {
         const answer = answers.get(player.id);
-        if (answer?.isCorrect) result.correct += 1;
+        if (answer?.isCorrect) {
+          result.correct += 1;
+          result.correctMs += answer.ms ?? 0;
+        }
         else if (!answer || isBlank(answer.given)) result.unanswered += 1;
         else if (answer.isCorrect === false) result.wrong += 1;
       }
@@ -402,14 +413,25 @@ class PartyGame {
     return answer.given ? this.rules.pointsForWrong : 0;
   }
 
+  correctTimes(playerId) {
+    const banked = this.bankedTimes.get(playerId) ?? { ms: 0, count: 0 };
+    return this.answers.slice(0, this.revealedCount).reduce((times, answers) => {
+      const answer = answers.get(playerId);
+      return answer?.isCorrect && answer.ms != null ? { ms: times.ms + answer.ms, count: times.count + 1 } : times;
+    }, banked);
+  }
+
   leaderboard() {
+    const byTime = (a, b) => (a.avgSeconds ?? Infinity) - (b.avgSeconds ?? Infinity) || 0;
     const scored = [...this.players.values()]
       .map(p => {
         const roundScore = this.answers.slice(0, this.revealedCount).reduce((sum, answers) => sum + this.pointsFor(answers.get(p.id)), 0);
-        return { id: p.id, name: p.name, roundScore, score: (this.bankedScores.get(p.id) ?? 0) + roundScore };
+        const times = this.correctTimes(p.id);
+        const avgSeconds = times.count ? Math.round(times.ms / times.count / 100) / 10 : null;
+        return { id: p.id, name: p.name, roundScore, score: (this.bankedScores.get(p.id) ?? 0) + roundScore, avgSeconds };
       })
-      .sort((a, b) => b.score - a.score || a.name.localeCompare(b.name));
-    return scored.map(entry => ({ ...entry, rank: 1 + scored.findIndex(other => other.score === entry.score) }));
+      .sort((a, b) => b.score - a.score || byTime(a, b) || a.name.localeCompare(b.name));
+    return scored.map(entry => ({ ...entry, rank: 1 + scored.findIndex(other => other.score === entry.score && other.avgSeconds === entry.avgSeconds) }));
   }
 
   remainingMs() {
@@ -470,7 +492,7 @@ class PartyGame {
         pointsForCorrect: this.rules.pointsForCorrect, pointsForWrong: this.rules.pointsForWrong, secondsPerQuestion: this.rules.secondsPerQuestion,
         secondsBetweenQuestions: this.rules.secondsBetweenQuestions, secondsOnAnswer: this.rules.secondsOnAnswer,
       },
-      me: { name: player.name, score: me?.score ?? 0, roundScore: me?.roundScore ?? 0, rank: me?.rank ?? null },
+      me: { name: player.name, score: me?.score ?? 0, roundScore: me?.roundScore ?? 0, rank: me?.rank ?? null, avgSeconds: me?.avgSeconds ?? null },
       question: PHASES_WITH_QUESTION.includes(this.phase) ? {
         text: question.text, noteBefore: question.note_before, handoutText: question.rekvizit_text, hasHandoutImage: !!question.rekvizit_src,
       } : null,
@@ -480,9 +502,10 @@ class PartyGame {
       reveal: this.phase === 'reveal' ? {
         answer: question.answer, acceptedAnswers: question.accepted_answers, comment: question.comment,
         hasAnswerImage: !!question.source_media_src, isCorrect: myAnswer ? !!myAnswer.isCorrect : null, points: this.pointsFor(myAnswer),
+        seconds: myAnswer?.ms != null && myAnswer.given ? Math.round(myAnswer.ms / 100) / 10 : null,
         isPending: !!myAnswer && myAnswer.verdict === 'unsure' && !myAnswer.decidedByHost,
       } : null,
-      leaderboard: showsLeaderboard ? leaderboard.slice(0, 10).map(({ name, score, rank }) => ({ name, score, rank })) : null,
+      leaderboard: showsLeaderboard ? leaderboard.slice(0, 10).map(({ name, score, rank, avgSeconds }) => ({ name, score, rank, avgSeconds })) : null,
     };
   }
 

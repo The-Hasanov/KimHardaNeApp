@@ -28,7 +28,7 @@ CREATE TABLE IF NOT EXISTS list_questions (
 const PARTY_RESULTS_SCHEMA = `
 CREATE TABLE IF NOT EXISTS party_results (
   name_key TEXT PRIMARY KEY, name TEXT NOT NULL, correct INTEGER NOT NULL DEFAULT 0, wrong INTEGER NOT NULL DEFAULT 0,
-  unanswered INTEGER NOT NULL DEFAULT 0, rounds INTEGER NOT NULL DEFAULT 0, updated_at TEXT NOT NULL);`;
+  unanswered INTEGER NOT NULL DEFAULT 0, rounds INTEGER NOT NULL DEFAULT 0, correct_ms INTEGER NOT NULL DEFAULT 0, updated_at TEXT NOT NULL);`;
 const POOL = 500;
 const OWN_PACKAGE_ID = 0;
 const OWN_GAME_ID = 0;
@@ -55,6 +55,9 @@ class Store {
     this.db.exec(LISTS_SCHEMA);
     this.db.exec(PLAY_SCHEMA);
     this.db.exec(PARTY_RESULTS_SCHEMA);
+    if (!this.db.prepare('PRAGMA table_info(party_results)').all().some(c => c.name === 'correct_ms')) {
+      this.db.exec('ALTER TABLE party_results ADD COLUMN correct_ms INTEGER NOT NULL DEFAULT 0');
+    }
     this.loadRows();
     this.vecs = null;
     this.vectorCount = 0;
@@ -395,18 +398,19 @@ class Store {
   }
 
   addPartyResults(results) {
-    const add = this.db.prepare(`INSERT INTO party_results (name_key, name, correct, wrong, unanswered, rounds, updated_at)
-      VALUES (?, ?, ?, ?, ?, 1, datetime('now'))
+    const add = this.db.prepare(`INSERT INTO party_results (name_key, name, correct, wrong, unanswered, correct_ms, rounds, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, 1, datetime('now'))
       ON CONFLICT (name_key) DO UPDATE SET name = excluded.name, correct = correct + excluded.correct, wrong = wrong + excluded.wrong,
-        unanswered = unanswered + excluded.unanswered, rounds = rounds + 1, updated_at = excluded.updated_at`);
+        unanswered = unanswered + excluded.unanswered, correct_ms = correct_ms + excluded.correct_ms, rounds = rounds + 1, updated_at = excluded.updated_at`);
     this.db.exec('BEGIN');
-    for (const { name, correct, wrong, unanswered } of results) add.run(name.toLowerCase(), name, correct, wrong, unanswered);
+    for (const { name, correct, wrong, unanswered, correctMs = 0 } of results) add.run(name.toLowerCase(), name, correct, wrong, unanswered, correctMs);
     this.db.exec('COMMIT');
   }
 
   partyResults() {
-    return this.db.prepare(`SELECT name, correct, wrong, unanswered, rounds, updated_at FROM party_results
-      ORDER BY correct DESC, wrong ASC, unanswered ASC, name`).all();
+    return this.db.prepare(`SELECT name, correct, wrong, unanswered, rounds, updated_at,
+        CASE WHEN correct > 0 THEN ROUND(correct_ms / 1000.0 / correct, 1) END AS avg_seconds
+      FROM party_results ORDER BY correct DESC, avg_seconds IS NULL, avg_seconds ASC, wrong ASC, unanswered ASC, name`).all();
   }
 
   resetPartyResults() {
