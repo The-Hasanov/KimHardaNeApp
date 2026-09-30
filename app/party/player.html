@@ -114,6 +114,20 @@ ol.board li.me { outline: 2px solid var(--primary); }
 ol.board .rank { width: 28px; font-weight: 700; color: var(--muted); font-variant-numeric: tabular-nums; }
 ol.board .name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 ol.board .score { font-weight: 700; font-variant-numeric: tabular-nums; }
+@media (min-width: 700px) {
+  main { max-width: 760px; padding-top: 24px; gap: 20px; }
+  header { margin-top: -24px; padding-top: 20px; }
+  .question { font-size: 26px; }
+  .note, .pre { font-size: 17px; }
+  input { font-size: 20px; }
+  .big-number { font-size: 160px; }
+  h1 { font-size: 32px; }
+  .overlay:not(.sheet-overlay) .card, .sheet { border-radius: 20px; border-bottom: 1px solid var(--border); margin-bottom: 10vh; }
+  .sheet-overlay { align-items: center; padding: 16px; }
+  .sheet { max-width: 480px !important; }
+}
+button:not(:disabled):hover { filter: brightness(1.08); }
+button:focus-visible, .skip:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
 </style>
 </head>
 <body>
@@ -285,7 +299,7 @@ function showSettings() {
   leave.addEventListener('click', async () => {
     if (!isConfirmingLeave) {
       isConfirmingLeave = true;
-      leave.textContent = 'Tap again to leave';
+      leave.textContent = 'Press again to leave';
       return;
     }
     leave.disabled = true;
@@ -441,7 +455,7 @@ function updateSkip() {
   button.classList.toggle('on', !!skip.isMine);
   document.getElementById('skip-icon').replaceChildren(icon(skip.isMine ? ICONS.check : ICONS.skip));
   document.getElementById('skip-title').textContent = skip.isMine ? `Waiting for ${others} ${others === 1 ? 'player' : 'players'}` : SKIP_TITLES[state.phase];
-  document.getElementById('skip-hint').textContent = skip.isMine ? 'Tap to undo' : 'Moves on when everyone taps';
+  document.getElementById('skip-hint').textContent = skip.isMine ? 'Press again to undo' : 'Moves on when everyone skips';
   document.getElementById('skip-count').textContent = `${skip.count}/${skip.of}`;
   const segmentCount = Math.min(skip.of, MAX_SKIP_SEGMENTS);
   const filled = Math.round((skip.count / Math.max(skip.of, 1)) * segmentCount);

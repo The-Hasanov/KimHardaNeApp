@@ -43,7 +43,8 @@ npm test         # offline tests for the scraper, search, ranking, edits, data u
   "Yalnız dəqiq cavablar" are not treated as answers, and exact-only or very short answers skip the AI check.
   You can overrule every verdict with *Correct* / *Wrong*. The score and every answer are saved; *Your results*
   in the Play setup lists past games, where verdicts can still be changed or a game deleted.
-- **Party mode** (Game tab, *Party*): players join from their phones. *Open party* starts a small web server
+- **Party mode** (Game tab, *Party*): players join from any phone, tablet or computer with a web browser (below, *phones* means any of
+  them). *Open party* starts a small web server
   (`party.js`, Node's `http`, port 8765 or a free one) on this computer's local network address, which the app
   finds itself (private IPv4, real adapters before virtual ones such as Hyper-V or VPNs; a picker appears when
   there are several). The lobby shows a QR code of that address; players scan it, type a name and join in the

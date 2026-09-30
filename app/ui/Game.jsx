@@ -58,7 +58,7 @@ function NumberField({ id, label, value, min, max, step = 1, onChange }) {
 const MODE_DESCRIPTIONS = {
   host: summary => `Host mode: ${summary} and a timer. Answers stay hidden until you end the game.`,
   play: summary => `Play mode: answer ${summary} yourself against the clock, then mark each answer correct or wrong, or let AI search check it.`,
-  party: summary => `Party mode: players join from their phones by scanning a QR code, then answer ${summary} on their own screens. You mark the answers, or AI search checks them; scores add up over rounds.`,
+  party: summary => `Party mode: players join from any phone, tablet or computer with a web browser (scan the QR code or type the address), then answer ${summary} on their own screens. You mark the answers, or AI search checks them; scores add up over rounds.`,
 };
 const TIMING_HELP = {
   host: "Between questions the next question's number fills the screen; Space skips the wait. Auto-start starts each question's timer as soon as the question appears.",

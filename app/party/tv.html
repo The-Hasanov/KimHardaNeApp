@@ -192,7 +192,7 @@ function lobbyScreen() {
     el('div', 'qr', joinUrl ? [image('', '/tv/join-qr.svg', 'Join code'), el('div', 'address', hostOf(joinUrl))] : el('p', '', 'No network connection')),
     el('div', 'side stack',
       el('h1', 'title', 'Nə? Harada? Nə zaman?'),
-      el('p', 'muted', 'Scan the code with your phone to join. Same Wi-Fi.'),
+      el('p', 'muted', 'Scan the code or open the address in any browser to join. Same Wi-Fi.'),
       showsScores
         ? el('div', 'stack', el('div', '', 'Scores after round ' + state.round), leaderboard(state.leaderboard.slice(0, 8), false))
         : el('div', 'stack', el('div', '', state.players.length + ' joined'), el('div', '', state.players.map(function (player) { return el('span', 'chip', player.name); })))));

@@ -63,7 +63,7 @@ function JoinCard({ urls }) {
   return (
     <div className="flex flex-col items-center gap-3 rounded-xl border p-6 text-center">
       <JoinQrCode url={chosenUrl} />
-      <p className="text-sm text-muted-foreground">Scan with a phone camera, or open</p>
+      <p className="text-sm text-muted-foreground">Scan with a phone camera, or open in any browser</p>
       <p className="font-mono text-xl font-semibold">{hostOf(chosenUrl)}</p>
       {urls.length > 1 && (
         <Select value={chosenUrl} onValueChange={setChosenUrl}>
@@ -74,7 +74,7 @@ function JoinCard({ urls }) {
         </Select>
       )}
       <p className="max-w-sm text-xs text-muted-foreground">
-        Phones must be on the same Wi-Fi as this computer. If the page does not open, allow KimHardaNeApp on private
+        Any phone, tablet or computer works, with nothing to install. It must be on the same Wi-Fi as this computer. If the page does not open, allow KimHardaNeApp on private
         networks when Windows Firewall asks.
       </p>
     </div>
@@ -204,7 +204,7 @@ function SkipProgress({ skips }) {
   const filled = Math.round((skips.count / Math.max(skips.of, 1)) * segmentCount);
   return (
     <span className="flex items-center gap-2.5 rounded-full border px-3 py-1.5 text-sm animate-in fade-in-0"
-      title="Moves on when every online player taps Skip on the phone">
+      title="Moves on when every online player taps Skip">
       <SkipForwardIcon className="size-4 text-emerald-600 dark:text-emerald-400" />
       <span><span className="font-semibold tabular-nums">{skips.count}/{skips.of}</span> <span className="text-muted-foreground">want to skip</span></span>
       <span className="flex gap-0.5">
@@ -499,7 +499,7 @@ function PlayersInLobby({ players, onKick }) {
             </li>
           ))}
         </ul>
-      ) : <p className="text-sm text-muted-foreground">Waiting for players to scan the code…</p>}
+      ) : <p className="text-sm text-muted-foreground">Waiting for players to join…</p>}
     </div>
   );
 }

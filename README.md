@@ -3,14 +3,15 @@
 # KimHardaNeApp
 
 A Windows app for hosting quiz nights in the style of *Nə? Harada? Nə zaman?* (What? Where? When?). Players
-answer on their phones, the TV shows the questions, a countdown and the leaderboard, and the host runs the
+answer in the web browser of any phone, tablet or computer, the TV shows the questions, a countdown and the leaderboard, and the host runs the
 game from the app. Bring your own questions or use the bundled question bank.
 
 ![A question on the TV](docs/screenshots/tv-question.png)
 
 ## Features
 
-- **Party mode**: players join by scanning a QR code, with nothing to install. The TV shows each question with
+- **Party mode**: players join from any phone, tablet or computer by scanning a QR code or opening
+  the address in a browser, with nothing to install. The TV shows each question with
   its pictures, a countdown with sound for the last 10 seconds, the answer with everyone's result, and the
   leaderboard. Typed answers are checked by a local AI model, or marked by the host when AI search is off,
   and the host can overrule any verdict, or mark answers while the question is still running. Players can skip
@@ -29,7 +30,7 @@ game from the app. Bring your own questions or use the bundled question bank.
 
 ## Party mode
 
-| Host (the app) | TV | Phone |
+| Host (the app) | TV | Player (any browser) |
 |---|---|---|
 | ![Host console](docs/screenshots/party-host.png) | ![TV question](docs/screenshots/tv-question.png) | ![Phone question](docs/screenshots/phone-question.png) |
 | ![Host reveal](docs/screenshots/party-reveal.png) | ![TV reveal](docs/screenshots/tv-reveal.png) | ![Phone reveal](docs/screenshots/phone-reveal.png) |
@@ -39,7 +40,7 @@ game from the app. Bring your own questions or use the bundled question bank.
 2. In the **Game** tab pick **Party**, then **Open party**. The TV window opens with the join code.
 3. Put the TV window on the TV: drag it there and press F11, or use **TV → Show on Samsung TV…** or
    **TV → Cast with Miracast…**.
-4. Players scan the QR code on the same Wi-Fi and type a name.
+4. Players scan the QR code, or type the address into any browser, on the same Wi-Fi and type a name.
 5. Pick the questions and start the round. Turn on **Autoplay** to move on by itself.
 
 The app window stays the host's console: only the host sees the answer before the reveal, and phones and
