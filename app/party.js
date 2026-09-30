@@ -665,7 +665,8 @@ function openEventStream(game, req, res, { playerId = null, view }) {
 function sendPage(res, file) {
   res.writeHead(200, {
     'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff',
-    'Content-Security-Policy': "default-src 'self'; img-src 'self' https: data:; style-src 'unsafe-inline'; script-src 'unsafe-inline'",
+    'Content-Security-Policy': "default-src 'self'; img-src 'self' https: data:; media-src 'self' https:; style-src 'unsafe-inline'; script-src 'unsafe-inline'; object-src 'none'; base-uri 'none'; form-action 'none'",
+    'Referrer-Policy': 'no-referrer',
   });
   res.end(fs.readFileSync(file));
 }

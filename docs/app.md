@@ -54,7 +54,8 @@ npm test         # offline tests for the scraper, search, ranking, edits, data u
   gets what it shows). It follows the host's night mode. Opening a party also opens it in the **TV window**, a
   normal window placed on a second screen if there is one: drag it where you want and press F11 for full
   screen (Esc leaves it; *TV → Show TV window* brings it back if closed). *TV → Show on Samsung TV…* finds
-  Samsung Smart TVs on the network (SSDP, `samsungTv.js`) and opens the TV page in the TV's own web browser
+  Samsung Smart TVs on the network (SSDP, `samsungTv.js`; only devices with a local network address are asked, and their
+  answers are size-limited) and opens the TV page in the TV's own web browser
   through Samsung's remote-control channel (`wss://<tv>:8002`, the TV may ask once to allow KimHardaNeApp);
   press OK on the remote for full screen. Nothing is installed on the TV. *TV → Cast with Miracast…* opens the
   Windows Cast panel (Win+K) on computers with Miracast-capable Wi-Fi: pick the TV, then *Extend to TV*
@@ -165,6 +166,11 @@ the party header turns them off and on for everyone. Windows
   question bank this computer lacks, is added to your own questions first. A message sums up what was added.
 - **Images** are shown from `data/images/` when `scraper.js images` has fetched them, otherwise from the site.
 - **Refresh data** (in Settings, the gear icon top right) runs the scraper inside the app and brings the open database up to date.
+  Every download goes over `https` only (redirects away from it are refused) and has a size limit (64 MB of data per API
+  answer, 25 MB per picture). Pictures are fetched only from the question bank's own image address
+  (`https://api.3sual.az/images/`): links that your own or imported questions carry are shown as links, never downloaded
+  in the background. A downloaded picture is kept only when its bytes really are a JPEG, PNG, GIF, WebP, BMP or SVG
+  image, and it is stored under a hashed name with an extension from that list.
   *Quick* (~2 min) lists every package, fetches the ones not stored yet and runs the author check. *Full*
   (~20 min) also refetches every stored package, which picks up upstream edits. Both then download new
   images, rebuild the index and embed new or changed questions. Search and editing keep working meanwhile, and

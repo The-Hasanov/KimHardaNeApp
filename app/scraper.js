@@ -12,6 +12,16 @@ const USER_AGENT = '3sual-dataset-scraper/2.0 (sequential, rate-limited; node)';
 const MAX_DEPTH = 16;
 const IMAGE_TYPES = { 'image/jpeg': '.jpg', 'image/png': '.png', 'image/gif': '.gif', 'image/webp': '.webp',
   'image/bmp': '.bmp', 'image/svg+xml': '.svg' };
+const IMAGE_SIGNATURES = {
+  'image/jpeg': bytes => bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff,
+  'image/png': bytes => bytes.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])),
+  'image/gif': bytes => ['GIF87a', 'GIF89a'].includes(bytes.toString('latin1', 0, 6)),
+  'image/webp': bytes => bytes.toString('latin1', 0, 4) === 'RIFF' && bytes.toString('latin1', 8, 12) === 'WEBP',
+  'image/bmp': bytes => bytes.toString('latin1', 0, 2) === 'BM',
+  'image/svg+xml': bytes => /^\s*(<\?xml[^>]*>\s*)?(<!--[\s\S]*?-->\s*)*(<!DOCTYPE[^>]*>\s*)?<svg[\s>]/i.test(bytes.toString('utf8', 0, 4096).replace(/^\uFEFF/, '')),
+};
+const MAX_JSON_BYTES = 64 * 1024 * 1024;
+const MAX_IMAGE_BYTES = 25 * 1024 * 1024;
 const AUTHOR_PAGE = 100;
 const LIST_FAILURE_LIMIT = 3;
 const FETCH_FAILURE_LIMIT = 10;
@@ -53,6 +63,35 @@ function tx(db, fn) {
 }
 
 class FetchError extends Error {}
+
+async function readLimited(res, maxBytes, url) {
+  const tooLarge = () => new FetchError(`${url} is larger than ${Math.round(maxBytes / 1024 / 1024)} MB`);
+  if (Number(res.headers.get('content-length')) > maxBytes) throw tooLarge();
+  if (!res.body?.getReader) return Buffer.from(await res.arrayBuffer());
+  const reader = res.body.getReader();
+  const chunks = [];
+  let length = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    length += value.length;
+    if (length > maxBytes) {
+      await reader.cancel();
+      throw tooLarge();
+    }
+    chunks.push(value);
+  }
+  return Buffer.concat(chunks);
+}
+
+const isSiteImage = url => {
+  try {
+    const parsed = new URL(url);
+    return parsed.origin === new URL(IMAGES).origin && parsed.pathname.startsWith(new URL(IMAGES).pathname);
+  } catch {
+    return false;
+  }
+};
 class Interrupted extends Error {}
 
 class Client {
@@ -66,7 +105,7 @@ class Client {
   async getJson(p, params = null) {
     const q = v => encodeURIComponent(String(v)).replace(/%2C/g, ',').replace(/%20/g, '+');
     const url = this.base + p + (params ? `?${Object.entries(params).map(([k, v]) => `${q(k)}=${q(v)}`).join('&')}` : '');
-    const { status, body } = await this.fetch(url, 'application/json');
+    const { status, body } = await this.fetch(url, 'application/json', { maxBytes: MAX_JSON_BYTES });
     const text = body.toString('utf8');
     if (status === 204 || !text.trim()) return null;
     try {
@@ -76,7 +115,8 @@ class Client {
     }
   }
 
-  async fetch(url, accept = '*/*') {
+  async fetch(url, accept = '*/*', { maxBytes = MAX_JSON_BYTES } = {}) {
+    if (new URL(url).protocol !== 'https:') throw new FetchError(`refusing to download ${url}: only https is allowed`);
     for (let attempt = 0; ; attempt++) {
       const pause = this.delay * 1000 - (Date.now() - this.last);
       if (pause > 0) await this.wait(pause, this.signal);
@@ -88,7 +128,10 @@ class Client {
         const timeout = AbortSignal.timeout(this.timeout * 1000);
         const res = await this.fetchImpl(url, { headers: { 'User-Agent': USER_AGENT, Accept: accept },
           signal: this.signal ? AbortSignal.any([this.signal, timeout]) : timeout });
-        if (res.status < 400) return { status: res.status, headers: res.headers, body: Buffer.from(await res.arrayBuffer()) };
+        if (res.status < 400) {
+          if (res.url && new URL(res.url).protocol !== 'https:') throw new FetchError(`refusing ${url}: it redirected away from https`);
+          return { status: res.status, headers: res.headers, body: await readLimited(res, maxBytes, url) };
+        }
         if (res.status !== 429 && res.status < 500) throw new FetchError(`HTTP ${res.status} for ${url}`);
         err = `HTTP ${res.status}`;
         retryAfter = res.headers.get('retry-after');
@@ -724,15 +767,7 @@ function exportJsonl(db, out, includeRaw = false) {
 
 function imagePath(url, contentType) {
   const h = crypto.createHash('sha1').update(url).digest('hex');
-  let ext = IMAGE_TYPES[contentType];
-  if (!ext) {
-    try {
-      ext = path.posix.extname(new URL(url).pathname).toLowerCase().slice(0, 6);
-    } catch {
-      ext = '';
-    }
-  }
-  return `images/${h.slice(0, 2)}/${h}${ext || '.bin'}`;
+  return `images/${h.slice(0, 2)}/${h}${IMAGE_TYPES[contentType] ?? '.bin'}`;
 }
 
 async function downloadImages(db, client, roots, { limit = null, log = defaultLog, progress = () => {} } = {}) {
@@ -741,15 +776,15 @@ async function downloadImages(db, client, roots, { limit = null, log = defaultLo
     SELECT source_media_url FROM questions WHERE source_media_url IS NOT NULL ORDER BY 1`).all().map(r => r.u);
   const have = new Set(db.prepare("SELECT url, path FROM images WHERE status = 'ok'").all()
     .filter(r => roots.some(root => fs.existsSync(path.join(root, r.path)))).map(r => r.url));
-  const todo = urls.filter(u => !have.has(u)).slice(0, limit ?? undefined);
+  const todo = urls.filter(u => !have.has(u) && isSiteImage(u)).slice(0, limit ?? undefined);
   log('info', `images: ${urls.length} referenced, ${have.size} already downloaded, ${todo.length} to fetch`);
   for (let i = 1; i <= todo.length; i++) {
     const url = todo[i - 1];
     let row;
     try {
-      const { headers, body } = await client.fetch(url, 'image/*');
+      const { headers, body } = await client.fetch(url, 'image/*', { maxBytes: MAX_IMAGE_BYTES });
       const ctype = (headers.get('content-type') || '').split(';')[0].trim().toLowerCase();
-      if (!body.length || ctype.startsWith('text/') || ctype.startsWith('application/json')) {
+      if (!body.length || !IMAGE_SIGNATURES[ctype]?.(body)) {
         throw new FetchError(`not an image: ${ctype || 'no content type'}, ${body.length} bytes`);
       }
       const rel = imagePath(url, ctype);

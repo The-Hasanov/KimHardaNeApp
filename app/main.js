@@ -11,7 +11,7 @@ const scraper = require('./scraper');
 const { judgeAnswer } = require('./judge');
 const { openParty } = require('./party');
 const transfer = require('./transfer');
-const { findSamsungTvs, openInTvBrowser } = require('./samsungTv');
+const { findSamsungTvs, openInTvBrowser, isLocalNetworkAddress } = require('./samsungTv');
 
 const WHAT_WHERE_WHEN_GAME_ID = 1;
 const USER_DATA_BEFORE_RENAME = path.join(app.getPath('appData'), '3sual Editor');
@@ -292,6 +292,7 @@ app.whenReady().then(() => {
   handle('party-find-tvs', () => findSamsungTvs());
   handle('party-cast-samsung', async address => {
     if (!party) throw new Error('No party is open');
+    if (!isLocalNetworkAddress(address)) throw new Error('That TV is not on the local network');
     const tvNetwork = address.split('.').slice(0, 3).join('.');
     const joinUrls = party.game.urls.map(({ url }) => url);
     const partyUrl = joinUrls.find(url => url.startsWith(`http://${tvNetwork}.`)) ?? joinUrls[0];
