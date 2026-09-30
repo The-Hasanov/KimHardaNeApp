@@ -213,12 +213,25 @@ test('pictures on your own questions are saved next to the database, shown from 
   assert.throws(() => s.setOwnImage(own.uid, 'rekvizit_url', 'notes.txt'), /PNG, JPEG/);
 });
 
-test('party results add up per player name across rounds and can be reset', () => {
+test('party results add up per player name across rounds, rank by points then time, and can be reset', () => {
   const s = store();
-  s.addPartyResults([{ name: 'Aysel', correct: 3, wrong: 1, unanswered: 1, correctMs: 30000 }, { name: 'Nicat', correct: 1, wrong: 0, unanswered: 4, correctMs: 5000 }]);
-  s.addPartyResults([{ name: 'aysel', correct: 2, wrong: 2, unanswered: 0, correctMs: 15500 }, { name: 'Leyla', correct: 1, wrong: 0, unanswered: 0, correctMs: 2000 }]);
-  assert.deepEqual(s.partyResults().map(({ name, correct, wrong, unanswered, rounds, avg_seconds }) => [name, correct, wrong, unanswered, rounds, avg_seconds]),
-    [['aysel', 5, 3, 1, 2, 9.1], ['Leyla', 1, 0, 0, 1, 2], ['Nicat', 1, 0, 4, 1, 5]]);
+  s.addPartyResults([{ name: 'Aysel', points: 6, correct: 3, wrong: 1, unanswered: 1, correctMs: 30000 }, { name: 'Nicat', points: 10, correct: 1, wrong: 0, unanswered: 4, correctMs: 5000 }]);
+  s.addPartyResults([{ name: 'aysel', points: 4, correct: 2, wrong: 2, unanswered: 0, correctMs: 15500 }, { name: 'Leyla', correct: 1, wrong: 0, unanswered: 0, correctMs: 2000 }]);
+  s.addPartyResults([{ name: 'Orxan', points: 1, correct: 1, wrong: 0, unanswered: 0, correctMs: 9000 }]);
+  assert.deepEqual(s.partyResults().map(({ name, points, correct, wrong, unanswered, rounds, avg_seconds }) => [name, points, correct, wrong, unanswered, rounds, avg_seconds]),
+    [['Nicat', 10, 1, 0, 4, 1, 5], ['aysel', 10, 5, 3, 1, 2, 9.1], ['Leyla', 1, 1, 0, 0, 1, 2], ['Orxan', 1, 1, 0, 0, 1, 9]]);
   s.resetPartyResults();
   assert.deepEqual(s.partyResults(), []);
+});
+
+test('point systems are saved by name, renamed, and deleted', () => {
+  const s = store();
+  const id = s.savePointSystem({ name: 'Brave pool', mode: 'pool', pool: [{ points: 10 }] });
+  assert.throws(() => s.savePointSystem({ name: 'brave POOL', mode: 'simple' }), /already exists/);
+  s.savePointSystem({ id, name: 'Brave pool', mode: 'pool', pool: [{ points: 20 }] });
+  assert.deepEqual(s.pointSystems().find(system => system.id === id).pool, [{ points: 20 }]);
+  const other = s.savePointSystem({ name: 'Classic', mode: 'simple' });
+  assert.deepEqual(s.pointSystems().map(system => system.name), ['Brave pool', 'Classic']);
+  s.deletePointSystem(other);
+  assert.deepEqual(s.pointSystems().map(system => system.id), [id]);
 });

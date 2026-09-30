@@ -34,7 +34,7 @@ import Game from './Game';
 import Lists, { ListNameDialog } from './Lists';
 import SettingsDialog, { describeAiWork } from './Settings';
 import { setNightMode, useNightMode } from './theme';
-import { Media } from './gameShared';
+import { Media, withoutIpcPrefix } from './gameShared';
 import { exportedMessage, importDetails, questionCountLabel, runTransfer } from './transferMessages';
 
 const { api } = window;
@@ -467,7 +467,7 @@ export default function App() {
       const question = await (shouldRemove ? api.removeQuestionImage(uid, column) : api.pickQuestionImage(uid, column));
       if (question) setCurrent(question);
     } catch (e) {
-      toast.error('Picture not saved', { description: e.message.replace(/^Error invoking remote method '[^']+': (Error: )?/, '') });
+      toast.error('Picture not saved', { description: withoutIpcPrefix(e) });
     }
   }
 

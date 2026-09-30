@@ -47,6 +47,16 @@ contextBridge.exposeInMainWorld('api', {
   partyClose: () => ipcRenderer.invoke('party-close'),
   partyResults: () => ipcRenderer.invoke('party-results'),
   resetPartyResults: () => ipcRenderer.invoke('reset-party-results'),
+  pointSystems: () => ipcRenderer.invoke('point-systems'),
+  newPointSystem: () => ipcRenderer.invoke('new-point-system'),
+  gameTemplates: () => ipcRenderer.invoke('game-templates'),
+  saveGameTemplate: template => ipcRenderer.invoke('save-game-template', template),
+  deleteGameTemplate: id => ipcRenderer.invoke('delete-game-template', id),
+  savePointSystem: system => ipcRenderer.invoke('save-point-system', system),
+  deletePointSystem: id => ipcRenderer.invoke('delete-point-system', id),
+  partyProfiles: () => ipcRenderer.invoke('party-profiles'),
+  clearPartyProfilePin: name => ipcRenderer.invoke('clear-party-profile-pin', name),
+  deletePartyProfile: (name, options) => ipcRenderer.invoke('delete-party-profile', name, options),
   onPartyResults: cb => {
     const listener = (_e, results) => cb(results);
     ipcRenderer.on('party-results', listener);

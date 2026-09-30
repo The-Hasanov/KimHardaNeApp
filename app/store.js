@@ -28,7 +28,18 @@ CREATE TABLE IF NOT EXISTS list_questions (
 const PARTY_RESULTS_SCHEMA = `
 CREATE TABLE IF NOT EXISTS party_results (
   name_key TEXT PRIMARY KEY, name TEXT NOT NULL, correct INTEGER NOT NULL DEFAULT 0, wrong INTEGER NOT NULL DEFAULT 0,
-  unanswered INTEGER NOT NULL DEFAULT 0, rounds INTEGER NOT NULL DEFAULT 0, correct_ms INTEGER NOT NULL DEFAULT 0, updated_at TEXT NOT NULL);`;
+  unanswered INTEGER NOT NULL DEFAULT 0, rounds INTEGER NOT NULL DEFAULT 0, correct_ms INTEGER NOT NULL DEFAULT 0, points INTEGER NOT NULL DEFAULT 0,
+  updated_at TEXT NOT NULL);`;
+const PARTY_PROFILES_SCHEMA = `
+CREATE TABLE IF NOT EXISTS party_profiles (
+  name_key TEXT PRIMARY KEY, name TEXT NOT NULL, pin_hash TEXT, pin_salt TEXT, preferences TEXT NOT NULL DEFAULT '{}',
+  created_at TEXT NOT NULL, last_seen_at TEXT NOT NULL);`;
+const POINT_SYSTEMS_SCHEMA = `
+CREATE TABLE IF NOT EXISTS point_systems (
+  id INTEGER PRIMARY KEY, name TEXT NOT NULL UNIQUE COLLATE NOCASE, settings TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL);`;
+const GAME_TEMPLATES_SCHEMA = `
+CREATE TABLE IF NOT EXISTS game_templates (
+  id INTEGER PRIMARY KEY, name TEXT NOT NULL UNIQUE COLLATE NOCASE, rounds TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL);`;
 const POOL = 500;
 const OWN_PACKAGE_ID = 0;
 const OWN_GAME_ID = 0;
@@ -65,9 +76,12 @@ class Store {
     this.db.exec(LISTS_SCHEMA);
     this.db.exec(PLAY_SCHEMA);
     this.db.exec(PARTY_RESULTS_SCHEMA);
-    if (!this.db.prepare('PRAGMA table_info(party_results)').all().some(c => c.name === 'correct_ms')) {
-      this.db.exec('ALTER TABLE party_results ADD COLUMN correct_ms INTEGER NOT NULL DEFAULT 0');
-    }
+    this.db.exec(PARTY_PROFILES_SCHEMA);
+    this.db.exec(POINT_SYSTEMS_SCHEMA);
+    this.db.exec(GAME_TEMPLATES_SCHEMA);
+    const resultColumns = this.db.prepare('PRAGMA table_info(party_results)').all().map(c => c.name);
+    if (!resultColumns.includes('correct_ms')) this.db.exec('ALTER TABLE party_results ADD COLUMN correct_ms INTEGER NOT NULL DEFAULT 0');
+    if (!resultColumns.includes('points')) this.db.exec('ALTER TABLE party_results ADD COLUMN points INTEGER NOT NULL DEFAULT 0; UPDATE party_results SET points = correct');
     this.loadRows();
     this.vecs = null;
     this.vectorCount = 0;
@@ -420,23 +434,106 @@ class Store {
   }
 
   addPartyResults(results) {
-    const add = this.db.prepare(`INSERT INTO party_results (name_key, name, correct, wrong, unanswered, correct_ms, rounds, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, 1, datetime('now'))
-      ON CONFLICT (name_key) DO UPDATE SET name = excluded.name, correct = correct + excluded.correct, wrong = wrong + excluded.wrong,
-        unanswered = unanswered + excluded.unanswered, correct_ms = correct_ms + excluded.correct_ms, rounds = rounds + 1, updated_at = excluded.updated_at`);
+    const add = this.db.prepare(`INSERT INTO party_results (name_key, name, points, correct, wrong, unanswered, correct_ms, rounds, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, 1, datetime('now'))
+      ON CONFLICT (name_key) DO UPDATE SET name = excluded.name, points = points + excluded.points, correct = correct + excluded.correct,
+        wrong = wrong + excluded.wrong, unanswered = unanswered + excluded.unanswered, correct_ms = correct_ms + excluded.correct_ms,
+        rounds = rounds + 1, updated_at = excluded.updated_at`);
     this.db.exec('BEGIN');
-    for (const { name, correct, wrong, unanswered, correctMs = 0 } of results) add.run(name.toLowerCase(), name, correct, wrong, unanswered, correctMs);
+    for (const { name, correct, points = correct, wrong, unanswered, correctMs = 0 } of results) add.run(name.toLowerCase(), name, points, correct, wrong, unanswered, correctMs);
     this.db.exec('COMMIT');
   }
 
   partyResults() {
-    return this.db.prepare(`SELECT name, correct, wrong, unanswered, rounds, updated_at,
+    return this.db.prepare(`SELECT name, points, correct, wrong, unanswered, rounds, updated_at,
         CASE WHEN correct > 0 THEN ROUND(correct_ms / 1000.0 / correct, 1) END AS avg_seconds
-      FROM party_results ORDER BY correct DESC, avg_seconds IS NULL, avg_seconds ASC, wrong ASC, unanswered ASC, name`).all();
+      FROM party_results ORDER BY points DESC, avg_seconds IS NULL, avg_seconds ASC, correct DESC, wrong ASC, name`).all();
   }
 
   resetPartyResults() {
     this.db.exec('DELETE FROM party_results');
+  }
+
+  partyProfile(key) {
+    const row = this.db.prepare('SELECT name_key, name, pin_hash, pin_salt, preferences FROM party_profiles WHERE name_key = ?').get(key);
+    if (!row) return null;
+    let preferences = {};
+    try {
+      preferences = JSON.parse(row.preferences) ?? {};
+    } catch {}
+    return { key: row.name_key, name: row.name, pinHash: row.pin_hash, pinSalt: row.pin_salt, preferences };
+  }
+
+  savePartyProfile({ key, name, pinHash = null, pinSalt = null, preferences = {} }) {
+    this.db.prepare(`INSERT INTO party_profiles (name_key, name, pin_hash, pin_salt, preferences, created_at, last_seen_at)
+      VALUES (?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+      ON CONFLICT (name_key) DO UPDATE SET name = excluded.name, pin_hash = excluded.pin_hash, pin_salt = excluded.pin_salt,
+        preferences = excluded.preferences, last_seen_at = excluded.last_seen_at`).run(key, name, pinHash, pinSalt, JSON.stringify(preferences));
+  }
+
+  get partyProfileStorage() {
+    return { get: key => this.partyProfile(key), save: profile => this.savePartyProfile(profile) };
+  }
+
+  partyProfiles() {
+    return this.db.prepare(`SELECT p.name, p.pin_hash IS NOT NULL AS has_pin, p.created_at, p.last_seen_at, COALESCE(r.rounds, 0) AS rounds
+      FROM party_profiles p LEFT JOIN party_results r ON r.name_key = p.name_key ORDER BY p.last_seen_at DESC, p.name`).all()
+      .map(row => ({ ...row, has_pin: !!row.has_pin }));
+  }
+
+  clearPartyProfilePin(name) {
+    this.db.prepare('UPDATE party_profiles SET pin_hash = NULL, pin_salt = NULL WHERE name_key = ?').run(String(name).toLowerCase());
+  }
+
+  deletePartyProfile(name, { withResults = false } = {}) {
+    const key = String(name).toLowerCase();
+    this.db.prepare('DELETE FROM party_profiles WHERE name_key = ?').run(key);
+    if (withResults) this.db.prepare('DELETE FROM party_results WHERE name_key = ?').run(key);
+  }
+
+  pointSystems() {
+    return this.db.prepare('SELECT id, name, settings, updated_at FROM point_systems ORDER BY name COLLATE NOCASE').all()
+      .map(({ settings, ...row }) => ({ ...JSON.parse(settings), ...row }));
+  }
+
+  savePointSystem({ id = null, name, ...settings }) {
+    const clash = this.db.prepare('SELECT id FROM point_systems WHERE name = ? AND id IS NOT ?').get(name, id);
+    if (clash) throw new Error(`A point system named “${name}” already exists`);
+    const json = JSON.stringify(settings);
+    if (id == null) {
+      return Number(this.db.prepare("INSERT INTO point_systems (name, settings, created_at, updated_at) VALUES (?, ?, datetime('now'), datetime('now'))").run(name, json).lastInsertRowid);
+    }
+    this.db.prepare("UPDATE point_systems SET name = ?, settings = ?, updated_at = datetime('now') WHERE id = ?").run(name, json, id);
+    return id;
+  }
+
+  deletePointSystem(id) {
+    this.db.prepare('DELETE FROM point_systems WHERE id = ?').run(id);
+  }
+
+  gameTemplates() {
+    return this.db.prepare('SELECT id, name, rounds, updated_at FROM game_templates ORDER BY name COLLATE NOCASE').all()
+      .map(row => ({ ...row, rounds: JSON.parse(row.rounds) }));
+  }
+
+  saveGameTemplate({ id = null, name, rounds }) {
+    const existing = this.db.prepare('SELECT id FROM game_templates WHERE name = ?').get(name);
+    const targetId = id ?? existing?.id ?? null;
+    if (existing && existing.id !== targetId) throw new Error(`A template named “${name}” already exists`);
+    const json = JSON.stringify(rounds);
+    if (targetId == null) {
+      return Number(this.db.prepare("INSERT INTO game_templates (name, rounds, created_at, updated_at) VALUES (?, ?, datetime('now'), datetime('now'))").run(name, json).lastInsertRowid);
+    }
+    this.db.prepare("UPDATE game_templates SET name = ?, rounds = ?, updated_at = datetime('now') WHERE id = ?").run(name, json, targetId);
+    return targetId;
+  }
+
+  deleteGameTemplate(id) {
+    this.db.prepare('DELETE FROM game_templates WHERE id = ?').run(id);
+  }
+
+  templatesUsingPointSystem(pointSystemId) {
+    return this.gameTemplates().filter(template => template.rounds.some(round => round.pointSystemId === pointSystemId)).map(template => template.name);
   }
 
   games() {
@@ -444,4 +541,4 @@ class Store {
   }
 }
 
-module.exports = { Store, OWN_PACKAGE_ID, OWN_IMAGE_PREFIX, MEDIA_TYPES, IMAGE_COLUMNS, mediaKind, TUNING, LISTS_SCHEMA, PLAY_SCHEMA, PARTY_RESULTS_SCHEMA, EMBEDDINGS_SCHEMA, fold, passage, embeddable, hashOf, DIM };
+module.exports = { Store, OWN_PACKAGE_ID, OWN_IMAGE_PREFIX, MEDIA_TYPES, IMAGE_COLUMNS, mediaKind, TUNING, LISTS_SCHEMA, PLAY_SCHEMA, PARTY_RESULTS_SCHEMA, PARTY_PROFILES_SCHEMA, POINT_SYSTEMS_SCHEMA, GAME_TEMPLATES_SCHEMA, EMBEDDINGS_SCHEMA, fold, passage, embeddable, hashOf, DIM };

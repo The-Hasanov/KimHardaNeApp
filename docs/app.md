@@ -73,11 +73,29 @@ npm test         # offline tests for the scraper, search, ranking, edits, data u
   has been shown for *Seconds on the answer*; the host can still press *Next question* early or *Pause* (Space)
   to look at the answers longer. Each question and its images appear on every phone with a countdown and, at the bottom where
   thumbs are, a chat-style answer bar (answer box and round send button) with the reactions above it and the answer's
-  status and a small *Done* chip (the Skip vote) under it. When the time is up (or *Close answers now*),
+  status and a small *Done* chip (the Skip vote, held for a second) under it. When the time is up (or *Close answers now*),
   AI search checks every answer as in Play mode (with AI search off the host marks each one, and phones show
   *The host is checking* until then); phones then show their verdict, the answer and the
-  leaderboard, and the host sees every answer and can overrule it. The host sets the points for a correct
-  answer and for a wrong one (for example −1; a blank answer always scores 0). *Show the answers: At the end of
+  leaderboard, and the host sees every answer and can overrule it. In Party mode the host plans the **rounds** before opening the party: each round has its own questions (random, with a count,
+  or a list), timers, answer showing, autoplay and point system, and rounds can be added, duplicated, removed and changed
+  until they are played (between rounds too). The party cannot open, and a round cannot start, while a planned round does
+  not fit its point system or its list is gone; the round shows why in red. *Save as template* keeps the plan as a **game
+  template** (`game_templates` table, carried through updates; saving with an existing name replaces it), and *Use a
+  template* or *Game → Templates → Use* loads one. Templates point to their point systems, so editing a point system changes
+  every template that uses it, and a point system a template uses cannot be deleted. Each round uses a **point system**,
+  picked in the round settings and kept under *Game → Point systems* (`point_systems` table, carried through updates;
+  a *Classic* one, correct +1, is made on first use). A point system has either *fixed points* (correct, wrong and no
+  answer, negative for a penalty) or a *point pool* (values such as 10, 20 and 30, each with its own wrong and no-answer
+  points and an optional number of uses per round): phones show the values as buttons above the answer bar, with the uses
+  left, and a question without a pick plays for the lowest free value. A round cannot start when it has more questions
+  than a limited pool has picks. Extras can be switched on together: a *streak bonus* from the nth correct answer in a
+  row (the same bonus each time, or growing by the bonus), *all or nothing* (a player scores for the round only with no
+  wrong answer, and with no blank one unless *No answer counts as wrong* is off), an *all correct bonus* for any point
+  system (extra points at the end of a round for players with every answer right, shown on the phone at the last
+  answer; with all or nothing and *No answer counts as wrong* off, a blank answer does not lose it), and *risk* (fixed points only): a *Risk it* switch on the phone uses the risked correct and wrong
+  points, up to an optional number of risks per round; a risked question left blank is not used up. The host sees each
+  player's pick or risk next to the answer, phones see their points with the streak bonus after the reveal, and the
+  scoring rules sit in `scoring.js`. *Show the answers: At the end of
   the round* keeps every answer and score hidden from phones and the TV; it needs seconds between questions, and
   during them the host checks the previous question's answers. After the last question the host checks its answers,
   presses *Show the answers* and steps through them with *Next answer*, and the scores grow as they are revealed. After the last question the
@@ -89,19 +107,28 @@ npm test         # offline tests for the scraper, search, ranking, edits, data u
 their answers and score leave the party, and their phone asks for a name again, so it is not a ban. A phone that
 loses the connection keeps its place and reconnects by itself, even after minutes or a page reload; only a removed
 player or a closed party has to join again. The phone's *Settings* (tap the name, or the button in the lobby) change the name, never to a name
-someone else has, and *Leave the game* removes the player and their score, as if the host had removed them. While a
+someone else has, and *Leave the game* removes the player and their score, as if the host had removed them. **Profiles**: the first time a name joins, the host app saves a
+profile for it (`party_profiles` table, carried through updates) with the player's preferences (*Show reactions*, and *Sound*:
+a chime and a buzz when a question starts). In *Settings* a player can set, change or remove a 4-digit **PIN** (stored as a
+salted scrypt hash). A name with a PIN asks for it on joining, or when another player renames to it; five wrong tries lock
+that name for a minute. Typing the right PIN for a name that is already in the game moves that player to the new device with
+their score, and the old phone goes back to the name screen. A name without a PIN is accepted as before, and a known name
+loads its profile. The host's *Game* tab has *Play*, *Profiles* and *Leaderboard* sections: *Profiles* lists every profile
+with its PIN state, rounds and last game, and can *Clear PIN* (for a player who forgot it) or delete a profile, optionally
+with its all-time results. While a
 question runs, a phone that switches to another tab or app, or loses the connection, gets a warning sign on the
 host's screen only, with how many times, and a short toast there names the player as it happens (one toast per
 player and question, updated with the count); the count starts again at each question. *Message* in the party header sends a clue or
 an announcement (up to 300 characters) to every phone, never to the TV; players cannot reply. It shows at the top of each
-phone, which vibrates where it can, until the player closes it, the host clears or replaces it, or the next question starts. Phones have a small *Skip* button while the next question's number, a question or an answer is
-shown: when every online player has tapped it (tap again to take it back), the game moves on, unless the host has
+phone, which vibrates where it can, until the player closes it, the host clears or replaces it, or the next question starts. Phones have a small *Skip* button that must be held for a second (a ring fills while holding; a quick tap only shows "Hold to skip", so it is not pressed by accident) while the next question's number, a question or an answer is
+shown: when every online player has held it (hold again to take it back), the game moves on, unless the host has
 paused, and never while the host checks answers (between questions when the answers show at the end of the round, or
 while an answer is still *not sure*): phones then show that the host is checking, and only the host moves on. Phones
 and the host see how many tapped, and the count starts again at each step. Every finished round adds
-each player's correct, wrong and unanswered questions (counted from the question they joined at) to the
-**all-time leaderboard** in the party lobby, kept per name in the `party_results` table and carried through
-updates; *Reset* there deletes them. Each answer keeps its time: seconds from the question's start to the last change of the
+each player's points, correct, wrong and unanswered questions (counted from the question they joined at) to the
+**all-time leaderboard** (in the party lobby and the Game tab's *Leaderboard*), kept per name in the `party_results` table and carried through
+updates; it ranks by total points, then by the faster average time, and *Reset* there deletes them (results saved before
+points were kept count one point per correct answer). Each answer keeps its time: seconds from the question's start to the last change of the
 answer, pauses left out (sending the same answer again keeps the first time). The host sees it next to every answer,
 phones see their own after the reveal, and every leaderboard (host, TV, phones, all-time) shows each player's average
 time of correct answers; players with the same score are ranked by it, the faster first. When a round ends, the TV and the host show
@@ -114,8 +141,8 @@ question runs they sit in a row just above the answer bar; one a
 second and ten a minute per player (the tray shows how many are left). The host app queues every reaction and shows it as a small toast
 with the player's name in the TV's bottom-right corner (five at a time, about 4 s each) and on the other players' phones
 (two at a time, about 3 s each), in the order sent; one that waits too long (15 s for the TV, 8 s for phones) is dropped, and it shows next to the player's name in the
-host's player lists for a few seconds when it reaches the TV. *Show reactions* in the phone's Settings hides them and the tray for that player (remembered
-on the device); *Reactions* in
+host's player lists for a few seconds when it reaches the TV. *Show reactions* in the phone's Settings hides them and the tray for that player (saved in the
+player's profile); *Reactions* in
 the party header turns them off and on for everyone. Windows
   Firewall asks once whether KimHardaNeApp may accept connections on private networks; allow it.
 - **Lists**: *Add to list* in the editor puts the open question into one or more of your lists, or creates a

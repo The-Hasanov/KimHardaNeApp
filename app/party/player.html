@@ -139,6 +139,20 @@ header .bar { gap: 6px; }
 .skip-chip .count { color: var(--muted); font-weight: 600; }
 .skip-chip.on { background: color-mix(in srgb, var(--good) 16%, var(--card)); border-color: color-mix(in srgb, var(--good) 55%, transparent); color: var(--good); }
 .skip-chip.on .count { color: var(--good); }
+.hold { touch-action: manipulation; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
+.hold-icon { position: relative; flex: none; display: grid; place-items: center; }
+.hold-icon > :not(.hold-ring) { grid-area: 1 / 1; }
+.hold-ring { grid-area: 1 / 1; width: 44px; height: 44px; margin: -4px; transform: rotate(-90deg); pointer-events: none; }
+.hold-ring circle { fill: none; stroke: var(--good); stroke-width: 3; stroke-linecap: round; stroke-dasharray: 100; stroke-dashoffset: 100; opacity: 0; transition: none; }
+.hold.holding .hold-ring circle { stroke-dashoffset: 0; opacity: 1; transition: stroke-dashoffset 1s linear; }
+.skip.hold.holding, .skip-chip.hold.holding { transform: scale(.97); }
+.chip-icon { display: grid; place-items: center; width: 18px; height: 18px; }
+.skip-chip.hold { position: relative; overflow: hidden; isolation: isolate; gap: 9px; padding: 8px 16px 8px 12px; font-size: 14px; }
+.skip.hold, .skip-chip.hold { position: relative; overflow: hidden; isolation: isolate; }
+.skip.hold::before, .skip-chip.hold::before { content: ''; position: absolute; inset: 0; z-index: -1; background: color-mix(in srgb, var(--good) 24%, transparent); transform: scaleX(0); transform-origin: left; transition: none; }
+.skip.hold.holding::before, .skip-chip.hold.holding::before { transform: scaleX(1); transition: transform 1s linear; }
+.skip-chip .hold-ring { width: 28px; height: 28px; margin: -5px; }
+.skip-chip .hold-ring circle { stroke-width: 3.5; }
 .danger { background: color-mix(in srgb, var(--bad) 12%, transparent); color: var(--bad); border: 1px solid color-mix(in srgb, var(--bad) 45%, transparent); }
 .sheet-overlay { align-items: flex-end; padding: 0; }
 .sheet { max-width: 640px !important; border-radius: 20px 20px 0 0; border-bottom: 0; padding: 16px 16px calc(24px + env(safe-area-inset-bottom)); gap: 16px; animation: rise .2s ease-out; }
@@ -146,6 +160,42 @@ header .bar { gap: 6px; }
 .sheet-head { display: flex; align-items: center; justify-content: space-between; }
 .sheet-title { font-size: 20px; }
 .sheet-section { display: flex; flex-direction: column; gap: 10px; padding-top: 16px; border-top: 1px solid var(--border); }
+.pin-input { text-align: center; font-size: 26px; letter-spacing: .5em; font-variant-numeric: tabular-nums; padding-left: calc(14px + .5em); }
+.pin-input[hidden] { display: none; }
+.pin-input:placeholder-shown { letter-spacing: normal; font-size: 18px; padding-left: 14px; }
+.pin-form .pin-input:placeholder-shown { font-size: 16px; }
+.pin-form { flex-direction: row; gap: 8px; }
+.pin-form .pin-input { flex: 1; min-width: 0; font-size: 20px; }
+.lock-badge { width: 56px; height: 56px; border-radius: 50%; display: grid; place-items: center; background: var(--card); border: 1px solid var(--border); margin-bottom: 4px; }
+.lock-badge svg { width: 26px; height: 26px; }
+.rules { display: flex; flex-direction: column; gap: 2px; font-size: 14px; color: var(--muted); }
+.stakes { display: flex; flex-direction: column; gap: 8px; }
+.stakes[hidden] { display: none; }
+.stake-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.stake-label { font-size: 12px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
+.stake-hint { font-size: 13px; font-weight: 500; color: var(--muted); text-align: right; }
+.pool-picks { display: flex; gap: 8px; }
+.pool-pick { flex: 1; min-width: 0; min-height: 52px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px; padding: 6px 4px; border-radius: 12px; border: 1px solid var(--border); background: var(--card); color: var(--fg); }
+.pool-pick .pool-points { font-size: 20px; font-weight: 800; font-variant-numeric: tabular-nums; line-height: 1.1; }
+.pool-pick .pool-left { font-size: 11px; font-weight: 600; color: var(--muted); }
+.pool-pick.on { background: var(--primary); color: var(--primary-fg); border-color: var(--primary); }
+.pool-pick.on .pool-left { color: inherit; opacity: .75; }
+.pool-pick.auto { outline: 2px dashed color-mix(in srgb, var(--primary-fg) 45%, transparent); outline-offset: -5px; }
+.pool-pick:disabled { opacity: .4; }
+.risk-toggle { display: flex; align-items: center; gap: 12px; width: 100%; padding: 10px 14px; border-radius: 12px; border: 1px solid var(--border); background: var(--card); color: var(--fg); text-align: left; }
+.risk-toggle svg { flex: none; width: 22px; height: 22px; }
+.risk-toggle .risk-text { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.risk-toggle .risk-text strong { font-size: 15px; }
+.risk-toggle .stake-hint { text-align: left; }
+.risk-switch { flex: none; width: 40px; height: 24px; border-radius: 99px; background: var(--border); position: relative; transition: background-color .2s; }
+.risk-switch::after { content: ''; position: absolute; top: 3px; left: 3px; width: 18px; height: 18px; border-radius: 50%; background: #fff; transition: transform .2s; box-shadow: 0 1px 3px rgb(0 0 0 / .3); }
+.risk-toggle.on { border-color: color-mix(in srgb, var(--warn, #f59e0b) 60%, transparent); background: color-mix(in srgb, var(--warn, #f59e0b) 14%, var(--card)); }
+.risk-toggle.on svg { color: var(--warn, #f59e0b); }
+.risk-toggle.on .risk-switch { background: var(--warn, #f59e0b); }
+.risk-toggle.on .risk-switch::after { transform: translateX(16px); }
+.verdict .bonus { font-size: .75em; font-weight: 700; opacity: .8; }
+.perfect-bonus { font-size: 15px; font-weight: 700; color: var(--good); }
+.round-lost { font-size: 14px; font-weight: 600; color: var(--bad); }
 .field-label { font-size: 13px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
 .icon-button { width: 36px; height: 36px; padding: 0; display: grid; place-items: center; border-radius: 50%; background: var(--card); color: var(--fg); border: 1px solid var(--border); }
 .sent { display: flex; align-items: center; gap: 6px; color: var(--good); font-size: 14px; margin: 0; min-height: 1.5em; }
@@ -270,11 +320,28 @@ function celebrate(pieces) {
 
 const secondsLabel = seconds => `${seconds.toFixed(1)} s`;
 const pointsLabel = points => (points > 0 ? `+${points}` : points < 0 ? `−${-points}` : '0');
-const rulesText = () => `Correct ${pointsLabel(state.rules.pointsForCorrect)} · Wrong ${pointsLabel(state.rules.pointsForWrong)} · No answer 0`;
+const rulesBlock = () => el('div', { class: 'rules' }, (state.rules.pointsSummary ?? []).map(line => el('span', {}, line)));
 const imageUrl = (route) => `${route}?token=${encodeURIComponent(session.token)}&question=${state.index}`;
 
 function show(...children) {
   app.replaceChildren(...children.flat().filter(Boolean));
+}
+
+async function postJson(path, body) {
+  const response = await fetch(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  const result = await response.json();
+  if (!response.ok) throw Object.assign(new Error(result.error), { needsPin: !!result.needsPin });
+  return result;
+}
+
+const pinInput = (placeholder = '4-digit PIN') => el('input', { class: 'pin-input', type: 'password', inputMode: 'numeric', pattern: '[0-9]{4}', maxLength: 4, placeholder, autocomplete: 'off', required: true,
+  oninput: event => { event.target.value = event.target.value.replace(/\D/g, '').slice(0, 4); } });
+
+async function joinAs(name, pin) {
+  unlockSound();
+  const body = await postJson('/join', { name, pin });
+  saveSession({ token: body.token, partyId: body.partyId, name: body.name });
+  connect();
 }
 
 function showJoin(errorText = '', { previousName = session?.name ?? '', note = 'Type your name to join the game.' } = {}) {
@@ -289,12 +356,9 @@ function showJoin(errorText = '', { previousName = session?.name ?? '', note = '
     button.disabled = true;
     error.textContent = '';
     try {
-      const response = await fetch('/join', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: name.value }) });
-      const body = await response.json();
-      if (!response.ok) throw new Error(body.error);
-      saveSession({ token: body.token, partyId: body.partyId, name: name.value.trim() });
-      connect();
+      await joinAs(name.value);
     } catch (e) {
+      if (e.needsPin) return showPinStep(name.value.trim(), e.message);
       error.textContent = e.message || 'Could not join';
       button.disabled = false;
     }
@@ -304,6 +368,34 @@ function showJoin(errorText = '', { previousName = session?.name ?? '', note = '
     el('p', { class: 'muted' }, note),
     el('form', { onsubmit: join, style: 'width:100%' }, name, button, error)));
   name.focus();
+}
+
+function showPinStep(name, errorText = '') {
+  renderedScreen = 'join';
+  const pin = pinInput();
+  const isPrompt = /type it/i.test(errorText);
+  const error = el('p', { class: 'error' }, isPrompt ? '' : errorText);
+  const button = el('button', { type: 'submit' }, 'Continue');
+  const submit = async event => {
+    event.preventDefault();
+    button.disabled = true;
+    error.textContent = '';
+    try {
+      await joinAs(name, pin.value);
+    } catch (e) {
+      error.textContent = e.message || 'Could not join';
+      pin.value = '';
+      pin.focus();
+      button.disabled = false;
+    }
+  };
+  show(el('div', { class: 'center' },
+    el('span', { class: 'lock-badge' }, icon(ICONS.lock)),
+    el('h1', {}, name),
+    el('p', { class: 'muted' }, 'This name is protected. Type its PIN to continue.'),
+    el('form', { onsubmit: submit, style: 'width:100%' }, pin, button, error),
+    el('button', { type: 'button', class: 'link muted', onclick: () => showJoin('', { previousName: '' }) }, 'Use another name')));
+  pin.focus();
 }
 
 function connect() {
@@ -361,9 +453,71 @@ window.addEventListener('online', reconnectIfDead);
 window.addEventListener('pageshow', reconnectIfDead);
 setInterval(reconnectIfDead, 10000);
 
+function preference(name) {
+  return state?.me?.preferences?.[name] ?? true;
+}
+
+async function savePreference(name, value) {
+  if (name === 'showReactions' && !value) {
+    isReactionTrayOpen = false;
+    reactionToasts.replaceChildren();
+  }
+  state.me.preferences = { ...state.me.preferences, [name]: value };
+  updateReactions();
+  try {
+    await postJson('/preferences', { token: session.token, preferences: { [name]: value } });
+  } catch {}
+}
+
+function switchRow(title, text, name) {
+  return el('label', { class: 'switch-row' },
+    el('span', { class: 'switch-text' }, el('strong', {}, title), el('span', { class: 'muted', style: 'font-size:14px' }, text)),
+    el('input', { type: 'checkbox', role: 'switch', checked: preference(name), onchange: event => savePreference(name, event.target.checked) }));
+}
+
+function pinSection() {
+  const section = el('div', { class: 'sheet-section' });
+  const message = el('p', { class: 'sent' });
+  const showMessage = (text, isError) => {
+    message.classList.toggle('error-text', isError);
+    message.replaceChildren(...(isError ? [] : [icon(ICONS.check)]), text);
+  };
+  const savePin = async pin => {
+    try {
+      await postJson('/pin', { token: session.token, pin });
+      state.me.hasPin = pin !== null;
+      renderStatus();
+      showMessage(pin === null ? 'PIN removed' : 'PIN saved', false);
+    } catch (e) {
+      showMessage(e.message || 'Could not save the PIN', true);
+    }
+  };
+  const renderStatus = () => {
+    const hasPin = !!state?.me?.hasPin;
+    const pin = pinInput(hasPin ? 'New 4-digit PIN' : '4-digit PIN');
+    const form = el('form', { class: 'pin-form', onsubmit: event => {
+      event.preventDefault();
+      savePin(pin.value);
+    } }, pin, el('button', { type: 'submit' }, hasPin ? 'Change' : 'Set PIN'));
+    section.replaceChildren(
+      el('label', { class: 'field-label', lang: 'en' }, 'PIN'),
+      el('p', { class: 'muted', style: 'margin:0;font-size:14px' }, hasPin
+        ? 'Your name is protected. Anyone who types it must know the PIN.'
+        : 'Set a PIN so nobody else can play with your name. The host keeps it.'),
+      form,
+      ...(hasPin ? [el('button', { type: 'button', class: 'link muted', style: 'align-self:flex-start', onclick: () => savePin(null) }, 'Remove PIN')] : []),
+      message);
+  };
+  renderStatus();
+  return section;
+}
+
 function showSettings() {
   document.querySelector('.overlay')?.remove();
   const name = el('input', { placeholder: 'Your name', maxLength: 24, autocomplete: 'nickname', required: true, value: state?.me.name ?? session.name ?? '' });
+  const namePin = pinInput('PIN of that name');
+  namePin.hidden = true;
+  namePin.required = false;
   const message = el('p', { class: 'sent' });
   const save = el('button', { type: 'submit' }, 'Save name');
   const leave = el('button', { type: 'button', class: 'danger' }, 'Leave the game');
@@ -378,17 +532,25 @@ function showSettings() {
     save.disabled = true;
     showMessage('', false);
     try {
-      const response = await fetch('/rename', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token: session.token, name: name.value }) });
-      const body = await response.json();
-      if (!response.ok) throw new Error(body.error);
+      const body = await postJson('/rename', { token: session.token, name: name.value, pin: namePin.hidden ? null : namePin.value });
       saveSession({ ...session, name: body.name });
       name.value = body.name;
+      namePin.hidden = true;
+      namePin.value = '';
       message.replaceChildren(icon(ICONS.check), 'Name saved');
     } catch (e) {
+      if (e.needsPin) {
+        namePin.hidden = false;
+        namePin.focus();
+      }
       showMessage(e.message || 'Could not change the name', true);
     }
     save.disabled = false;
   };
+  name.addEventListener('input', () => {
+    namePin.hidden = true;
+    namePin.value = '';
+  });
   let isConfirmingLeave = false;
   leave.addEventListener('click', async () => {
     if (!isConfirmingLeave) {
@@ -414,20 +576,53 @@ function showSettings() {
       el('button', { type: 'button', class: 'icon-button', onclick: close, title: 'Close' }, icon(ICONS.close))),
     el('form', { onsubmit: rename },
       el('label', { class: 'field-label', lang: 'en' }, 'Your name'),
-      name, save, message),
+      name, namePin, save, message),
+    pinSection(),
     el('div', { class: 'sheet-section' },
-      el('label', { class: 'field-label', lang: 'en' }, 'Reactions'),
-      el('label', { class: 'switch-row' },
-        el('span', { class: 'switch-text' },
-          el('strong', {}, 'Show reactions'),
-          el('span', { class: 'muted', style: 'font-size:14px' }, "See other players' emojis and send your own.")),
-        el('input', { type: 'checkbox', role: 'switch', checked: areReactionsShown(), onchange: event => setReactionsShown(event.target.checked) }))),
+      el('label', { class: 'field-label', lang: 'en' }, 'Preferences'),
+      switchRow('Show reactions', "See other players' emojis and send your own.", 'showReactions'),
+      switchRow('Sound', 'A chime and a buzz when a question starts.', 'sound'),
+      el('p', { class: 'muted', style: 'margin:0;font-size:13px' }, 'Saved with your name, so they follow you to any device.')),
     el('div', { class: 'sheet-section' },
       el('label', { class: 'field-label', lang: 'en' }, 'Leave'),
       el('p', { class: 'muted', style: 'margin:0;font-size:14px' }, 'Leaving removes you and your score from this game. You can join again with any free name.'),
       leave)));
   overlay.addEventListener('click', event => { if (event.target === overlay) close(); });
   document.body.append(overlay);
+}
+
+let audio = null;
+
+function unlockSound() {
+  try {
+    audio ??= new (window.AudioContext || window.webkitAudioContext)();
+    if (audio.state === 'suspended') audio.resume();
+  } catch {}
+}
+
+document.addEventListener('pointerdown', unlockSound, { passive: true });
+
+function playChime() {
+  if (!audio || audio.state !== 'running') return;
+  const start = audio.currentTime;
+  [[880, 0], [1320, 0.14]].forEach(([frequency, delay]) => {
+    const tone = audio.createOscillator();
+    const volume = audio.createGain();
+    tone.type = 'sine';
+    tone.frequency.value = frequency;
+    volume.gain.setValueAtTime(0.0001, start + delay);
+    volume.gain.exponentialRampToValueAtTime(0.25, start + delay + 0.02);
+    volume.gain.exponentialRampToValueAtTime(0.0001, start + delay + 0.35);
+    tone.connect(volume).connect(audio.destination);
+    tone.start(start + delay);
+    tone.stop(start + delay + 0.4);
+  });
+}
+
+function alertQuestionStart() {
+  if (!preference('sound')) return;
+  navigator.vibrate?.([60, 40, 60]);
+  playChime();
 }
 
 const DISMISSED_KEY = 'party-dismissed-announcement';
@@ -502,30 +697,13 @@ const icon = path => {
   svg.innerHTML = path;
   return svg;
 };
-const SHOW_REACTIONS_KEY = 'party-show-reactions';
 const MAX_REACTION_TOASTS = 2;
 const reactionToasts = el('div', { class: 'reaction-toasts', role: 'status' });
 document.body.append(reactionToasts);
 let reactionsLeft = null;
 
-function areReactionsShown() {
-  try {
-    return localStorage.getItem(SHOW_REACTIONS_KEY) !== 'off';
-  } catch {
-    return true;
-  }
-}
+const areReactionsShown = () => preference('showReactions');
 
-function setReactionsShown(areShown) {
-  try {
-    localStorage.setItem(SHOW_REACTIONS_KEY, areShown ? 'on' : 'off');
-  } catch {}
-  if (!areShown) {
-    isReactionTrayOpen = false;
-    reactionToasts.replaceChildren();
-  }
-  updateReactions();
-}
 
 function showOthersReaction(reaction) {
   if (!areReactionsShown() || !state || renderedScreen === 'join' || renderedScreen === 'closed') return;
@@ -623,6 +801,8 @@ const ICONS = {
   clock: '<circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>',
   smile: '<circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><path d="M9 9h.01"/><path d="M15 9h.01"/>',
   hourglass: '<path d="M5 22h14"/><path d="M5 2h14"/><path d="M17 22v-4.2a2 2 0 0 0-.6-1.4L12 12l-4.4 4.4a2 2 0 0 0-.6 1.4V22"/><path d="M7 2v4.2a2 2 0 0 0 .6 1.4L12 12l4.4-4.4a2 2 0 0 0 .6-1.4V2"/>',
+  dice: '<rect width="12" height="12" x="2" y="10" rx="2"/><path d="m17.92 14 3.5-3.5a2.24 2.24 0 0 0 0-3l-5-4.92a2.24 2.24 0 0 0-3 0L10 6"/><path d="M6 18h.01"/><path d="M10 14h.01"/><path d="M15 6h.01"/><path d="M18 9h.01"/>',
+  lock: '<rect width="18" height="11" x="3" y="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>',
   megaphone: '<path d="m3 11 18-5v12L3 14v-3z"/><path d="M11.6 16.8a3 3 0 1 1-5.8-1.6"/>',
 };
 
@@ -636,17 +816,68 @@ async function toggleSkip() {
   } catch {}
 }
 
+const SKIP_HOLD_MS = 1000;
+const holdHint = () => (state.skip?.isMine ? 'Hold to take it back' : 'Hold to skip');
+
+function holdRing(...inside) {
+  const ring = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  ring.setAttribute('class', 'hold-ring');
+  ring.setAttribute('viewBox', '0 0 40 40');
+  ring.innerHTML = '<circle cx="20" cy="20" r="18" pathLength="100"/>';
+  return el('span', { class: 'hold-icon' }, ring, ...inside);
+}
+
+function holdToSkip(button) {
+  let timer = null;
+  const stop = () => {
+    clearTimeout(timer);
+    timer = null;
+    button.classList.remove('holding');
+  };
+  const start = () => {
+    if (timer || button.disabled) return;
+    button.classList.add('holding');
+    timer = setTimeout(() => {
+      stop();
+      navigator.vibrate?.(30);
+      toggleSkip();
+    }, SKIP_HOLD_MS);
+  };
+  const release = () => {
+    if (!timer) return;
+    stop();
+    showReactionToast(el('span', {}, holdHint()));
+  };
+  button.addEventListener('pointerdown', event => event.button === 0 && start());
+  button.addEventListener('pointerup', release);
+  button.addEventListener('pointerleave', stop);
+  button.addEventListener('pointercancel', stop);
+  button.addEventListener('contextmenu', event => event.preventDefault());
+  button.addEventListener('keydown', event => {
+    if (event.key !== 'Enter' && event.key !== ' ') return;
+    event.preventDefault();
+    if (!event.repeat) start();
+  });
+  button.addEventListener('keyup', event => (event.key === 'Enter' || event.key === ' ') && release());
+  return button;
+}
+
 const SKIP_TITLES = { waiting: 'Start the question', question: "I'm done", reveal: 'Next' };
 const MAX_SKIP_SEGMENTS = 12;
 
 function skipDock() {
   return el('div', { class: 'dock', id: 'skip-dock' },
-    el('button', { type: 'button', class: 'skip', id: 'skip-button', onclick: toggleSkip },
+    holdToSkip(el('button', { type: 'button', class: 'skip hold', id: 'skip-button' },
       el('span', { class: 'skip-main' },
-        el('span', { class: 'skip-icon', id: 'skip-icon' }),
+        holdRing(el('span', { class: 'skip-icon', id: 'skip-icon' })),
         el('span', { class: 'skip-text' }, el('span', { class: 'skip-title', id: 'skip-title' }), el('span', { class: 'skip-hint', id: 'skip-hint' })),
         el('span', { class: 'skip-count', id: 'skip-count' })),
-      el('span', { class: 'skip-segments', id: 'skip-segments' })));
+      el('span', { class: 'skip-segments', id: 'skip-segments' }))));
+}
+
+function skipChip() {
+  return holdToSkip(el('button', { type: 'button', class: 'skip-chip hold', id: 'skip-chip' },
+    holdRing(el('span', { class: 'chip-icon', id: 'skip-chip-icon' })), 'Done', el('span', { class: 'count', id: 'skip-chip-count' })));
 }
 
 function updateSkipChip() {
@@ -656,8 +887,9 @@ function updateSkipChip() {
   chip.hidden = !skip?.isAvailable;
   if (chip.hidden) return;
   chip.classList.toggle('on', !!skip.isMine);
-  chip.title = skip.isMine ? 'Tap again to take it back' : 'Moves on when everyone taps Done';
-  chip.replaceChildren(icon(skip.isMine ? ICONS.check : ICONS.skip), 'Done', el('span', { class: 'count' }, `${skip.count}/${skip.of}`));
+  chip.title = skip.isMine ? 'Hold to take it back' : 'Hold to skip. Moves on when everyone is done';
+  document.getElementById('skip-chip-icon').replaceChildren(icon(skip.isMine ? ICONS.check : ICONS.skip));
+  document.getElementById('skip-chip-count').textContent = `${skip.count}/${skip.of}`;
 }
 
 function updateSkip() {
@@ -682,7 +914,7 @@ function updateSkip() {
   button.classList.toggle('on', !!skip.isMine);
   document.getElementById('skip-icon').replaceChildren(icon(skip.isMine ? ICONS.check : ICONS.skip));
   document.getElementById('skip-title').textContent = skip.isMine ? `Waiting for ${others} ${others === 1 ? 'player' : 'players'}` : SKIP_TITLES[state.phase];
-  document.getElementById('skip-hint').textContent = skip.isMine ? 'Press again to undo' : 'Moves on when everyone skips';
+  document.getElementById('skip-hint').textContent = skip.isMine ? 'Hold to take it back' : 'Hold to skip · moves on when everyone skips';
   document.getElementById('skip-count').textContent = `${skip.count}/${skip.of}`;
   const segmentCount = Math.min(skip.of, MAX_SKIP_SEGMENTS);
   const filled = Math.round((skip.count / Math.max(skip.of, 1)) * segmentCount);
@@ -755,11 +987,65 @@ function composerDock() {
   };
   const emojis = el('div', { class: 'composer-emojis', id: 'composer-emojis', role: 'group', title: 'Reactions: everyone sees them' },
     state.reactions.map(emoji => el('button', { type: 'button', title: `Send ${emoji}`, onclick: event => sendReaction(event.currentTarget, emoji) }, emoji)));
-  const skipChip = el('button', { type: 'button', class: 'skip-chip', id: 'skip-chip', onclick: toggleSkip });
   return el('div', { class: 'composer-dock', id: 'composer-dock' },
     emojis,
+    el('div', { class: 'stakes', id: 'stakes', hidden: true }),
     el('form', { class: 'composer', onsubmit: send }, input, button),
-    el('div', { class: 'composer-meta' }, status, skipChip));
+    el('div', { class: 'composer-meta' }, status, skipChip()));
+}
+
+let stakeError = '';
+
+async function sendStake(change) {
+  stakeError = '';
+  state.stake = { ...state.stake, ...change, ...('pick' in change && { isPicked: true }) };
+  updateStakes();
+  navigator.vibrate?.(10);
+  try {
+    const body = await postJson('/stake', { token: session.token, ...change });
+    state.stake = body.stake;
+  } catch (e) {
+    stakeError = e.message || 'Could not save';
+  }
+  updateStakes();
+}
+
+const stakeHint = (...parts) => el('span', { class: 'stake-hint' }, parts.filter(Boolean).join(' · '));
+
+function updateStakes() {
+  const row = document.getElementById('stakes');
+  if (!row) return;
+  const system = state.rules.pointSystem;
+  const stake = state.stake;
+  const hasPool = system?.mode === 'pool';
+  const hasRisk = !!system?.risk?.isOn;
+  row.hidden = !stake || (!hasPool && !hasRisk);
+  if (row.hidden) return;
+  const error = stakeError && el('span', { class: 'stake-hint error-text' }, stakeError);
+  if (hasPool) {
+    const picked = system.pool[stake.pick];
+    row.replaceChildren(
+      el('div', { class: 'stake-head' }, el('span', { class: 'stake-label', lang: 'en' }, 'Play for'),
+        error || stakeHint(`Right +${picked.points}`, `Wrong ${pointsLabel(picked.wrong)}`, `No answer ${pointsLabel(picked.unanswered)}`)),
+      el('div', { class: 'pool-picks', role: 'radiogroup', ariaLabel: 'Points for this question' }, system.pool.map((entry, index) => {
+        const left = stake.usesLeft[index];
+        const isChosen = index === stake.pick;
+        return el('button', {
+          type: 'button', role: 'radio', class: `pool-pick${isChosen ? ' on' : ''}${isChosen && !stake.isPicked ? ' auto' : ''}`, disabled: left != null && left <= 0 && !isChosen,
+          ariaChecked: String(isChosen), onclick: () => !isChosen && sendStake({ pick: index }),
+        }, el('span', { class: 'pool-points' }, entry.points), left != null && el('span', { class: 'pool-left' }, left <= 0 ? 'used' : `${left} left`));
+      })));
+    return;
+  }
+  const risks = stake.risksLeft >= 99 ? '' : stake.isRisked ? '' : `${stake.risksLeft} left`;
+  const canRisk = stake.isRisked || stake.risksLeft > 0;
+  row.replaceChildren(el('button', {
+    type: 'button', class: `risk-toggle${stake.isRisked ? ' on' : ''}`, disabled: !canRisk, ariaPressed: String(!!stake.isRisked),
+    onclick: () => sendStake({ isRisked: !stake.isRisked }),
+  }, icon(ICONS.dice), el('span', { class: 'risk-text' },
+    el('strong', {}, stake.isRisked ? 'Risked' : canRisk ? 'Risk it' : 'No risks left'),
+    error || stakeHint(`Right ${pointsLabel(system.risk.correct)}`, `Wrong ${pointsLabel(system.risk.wrong)}`, risks)),
+  el('span', { class: 'risk-switch' })));
 }
 
 function updateAnswerStatus() {
@@ -781,6 +1067,12 @@ function renderScreen(next) {
   state = next;
   if ('isNightMode' in next) document.documentElement.dataset.theme = next.isNightMode ? 'dark' : 'light';
   deadline = next.remainingMs == null || next.isPaused ? null : Date.now() + next.remainingMs;
+  if (next.phase === 'moved') {
+    events.close();
+    const previousName = session?.name;
+    saveSession(null);
+    return showJoin('', { previousName, note: 'You joined with this name on another device. Type your name to play here again.' });
+  }
   if (next.phase === 'kicked') {
     events.close();
     const previousName = session?.name;
@@ -801,8 +1093,10 @@ function renderScreen(next) {
     const nameElement = document.getElementById('me-name');
     if (nameElement) nameElement.textContent = next.me.name;
     updateSkip();
+    updateStakes();
     return updateAnswerStatus();
   }
+  if (next.phase === 'question' && renderedScreen !== screen) alertQuestionStart();
   renderedScreen = screen;
   const done = rendered => {
     updateSkip();
@@ -828,7 +1122,8 @@ function renderScreen(next) {
   if (next.phase === 'question') {
     isAway = false;
     if (document.visibilityState === 'hidden') reportAway();
-    show(topBar(), questionBlock(), el('p', { class: 'muted', style: 'margin:0;font-size:14px' }, rulesText()), composerDock());
+    show(topBar(), questionBlock(), rulesBlock(), composerDock());
+    updateStakes();
     updateSkip();
     return updateAnswerStatus();
   }
@@ -839,11 +1134,14 @@ function renderScreen(next) {
   }
   if (next.phase === 'reveal') {
     const reveal = next.reveal;
-    const verdict = reveal.isCorrect == null ? el('div', { class: 'verdict bad' }, 'No answer')
+    const earned = el('span', { class: 'points' }, pointsLabel(reveal.points), reveal.streakBonus > 0 && el('span', { class: 'bonus' }, ` ${pointsLabel(reveal.streakBonus)} streak`));
+    const verdict = reveal.isCorrect == null ? el('div', { class: 'verdict bad' }, 'No answer', reveal.points !== 0 && earned)
       : reveal.isPending ? el('div', { class: 'verdict' }, '? The host is checking')
-      : el('div', { class: `verdict ${reveal.isCorrect ? 'good' : 'bad'}` }, reveal.isCorrect ? '✓ Correct' : '✗ Wrong', el('span', { class: 'points' }, pointsLabel(reveal.points)));
+      : el('div', { class: `verdict ${reveal.isCorrect ? 'good' : 'bad'}` }, reveal.isCorrect ? '✓ Correct' : '✗ Wrong', earned);
     return done(show(topBar(), el('div', { class: 'card' },
       verdict,
+      reveal.isRoundLost && next.rules.pointSystem.allOrNothing.isOn && el('span', { class: 'round-lost' }, 'All or nothing: this round now scores 0 for you'),
+      reveal.perfectBonus > 0 && el('span', { class: 'perfect-bonus' }, `🏅 Every answer right: ${pointsLabel(reveal.perfectBonus)} all correct bonus`),
       next.myAnswer != null && el('span', { class: 'muted' }, `Your answer: ${next.myAnswer || '—'}`),
       reveal.seconds != null && el('span', { class: 'time-note' }, icon(ICONS.clock), `Answered in ${secondsLabel(reveal.seconds)}`),
       el('p', { class: 'answer' }, reveal.answer),

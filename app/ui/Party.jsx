@@ -2,7 +2,7 @@ import { createContext, useContext, useEffect, useMemo, useRef, useState } from 
 import QRCode from 'qrcode';
 import { cn } from 'cn';
 import {
-  AppWindowIcon, ArrowRightIcon, CastIcon, MegaphoneIcon, SendIcon, SmilePlusIcon, CheckIcon, ChevronDownIcon, CircleHelpIcon, DoorClosedIcon, EyeIcon, EyeOffIcon, FlagIcon, GamepadIcon, PauseIcon, PlayIcon, QrCodeIcon,
+  AppWindowIcon, ArrowRightIcon, CastIcon, DicesIcon, MegaphoneIcon, SendIcon, SmilePlusIcon, CheckIcon, ChevronDownIcon, CircleHelpIcon, DoorClosedIcon, EyeIcon, EyeOffIcon, FlagIcon, GamepadIcon, PauseIcon, PlayIcon, QrCodeIcon,
   RotateCcwIcon, SkipForwardIcon, TimerIcon, Trash2Icon, TriangleAlertIcon, TrophyIcon, TvIcon, UserXIcon, UsersIcon, WifiOffIcon, XIcon,
 } from 'lucide-react';
 import {
@@ -23,7 +23,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Toggle } from '@/components/ui/toggle';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import {
-  KEY_HINT_ON_PRIMARY_BUTTON, QuestionOnScreen, WARNING_AT_SECONDS_LEFT, formatClock, useCountdown, withLineBreaks,
+  KEY_HINT_ON_PRIMARY_BUTTON, QuestionOnScreen, pointsLabel, withoutIpcPrefix, WARNING_AT_SECONDS_LEFT, formatClock, useCountdown, withLineBreaks,
 } from './gameShared';
 import { toast } from 'sonner';
 import { CorrectAnswer } from './Play';
@@ -34,7 +34,6 @@ const PHASES_IN_ROUND = ['waiting', 'question', 'judging', 'reveal'];
 
 const secondsLabel = seconds => (seconds == null ? '—' : `${seconds.toFixed(1)} s`);
 const answerSeconds = answer => (answer?.ms == null || !answer.given ? null : answer.ms / 1000);
-const pointsLabel = points => (points > 0 ? `+${points}` : points < 0 ? `−${-points}` : '0');
 const hostOf = url => url.replace(/^http:\/\//, '').replace(/\/$/, '');
 const isWaitingToReveal = party => party.phase === 'judging' && party.rules.revealAtEnd && party.answers.every(answer => answer.isCorrect !== undefined);
 const outcomeOf = answer => (answer.isCorrect ? 'correct' : answer.verdict === 'unsure' && !answer.decidedByHost ? 'unsure' : 'wrong');
@@ -43,6 +42,16 @@ const OUTCOMES = {
   wrong: { label: 'Wrong', Icon: XIcon, className: 'text-destructive' },
   unsure: { label: 'Not sure', Icon: CircleHelpIcon, className: 'text-amber-600 dark:text-amber-400' },
 };
+
+function StakeBadge({ stake, pointSystem }) {
+  if (pointSystem?.mode === 'pool' && Number.isInteger(stake?.pick)) {
+    return <Badge variant="outline" className="shrink-0 tabular-nums" title="Points picked for this question">{pointSystem.pool[stake.pick]?.points}</Badge>;
+  }
+  if (stake?.isRisked) {
+    return <Badge variant="outline" className="shrink-0 border-amber-500/50 text-amber-700 dark:text-amber-400" title="Risked this answer"><DicesIcon />Risk</Badge>;
+  }
+  return null;
+}
 
 function JoinQrCode({ url, className = 'size-64' }) {
   const [svg, setSvg] = useState('');
@@ -155,7 +164,7 @@ function Podium({ party }) {
           Round {party.round} · {winners.length > 1 ? 'shared first place' : 'winner'}
         </p>
         <h1 className="text-4xl font-bold">Congratulations, {namesOf(winners)}!</h1>
-        <p className="text-muted-foreground">Correct {pointsLabel(party.rules.pointsForCorrect)} · wrong {pointsLabel(party.rules.pointsForWrong)} · no answer 0 · ties go to the faster average</p>
+        <p className="text-muted-foreground">{party.rules.pointSystem?.name}: {party.rules.pointsSummary?.join(' · ')} · ties go to the faster average</p>
       </div>
       <div className="flex items-end justify-center gap-3">
         {podiumOrder.map(entry => {
@@ -201,7 +210,7 @@ function Leaderboard({ entries, players = [], onKick, showsRoundScore = false })
   );
 }
 
-function AllTimeLeaderboard() {
+export function AllTimeLeaderboard() {
   const [results, setResults] = useState(null);
   const [isConfirmingReset, setIsConfirmingReset] = useState(false);
   useEffect(() => {
@@ -214,6 +223,7 @@ function AllTimeLeaderboard() {
     <div className="space-y-3">
       <div className="flex items-center gap-2">
         <h2 className="flex items-center gap-2 font-medium"><TrophyIcon className="size-4" />All-time leaderboard</h2>
+        {results.length > 0 && <span className="text-sm text-muted-foreground">ranked by points, then average time</span>}
         {results.length > 0 && (
           <Button size="sm" variant="ghost" className="ml-auto text-muted-foreground" onClick={() => setIsConfirmingReset(true)}><Trash2Icon />Reset</Button>
         )}
@@ -225,6 +235,7 @@ function AllTimeLeaderboard() {
               <tr className="text-left">
                 <th className="w-10 px-3 py-2 text-right font-medium">#</th>
                 <th className="px-3 py-2 font-medium">Player</th>
+                <th className="px-3 py-2 text-right font-medium">Points</th>
                 <th className="px-3 py-2 text-right font-medium">Correct</th>
                 <th className="px-3 py-2 text-right font-medium">Wrong</th>
                 <th className="px-3 py-2 text-right font-medium">No answer</th>
@@ -237,7 +248,8 @@ function AllTimeLeaderboard() {
                 <tr key={result.name} className={cn(i === 0 && 'bg-amber-500/10')}>
                   <td className="px-3 py-2 text-right font-semibold text-muted-foreground tabular-nums">{i + 1}</td>
                   <td className="max-w-48 truncate px-3 py-2 font-medium">{result.name}</td>
-                  <td className="px-3 py-2 text-right font-semibold tabular-nums text-emerald-600 dark:text-emerald-400">{result.correct}</td>
+                  <td className="px-3 py-2 text-right text-base font-semibold tabular-nums">{result.points}</td>
+                  <td className="px-3 py-2 text-right tabular-nums text-emerald-600 dark:text-emerald-400">{result.correct}</td>
                   <td className="px-3 py-2 text-right tabular-nums text-destructive">{result.wrong}</td>
                   <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">{result.unanswered}</td>
                   <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">{secondsLabel(result.avg_seconds)}</td>
@@ -247,7 +259,7 @@ function AllTimeLeaderboard() {
             </tbody>
           </table>
         </div>
-      ) : <p className="text-sm text-muted-foreground">Every finished round adds each player's correct, wrong and unanswered questions and answer times here.</p>}
+      ) : <p className="text-sm text-muted-foreground">Every finished round adds each player's points, correct, wrong and unanswered questions and answer times here. Players are ranked by points, then by the faster average time.</p>}
       <AlertDialog open={isConfirmingReset} onOpenChange={setIsConfirmingReset}>
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -310,7 +322,8 @@ function LiveAnswers({ party, onKick }) {
             <li key={player.id} className="flex items-center gap-2 px-3 py-2">
               <OnlineDot isOnline={player.isOnline} />
               <div className="min-w-0 flex-1">
-                <p className="flex items-center gap-1.5 text-sm font-medium"><span className="truncate">{player.name}</span><AwayWarning timesAway={player.timesAway} /><PlayerReaction playerId={player.id} /></p>
+                <p className="flex items-center gap-1.5 text-sm font-medium"><span className="truncate">{player.name}</span><AwayWarning timesAway={player.timesAway} /><PlayerReaction playerId={player.id} />
+                  {showsAnswers && <StakeBadge stake={answer?.stake} pointSystem={party.rules.pointSystem} />}</p>
                 {showsAnswers && (
                   <p className={cn('truncate text-sm', !answer?.given && 'text-muted-foreground')} title={answer?.given}>
                     {answer ? answer.given || 'Blank' : 'No answer yet'}
@@ -349,10 +362,10 @@ function PlayerAnswers({ party, answers = party.answers, position = party.index 
           return (
             <li key={answer.playerId} className="flex flex-wrap items-center gap-x-4 gap-y-1 px-4 py-2.5">
               <span className="flex w-32 items-center gap-1.5 font-medium"><span className="truncate">{answer.name}</span><AwayWarning timesAway={timesAway.get(answer.playerId)} /></span>
-              <span className="min-w-0 flex-1 truncate">{answer.given || '—'}</span>
+              <span className="flex min-w-0 flex-1 items-center gap-2"><span className="truncate">{answer.given || '—'}</span><StakeBadge stake={answer.stake} pointSystem={party.rules.pointSystem} /></span>
               <span className="w-14 text-right text-sm text-muted-foreground tabular-nums" title="Answer time">{answerSeconds(answer) != null && secondsLabel(answerSeconds(answer))}</span>
               <span className={cn('flex items-center gap-1 text-sm font-semibold', className)}><Icon className="size-4" />{label}</span>
-              <span className="w-8 text-right text-sm tabular-nums">{pointsLabel(answer.points)}</span>
+              <span className="w-10 text-right text-sm tabular-nums">{pointsLabel(answer.points)}</span>
               <CallButtons answer={answer} position={position} isCalledNow={answer.isCorrect ? true : outcomeOf(answer) === 'wrong' ? false : null} />
             </li>
           );
@@ -393,7 +406,6 @@ function QuestionForHost({ party, onKick }) {
   );
 }
 
-const withoutIpcPrefix = error => error.message.replace(/^Error invoking remote method '[^']+': (Error: )?/, '');
 
 function SamsungTvDialog({ isOpen, onOpenChange }) {
   const [tvs, setTvs] = useState(null);
