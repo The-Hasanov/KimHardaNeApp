@@ -104,7 +104,6 @@ header .bar { gap: 6px; }
 .flying { position: fixed; z-index: 30; font-size: 32px; pointer-events: none; animation: fly .9s ease-out forwards; }
 @keyframes fly { to { transform: translateY(-120px) scale(1.4); opacity: 0; } }
 .reaction-toasts { position: fixed; left: 50%; transform: translateX(-50%); bottom: 24px; z-index: 6; display: flex; flex-direction: column; align-items: center; gap: 6px; pointer-events: none; width: calc(100% - 32px); max-width: 608px; }
-.reaction-toasts.above-dock { bottom: 128px; }
 .reaction-toast { display: inline-flex; align-items: center; gap: 8px; max-width: 100%; padding: 6px 14px 6px 8px; border-radius: 99px; background: var(--card); border: 1px solid var(--border); box-shadow: 0 6px 20px rgb(0 0 0 / .25); font-size: 14px; font-weight: 600; animation: toast-in .25s ease-out, toast-out .35s ease-in 2.4s forwards; }
 .reaction-toast .emoji { font-size: 20px; line-height: 1; }
 .reaction-toast .who { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -118,6 +117,26 @@ header .bar { gap: 6px; }
 .switch-row input::after { content: ''; position: absolute; top: 3px; left: 3px; width: 22px; height: 22px; border-radius: 50%; background: #fff; transition: transform .2s; box-shadow: 0 1px 3px rgb(0 0 0 / .3); }
 .switch-row input:checked { background: var(--good); }
 .switch-row input:checked::after { transform: translateX(18px); }
+.composer-dock { position: sticky; bottom: 0; z-index: 3; margin: auto -16px calc(-24px - env(safe-area-inset-bottom)); padding: 16px 12px calc(12px + env(safe-area-inset-bottom)); background: linear-gradient(to bottom, transparent, var(--bg) 16px); display: flex; flex-direction: column; gap: 8px; }
+.composer-emojis { display: flex; justify-content: space-between; padding: 0 4px; }
+.composer-emojis[hidden] { display: none; }
+.composer-emojis button { width: 40px; height: 40px; padding: 0; font-size: 24px; line-height: 1; background: transparent; border-radius: 12px; font-family: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", "Twemoji Mozilla", sans-serif; transition: transform .12s, opacity .2s; }
+.composer-emojis button:active { transform: scale(.85); background: var(--card); }
+.composer-emojis.cooling button { opacity: .45; }
+.composer { display: flex; flex-direction: row; align-items: center; gap: 8px; padding: 6px 6px 6px 18px; border-radius: 999px; background: var(--card); border: 1px solid var(--border); transition: border-color .2s; }
+.composer:focus-within { border-color: var(--primary); }
+.composer .composer-input { flex: 1; width: auto; min-width: 0; border: 0; border-radius: 0; padding: 8px 0; background: transparent; font-size: 18px; }
+.composer .composer-input:focus { outline: none; }
+.composer-send { flex: none; width: 46px; height: 46px; padding: 0; border-radius: 50%; display: grid; place-items: center; }
+.composer-send svg { width: 22px; height: 22px; }
+.composer-meta { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 30px; padding: 0 4px 0 8px; }
+.composer-status { font-size: 13px; min-height: 0; }
+.skip-chip { flex: none; display: inline-flex; align-items: center; gap: 6px; padding: 5px 12px; border-radius: 99px; border: 1px solid var(--border); background: var(--card); color: var(--fg); font-size: 13px; font-weight: 700; }
+.skip-chip[hidden], .react-toggle[hidden] { display: none; }
+.skip-chip svg { width: 14px; height: 14px; }
+.skip-chip .count { color: var(--muted); font-weight: 600; }
+.skip-chip.on { background: color-mix(in srgb, var(--good) 16%, var(--card)); border-color: color-mix(in srgb, var(--good) 55%, transparent); color: var(--good); }
+.skip-chip.on .count { color: var(--good); }
 .danger { background: color-mix(in srgb, var(--bad) 12%, transparent); color: var(--bad); border: 1px solid color-mix(in srgb, var(--bad) 45%, transparent); }
 .sheet-overlay { align-items: flex-end; padding: 0; }
 .sheet { max-width: 640px !important; border-radius: 20px 20px 0 0; border-bottom: 0; padding: 16px 16px calc(24px + env(safe-area-inset-bottom)); gap: 16px; animation: rise .2s ease-out; }
@@ -170,6 +189,7 @@ ol.board .time { font-size: 13px; color: var(--muted); font-variant-numeric: tab
   .overlay:not(.sheet-overlay) .card, .sheet { border-radius: 20px; border-bottom: 1px solid var(--border); margin-bottom: 10vh; }
   .sheet-overlay { align-items: center; padding: 16px; }
   .sheet { max-width: 480px !important; }
+  .composer-emojis { justify-content: center; gap: 12px; }
 }
 button:not(:disabled):hover { filter: brightness(1.08); }
 button:focus-visible, .skip:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
@@ -513,7 +533,8 @@ function showOthersReaction(reaction) {
 function showReactionToast(...children) {
   const isNotice = children.length === 1;
   const toast = el('div', { class: `reaction-toast${isNotice ? ' notice-toast' : ''}` }, ...children);
-  reactionToasts.classList.toggle('above-dock', !!document.getElementById('skip-dock') && !document.getElementById('skip-dock').hidden);
+  const dock = [document.getElementById('composer-dock'), document.getElementById('skip-dock')].find(candidate => candidate && !candidate.hidden);
+  reactionToasts.style.bottom = `${dock ? window.innerHeight - dock.getBoundingClientRect().top + 8 : 24}px`;
   reactionToasts.append(toast);
   while (reactionToasts.childElementCount > MAX_REACTION_TOASTS) reactionToasts.firstElementChild.remove();
   setTimeout(() => toast.remove(), 2800);
@@ -535,7 +556,7 @@ function flyFrom(button, emoji) {
 async function sendReaction(button, emoji) {
   if (Date.now() < reactionCoolsUntil) return;
   reactionCoolsUntil = Date.now() + REACTION_COOLDOWN_MS;
-  const tray = button.closest('.reaction-tray');
+  const tray = button.closest('.reaction-tray, .composer-emojis');
   tray?.classList.add('cooling');
   setTimeout(() => tray?.classList.remove('cooling'), REACTION_COOLDOWN_MS);
   flyFrom(button, emoji);
@@ -571,28 +592,29 @@ function toggleReactionTray() {
 function updateReactions() {
   const toggle = document.getElementById('react-toggle');
   const hasReactions = !!state?.reactions?.length && areReactionsShown();
+  const composerEmojis = document.getElementById('composer-emojis');
+  if (composerEmojis) composerEmojis.hidden = !hasReactions;
   if (toggle) {
-    toggle.hidden = !hasReactions;
+    toggle.hidden = !hasReactions || !!composerEmojis;
     toggle.classList.toggle('on', isReactionTrayOpen);
   }
   const header = app.querySelector('header');
   const existing = document.getElementById('reaction-tray');
-  const wantsTray = hasReactions && (!header || isReactionTrayOpen);
+  const wantsTray = hasReactions && !composerEmojis && (!header || isReactionTrayOpen);
   if (!wantsTray) {
     app.querySelector('.reactions-slot')?.replaceChildren();
     return existing?.remove();
   }
   if (existing) return;
   const tray = reactionTray();
-  const answerForm = document.getElementById('answer-status')?.closest('form');
-  if (answerForm) answerForm.after(tray);
-  else if (header) (notice.isConnected ? notice : header).after(tray);
+  if (header) (notice.isConnected ? notice : header).after(tray);
   else app.querySelector('.reactions-slot')?.replaceChildren(el('p', { class: 'reaction-label' }, 'Reactions · everyone sees them'), tray);
 }
 
 const ICONS = {
   skip: '<path d="m5 4 10 8-10 8z"/><path d="M19 5v14"/>',
   check: '<path d="M20 6 9 17l-5-5"/>',
+  arrow: '<path d="M5 12h14"/><path d="m13 6 6 6-6 6"/>',
   pencil: '<path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/>',
   settings: '<path d="M12.2 2h-.4a2 2 0 0 0-2 2v.2a2 2 0 0 1-1 1.7l-.4.3a2 2 0 0 1-2 0l-.2-.1a2 2 0 0 0-2.7.7l-.2.4a2 2 0 0 0 .7 2.7l.2.1a2 2 0 0 1 1 1.7v.5a2 2 0 0 1-1 1.7l-.2.1a2 2 0 0 0-.7 2.7l.2.4a2 2 0 0 0 2.7.7l.2-.1a2 2 0 0 1 2 0l.4.3a2 2 0 0 1 1 1.7v.2a2 2 0 0 0 2 2h.4a2 2 0 0 0 2-2v-.2a2 2 0 0 1 1-1.7l.4-.3a2 2 0 0 1 2 0l.2.1a2 2 0 0 0 2.7-.7l.2-.4a2 2 0 0 0-.7-2.7l-.2-.1a2 2 0 0 1-1-1.7v-.5a2 2 0 0 1 1-1.7l.2-.1a2 2 0 0 0 .7-2.7l-.2-.4a2 2 0 0 0-2.7-.7l-.2.1a2 2 0 0 1-2 0l-.4-.3a2 2 0 0 1-1-1.7V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/>',
   close: '<path d="M18 6 6 18"/><path d="m6 6 12 12"/>',
@@ -625,7 +647,19 @@ function skipDock() {
       el('span', { class: 'skip-segments', id: 'skip-segments' })));
 }
 
+function updateSkipChip() {
+  const chip = document.getElementById('skip-chip');
+  if (!chip) return;
+  const skip = state.skip;
+  chip.hidden = !skip?.isAvailable;
+  if (chip.hidden) return;
+  chip.classList.toggle('on', !!skip.isMine);
+  chip.title = skip.isMine ? 'Tap again to take it back' : 'Moves on when everyone taps Done';
+  chip.replaceChildren(icon(skip.isMine ? ICONS.check : ICONS.skip), 'Done', el('span', { class: 'count' }, `${skip.count}/${skip.of}`));
+}
+
 function updateSkip() {
+  updateSkipChip();
   const dock = document.getElementById('skip-dock');
   if (!dock) return;
   const skip = state.skip;
@@ -688,14 +722,10 @@ function questionBlock() {
   ];
 }
 
-function answerForm() {
-  const input = el('input', { placeholder: 'Your answer', maxLength: 200, autocomplete: 'off', autocapitalize: 'off', spellcheck: false, value: state.myAnswer ?? '' });
-  const status = el('p', { class: 'sent', id: 'answer-status' });
-  const showError = text => {
-    status.classList.add('error-text');
-    status.textContent = text;
-  };
-  const button = el('button', { type: 'submit' }, 'Send answer');
+function composerDock() {
+  const input = el('input', { class: 'composer-input', placeholder: 'Your answer', maxLength: 200, autocomplete: 'off', autocapitalize: 'off', spellcheck: false, enterKeyHint: 'send', value: state.myAnswer ?? '' });
+  const status = el('span', { class: 'sent composer-status', id: 'answer-status' });
+  const button = el('button', { type: 'submit', class: 'composer-send', title: 'Send answer' }, icon(ICONS.arrow));
   const send = async event => {
     event.preventDefault();
     button.disabled = true;
@@ -705,18 +735,26 @@ function answerForm() {
       if (!response.ok) throw new Error(body.error);
       input.blur();
     } catch (e) {
-      showError(e.message || 'Could not send');
+      status.classList.add('error-text');
+      status.textContent = e.message || 'Could not send';
     }
     button.disabled = false;
   };
-  return el('form', { onsubmit: send }, input, button, status);
+  const emojis = el('div', { class: 'composer-emojis', id: 'composer-emojis', role: 'group', title: 'Reactions: everyone sees them' },
+    state.reactions.map(emoji => el('button', { type: 'button', title: `Send ${emoji}`, onclick: event => sendReaction(event.currentTarget, emoji) }, emoji)));
+  const skipChip = el('button', { type: 'button', class: 'skip-chip', id: 'skip-chip', onclick: toggleSkip });
+  return el('div', { class: 'composer-dock', id: 'composer-dock' },
+    emojis,
+    el('form', { class: 'composer', onsubmit: send }, input, button),
+    el('div', { class: 'composer-meta' }, status, skipChip));
 }
 
 function updateAnswerStatus() {
   const status = document.getElementById('answer-status');
-  if (!status || state.myAnswer == null) return;
+  if (!status) return;
   status.classList.remove('error-text');
-  status.replaceChildren(icon(ICONS.check), `Sent “${state.myAnswer || '—'}”. You can change it until time is up.`);
+  if (state.myAnswer == null) return status.replaceChildren(el('span', { class: 'muted' }, 'Not sent yet'));
+  status.replaceChildren(icon(ICONS.check), 'Sent · you can change it');
 }
 
 function render(next) {
@@ -777,7 +815,7 @@ function renderScreen(next) {
   if (next.phase === 'question') {
     isAway = false;
     if (document.visibilityState === 'hidden') reportAway();
-    show(topBar(), questionBlock(), answerForm(), el('p', { class: 'muted', style: 'margin:0;font-size:14px' }, rulesText()), skipDock());
+    show(topBar(), questionBlock(), el('p', { class: 'muted', style: 'margin:0;font-size:14px' }, rulesText()), composerDock());
     updateSkip();
     return updateAnswerStatus();
   }

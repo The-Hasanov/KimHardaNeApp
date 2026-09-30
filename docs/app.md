@@ -70,8 +70,9 @@ npm test         # offline tests for the scraper, search, ranking, edits, data u
   second and a tone when time is up; sounds play only from the TV page (after *Show on Samsung TV* the TV window
   on the computer goes silent). *Autoplay* in the round settings moves on to the next question once the answer
   has been shown for *Seconds on the answer*; the host can still press *Next question* early or *Pause* (Space)
-  to look at the answers longer. Each question and its images appear on every phone with an answer box and a
-  countdown. When the time is up (or *Close answers now*),
+  to look at the answers longer. Each question and its images appear on every phone with a countdown and, at the bottom where
+  thumbs are, a chat-style answer bar (answer box and round send button) with the reactions above it and the answer's
+  status and a small *Done* chip (the Skip vote) under it. When the time is up (or *Close answers now*),
   AI search checks every answer as in Play mode (with AI search off the host marks each one, and phones show
   *The host is checking* until then); phones then show their verdict, the answer and the
   leaderboard, and the host sees every answer and can overrule it. The host sets the points for a correct
@@ -107,8 +108,8 @@ a podium of the top three with *Congratulations, <winner>!* (shared first places
 a short fanfare; each phone congratulates its player by place: a trophy and confetti for first, silver and bronze
 medals for second and third, and the place and winner for everyone else. Confetti is left out when the device asks
 for reduced motion. **Reactions**: players send one of eight emojis (👏 😂 😮 🤔 🔥 ❤️ 😢 🎉) from a tray,
-always shown in the lobby and on the results, and opened with the smile button in the top bar during a round (under
-the *Send answer* button while a question runs); one a
+always shown in the lobby and on the results, and opened with the smile button in the top bar during a round; while a
+question runs they sit in a row just above the answer bar; one a
 second and ten a minute per player (the tray shows how many are left). The host app queues every reaction and shows it as a small toast
 with the player's name in the TV's bottom-right corner (five at a time, about 4 s each) and on the other players' phones
 (two at a time, about 3 s each), in the order sent; one that waits too long (15 s for the TV, 8 s for phones) is dropped, and it shows next to the player's name in the
