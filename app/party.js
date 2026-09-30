@@ -8,6 +8,7 @@ const { fileURLToPath } = require('node:url');
 const QRCode = require('qrcode');
 const { matchesAsText } = require('./judge');
 const { MEDIA_TYPES } = require('./store');
+const { PlayerProfiles } = require('./profiles');
 
 const PARTY_LIMITS = { players: 100, nameLength: 24, answerLength: 200, messageLength: 300, bodyBytes: 4096 };
 const PREFERRED_PORT = 8765;
@@ -50,8 +51,9 @@ function lanAddresses() {
 }
 
 class PartyGame {
-  constructor({ judge, onChange = () => {}, onRoundFinished = () => {}, onReaction = () => {} }) {
+  constructor({ judge, onChange = () => {}, onRoundFinished = () => {}, onReaction = () => {}, profiles = new PlayerProfiles() }) {
     this.id = crypto.randomBytes(6).toString('hex');
+    this.profiles = profiles;
     this.judge = judge;
     this.onChange = onChange;
     this.onRoundFinished = onRoundFinished;
@@ -94,20 +96,71 @@ class PartyGame {
     return clean;
   }
 
-  join(name) {
-    const clean = this.checkName(name);
+  playerNamed(name, exceptId = null) {
+    return [...this.players.values()].find(p => p.id !== exceptId && p.name.toLowerCase() === name.toLowerCase()) ?? null;
+  }
+
+  loadProfile(player, { preferences, isRenamed = false } = {}) {
+    this.profiles.ensure(player.name, { preferences, isRenamed });
+    player.preferences = this.profiles.preferencesOf(player.name);
+    player.hasPin = this.profiles.hasPin(player.name);
+  }
+
+  join(name, pin = null) {
+    const typed = cleanName(name);
+    if (!typed) throw new PartyError(400, 'Type your name');
+    const clean = this.profiles.nameOf(typed);
+    this.profiles.unlock(clean, pin);
+    const holder = this.playerNamed(clean);
+    if (holder && !this.profiles.hasPin(clean)) throw new PartyError(409, 'That name is taken');
+    if (holder) return this.moveToNewDevice(holder);
     if (this.players.size >= PARTY_LIMITS.players) throw new PartyError(409, 'The game is full');
     const player = { id: crypto.randomUUID(), token: crypto.randomBytes(16).toString('hex'), name: clean, countsFrom: { round: this.round, position: this.closedCount } };
+    this.loadProfile(player);
     this.players.set(player.id, player);
     this.changed();
     return player;
   }
 
-  rename(token, name) {
-    const player = this.playerByToken(token);
-    player.name = this.checkName(name, player.id);
+  moveToNewDevice(player) {
+    player.token = crypto.randomBytes(16).toString('hex');
+    for (const stream of this.streams) if (stream.playerId === player.id) stream.end({ phase: 'moved' });
+    this.loadProfile(player);
     this.changed();
     return player;
+  }
+
+  rename(token, name, pin = null) {
+    const player = this.playerByToken(token);
+    const clean = this.checkName(name, player.id);
+    const isSameName = clean.toLowerCase() === player.name.toLowerCase();
+    if (!isSameName) this.profiles.unlock(clean, pin);
+    const preferences = player.preferences;
+    player.name = isSameName ? clean : this.profiles.nameOf(clean);
+    this.loadProfile(player, { preferences, isRenamed: isSameName });
+    this.changed();
+    return player;
+  }
+
+  setPin(token, pin) {
+    const player = this.playerByToken(token);
+    this.profiles.setPin(player.name, pin);
+    player.hasPin = this.profiles.hasPin(player.name);
+    this.changed();
+  }
+
+  setPreferences(token, preferences) {
+    const player = this.playerByToken(token);
+    player.preferences = this.profiles.setPreferences(player.name, preferences);
+    this.changed();
+    return player.preferences;
+  }
+
+  profileChanged(name) {
+    const player = this.playerNamed(cleanName(name));
+    if (!player) return;
+    player.hasPin = this.profiles.hasPin(player.name);
+    this.changed();
   }
 
   isOnline(playerId) {
@@ -514,7 +567,7 @@ class PartyGame {
       id: this.id, phase: this.phase, round: this.round, index: this.index, total: this.questions.length,
       remainingMs: this.remainingMs(), isPaused: this.pausedRemainingMs != null, screen: this.screen,
       rules: this.rules, urls: this.urls, port: this.port, question: this.questions[this.index] ?? null,
-      players: [...this.players.values()].map(p => ({ id: p.id, name: p.name, hasAnswered: !!current?.has(p.id), isOnline: this.isOnline(p.id), timesAway: this.absencesOf(p.id) })),
+      players: [...this.players.values()].map(p => ({ id: p.id, name: p.name, hasPin: !!p.hasPin, hasAnswered: !!current?.has(p.id), isOnline: this.isOnline(p.id), timesAway: this.absencesOf(p.id) })),
       skips: this.skipStatus(),
       announcement: this.announcement,
       areReactionsOn: this.areReactionsOn,
@@ -558,7 +611,7 @@ class PartyGame {
         pointsForCorrect: this.rules.pointsForCorrect, pointsForWrong: this.rules.pointsForWrong, secondsPerQuestion: this.rules.secondsPerQuestion,
         secondsBetweenQuestions: this.rules.secondsBetweenQuestions, secondsOnAnswer: this.rules.secondsOnAnswer,
       },
-      me: { name: player.name, score: me?.score ?? 0, roundScore: me?.roundScore ?? 0, rank: me?.rank ?? null, avgSeconds: me?.avgSeconds ?? null },
+      me: { name: player.name, hasPin: !!player.hasPin, preferences: player.preferences, score: me?.score ?? 0, roundScore: me?.roundScore ?? 0, rank: me?.rank ?? null, avgSeconds: me?.avgSeconds ?? null },
       question: PHASES_WITH_QUESTION.includes(this.phase) ? {
         text: question.text, noteBefore: question.note_before, handoutText: question.rekvizit_text, hasHandoutImage: !!question.rekvizit_src, handoutKind: question.rekvizit_kind ?? 'image',
       } : null,
@@ -694,8 +747,9 @@ async function route(game, req, res) {
   const token = url.searchParams.get('token');
   if (req.method === 'GET' && url.pathname === '/') return sendPage(res, PLAYER_PAGE);
   if (req.method === 'POST' && url.pathname === '/join') {
-    const player = game.join((await readJson(req)).name);
-    return sendJson(res, 200, { token: player.token, partyId: game.id });
+    const body = await readJson(req);
+    const player = game.join(body.name, body.pin);
+    return sendJson(res, 200, { token: player.token, partyId: game.id, name: player.name });
   }
   if (req.method === 'GET' && url.pathname === '/me') {
     const player = game.playerByToken(token);
@@ -703,8 +757,17 @@ async function route(game, req, res) {
   }
   if (req.method === 'POST' && url.pathname === '/rename') {
     const body = await readJson(req);
-    const player = game.rename(body.token, body.name);
+    const player = game.rename(body.token, body.name, body.pin);
     return sendJson(res, 200, { name: player.name });
+  }
+  if (req.method === 'POST' && url.pathname === '/pin') {
+    const body = await readJson(req);
+    game.setPin(body.token, body.pin ?? null);
+    return sendJson(res, 200, { ok: true });
+  }
+  if (req.method === 'POST' && url.pathname === '/preferences') {
+    const body = await readJson(req);
+    return sendJson(res, 200, { preferences: game.setPreferences(body.token, body.preferences) });
   }
   if (req.method === 'POST' && url.pathname === '/away') {
     game.reportAway((await readJson(req)).token);
@@ -749,7 +812,7 @@ async function route(game, req, res) {
 async function openParty(settings, { port = PREFERRED_PORT } = {}) {
   const game = new PartyGame(settings);
   const server = http.createServer((req, res) => route(game, req, res).catch(e => {
-    if (!res.headersSent) sendJson(res, e.status ?? 500, { error: e.status ? e.message : 'Something went wrong' });
+    if (!res.headersSent) sendJson(res, e.status ?? 500, { error: e.status ? e.message : 'Something went wrong', ...(e.needsPin && { needsPin: true }) });
     else res.end();
   }));
   const listen = candidatePort => new Promise((resolve, reject) => {

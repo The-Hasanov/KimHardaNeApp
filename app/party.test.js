@@ -197,6 +197,13 @@ test('the TV page script stays ES5, for the Chrome 47 web engine of 2017 Samsung
   for (const pattern of newerSyntax) assert.doesNotMatch(script, pattern);
 });
 
+test('the player and TV page scripts parse', () => {
+  for (const page of ['player.html', 'tv.html']) {
+    const script = fs.readFileSync(path.join(__dirname, 'party', page), 'utf8').split('<script>').at(-1).split('</script>')[0];
+    assert.doesNotThrow(() => new Function(script), page);
+  }
+});
+
 test('autoplay moves on after the answer has been shown, can be paused, and ends the round by itself', async () => {
   const game = newGame();
   game.join('Aysel');

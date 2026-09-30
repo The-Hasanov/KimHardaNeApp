@@ -201,7 +201,7 @@ function Leaderboard({ entries, players = [], onKick, showsRoundScore = false })
   );
 }
 
-function AllTimeLeaderboard() {
+export function AllTimeLeaderboard() {
   const [results, setResults] = useState(null);
   const [isConfirmingReset, setIsConfirmingReset] = useState(false);
   useEffect(() => {

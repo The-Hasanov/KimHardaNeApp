@@ -29,6 +29,10 @@ const PARTY_RESULTS_SCHEMA = `
 CREATE TABLE IF NOT EXISTS party_results (
   name_key TEXT PRIMARY KEY, name TEXT NOT NULL, correct INTEGER NOT NULL DEFAULT 0, wrong INTEGER NOT NULL DEFAULT 0,
   unanswered INTEGER NOT NULL DEFAULT 0, rounds INTEGER NOT NULL DEFAULT 0, correct_ms INTEGER NOT NULL DEFAULT 0, updated_at TEXT NOT NULL);`;
+const PARTY_PROFILES_SCHEMA = `
+CREATE TABLE IF NOT EXISTS party_profiles (
+  name_key TEXT PRIMARY KEY, name TEXT NOT NULL, pin_hash TEXT, pin_salt TEXT, preferences TEXT NOT NULL DEFAULT '{}',
+  created_at TEXT NOT NULL, last_seen_at TEXT NOT NULL);`;
 const POOL = 500;
 const OWN_PACKAGE_ID = 0;
 const OWN_GAME_ID = 0;
@@ -65,6 +69,7 @@ class Store {
     this.db.exec(LISTS_SCHEMA);
     this.db.exec(PLAY_SCHEMA);
     this.db.exec(PARTY_RESULTS_SCHEMA);
+    this.db.exec(PARTY_PROFILES_SCHEMA);
     if (!this.db.prepare('PRAGMA table_info(party_results)').all().some(c => c.name === 'correct_ms')) {
       this.db.exec('ALTER TABLE party_results ADD COLUMN correct_ms INTEGER NOT NULL DEFAULT 0');
     }
@@ -439,9 +444,46 @@ class Store {
     this.db.exec('DELETE FROM party_results');
   }
 
+  partyProfile(key) {
+    const row = this.db.prepare('SELECT name_key, name, pin_hash, pin_salt, preferences FROM party_profiles WHERE name_key = ?').get(key);
+    if (!row) return null;
+    let preferences = {};
+    try {
+      preferences = JSON.parse(row.preferences) ?? {};
+    } catch {}
+    return { key: row.name_key, name: row.name, pinHash: row.pin_hash, pinSalt: row.pin_salt, preferences };
+  }
+
+  savePartyProfile({ key, name, pinHash = null, pinSalt = null, preferences = {} }) {
+    this.db.prepare(`INSERT INTO party_profiles (name_key, name, pin_hash, pin_salt, preferences, created_at, last_seen_at)
+      VALUES (?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+      ON CONFLICT (name_key) DO UPDATE SET name = excluded.name, pin_hash = excluded.pin_hash, pin_salt = excluded.pin_salt,
+        preferences = excluded.preferences, last_seen_at = excluded.last_seen_at`).run(key, name, pinHash, pinSalt, JSON.stringify(preferences));
+  }
+
+  get partyProfileStorage() {
+    return { get: key => this.partyProfile(key), save: profile => this.savePartyProfile(profile) };
+  }
+
+  partyProfiles() {
+    return this.db.prepare(`SELECT p.name, p.pin_hash IS NOT NULL AS has_pin, p.created_at, p.last_seen_at, COALESCE(r.rounds, 0) AS rounds
+      FROM party_profiles p LEFT JOIN party_results r ON r.name_key = p.name_key ORDER BY p.last_seen_at DESC, p.name`).all()
+      .map(row => ({ ...row, has_pin: !!row.has_pin }));
+  }
+
+  clearPartyProfilePin(name) {
+    this.db.prepare('UPDATE party_profiles SET pin_hash = NULL, pin_salt = NULL WHERE name_key = ?').run(String(name).toLowerCase());
+  }
+
+  deletePartyProfile(name, { withResults = false } = {}) {
+    const key = String(name).toLowerCase();
+    this.db.prepare('DELETE FROM party_profiles WHERE name_key = ?').run(key);
+    if (withResults) this.db.prepare('DELETE FROM party_results WHERE name_key = ?').run(key);
+  }
+
   games() {
     return this.db.prepare('SELECT game_id AS id, game_name AS name, COUNT(*) AS n FROM questions GROUP BY game_id ORDER BY game_id').all();
   }
 }
 
-module.exports = { Store, OWN_PACKAGE_ID, OWN_IMAGE_PREFIX, MEDIA_TYPES, IMAGE_COLUMNS, mediaKind, TUNING, LISTS_SCHEMA, PLAY_SCHEMA, PARTY_RESULTS_SCHEMA, EMBEDDINGS_SCHEMA, fold, passage, embeddable, hashOf, DIM };
+module.exports = { Store, OWN_PACKAGE_ID, OWN_IMAGE_PREFIX, MEDIA_TYPES, IMAGE_COLUMNS, mediaKind, TUNING, LISTS_SCHEMA, PLAY_SCHEMA, PARTY_RESULTS_SCHEMA, PARTY_PROFILES_SCHEMA, EMBEDDINGS_SCHEMA, fold, passage, embeddable, hashOf, DIM };

@@ -160,6 +160,14 @@ header .bar { gap: 6px; }
 .sheet-head { display: flex; align-items: center; justify-content: space-between; }
 .sheet-title { font-size: 20px; }
 .sheet-section { display: flex; flex-direction: column; gap: 10px; padding-top: 16px; border-top: 1px solid var(--border); }
+.pin-input { text-align: center; font-size: 26px; letter-spacing: .5em; font-variant-numeric: tabular-nums; padding-left: calc(14px + .5em); }
+.pin-input[hidden] { display: none; }
+.pin-input:placeholder-shown { letter-spacing: normal; font-size: 18px; padding-left: 14px; }
+.pin-form .pin-input:placeholder-shown { font-size: 16px; }
+.pin-form { flex-direction: row; gap: 8px; }
+.pin-form .pin-input { flex: 1; min-width: 0; font-size: 20px; }
+.lock-badge { width: 56px; height: 56px; border-radius: 50%; display: grid; place-items: center; background: var(--card); border: 1px solid var(--border); margin-bottom: 4px; }
+.lock-badge svg { width: 26px; height: 26px; }
 .field-label { font-size: 13px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
 .icon-button { width: 36px; height: 36px; padding: 0; display: grid; place-items: center; border-radius: 50%; background: var(--card); color: var(--fg); border: 1px solid var(--border); }
 .sent { display: flex; align-items: center; gap: 6px; color: var(--good); font-size: 14px; margin: 0; min-height: 1.5em; }
@@ -291,6 +299,23 @@ function show(...children) {
   app.replaceChildren(...children.flat().filter(Boolean));
 }
 
+async function postJson(path, body) {
+  const response = await fetch(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  const result = await response.json();
+  if (!response.ok) throw Object.assign(new Error(result.error), { needsPin: !!result.needsPin });
+  return result;
+}
+
+const pinInput = (placeholder = '4-digit PIN') => el('input', { class: 'pin-input', type: 'password', inputMode: 'numeric', pattern: '[0-9]{4}', maxLength: 4, placeholder, autocomplete: 'off', required: true,
+  oninput: event => { event.target.value = event.target.value.replace(/\D/g, '').slice(0, 4); } });
+
+async function joinAs(name, pin) {
+  unlockSound();
+  const body = await postJson('/join', { name, pin });
+  saveSession({ token: body.token, partyId: body.partyId, name: body.name });
+  connect();
+}
+
 function showJoin(errorText = '', { previousName = session?.name ?? '', note = 'Type your name to join the game.' } = {}) {
   renderedScreen = 'join';
   banner.hidden = true;
@@ -303,12 +328,9 @@ function showJoin(errorText = '', { previousName = session?.name ?? '', note = '
     button.disabled = true;
     error.textContent = '';
     try {
-      const response = await fetch('/join', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: name.value }) });
-      const body = await response.json();
-      if (!response.ok) throw new Error(body.error);
-      saveSession({ token: body.token, partyId: body.partyId, name: name.value.trim() });
-      connect();
+      await joinAs(name.value);
     } catch (e) {
+      if (e.needsPin) return showPinStep(name.value.trim(), e.message);
       error.textContent = e.message || 'Could not join';
       button.disabled = false;
     }
@@ -318,6 +340,34 @@ function showJoin(errorText = '', { previousName = session?.name ?? '', note = '
     el('p', { class: 'muted' }, note),
     el('form', { onsubmit: join, style: 'width:100%' }, name, button, error)));
   name.focus();
+}
+
+function showPinStep(name, errorText = '') {
+  renderedScreen = 'join';
+  const pin = pinInput();
+  const isPrompt = /type it/i.test(errorText);
+  const error = el('p', { class: 'error' }, isPrompt ? '' : errorText);
+  const button = el('button', { type: 'submit' }, 'Continue');
+  const submit = async event => {
+    event.preventDefault();
+    button.disabled = true;
+    error.textContent = '';
+    try {
+      await joinAs(name, pin.value);
+    } catch (e) {
+      error.textContent = e.message || 'Could not join';
+      pin.value = '';
+      pin.focus();
+      button.disabled = false;
+    }
+  };
+  show(el('div', { class: 'center' },
+    el('span', { class: 'lock-badge' }, icon(ICONS.lock)),
+    el('h1', {}, name),
+    el('p', { class: 'muted' }, 'This name is protected. Type its PIN to continue.'),
+    el('form', { onsubmit: submit, style: 'width:100%' }, pin, button, error),
+    el('button', { type: 'button', class: 'link muted', onclick: () => showJoin('', { previousName: '' }) }, 'Use another name')));
+  pin.focus();
 }
 
 function connect() {
@@ -375,9 +425,71 @@ window.addEventListener('online', reconnectIfDead);
 window.addEventListener('pageshow', reconnectIfDead);
 setInterval(reconnectIfDead, 10000);
 
+function preference(name) {
+  return state?.me?.preferences?.[name] ?? true;
+}
+
+async function savePreference(name, value) {
+  if (name === 'showReactions' && !value) {
+    isReactionTrayOpen = false;
+    reactionToasts.replaceChildren();
+  }
+  state.me.preferences = { ...state.me.preferences, [name]: value };
+  updateReactions();
+  try {
+    await postJson('/preferences', { token: session.token, preferences: { [name]: value } });
+  } catch {}
+}
+
+function switchRow(title, text, name) {
+  return el('label', { class: 'switch-row' },
+    el('span', { class: 'switch-text' }, el('strong', {}, title), el('span', { class: 'muted', style: 'font-size:14px' }, text)),
+    el('input', { type: 'checkbox', role: 'switch', checked: preference(name), onchange: event => savePreference(name, event.target.checked) }));
+}
+
+function pinSection() {
+  const section = el('div', { class: 'sheet-section' });
+  const message = el('p', { class: 'sent' });
+  const showMessage = (text, isError) => {
+    message.classList.toggle('error-text', isError);
+    message.replaceChildren(...(isError ? [] : [icon(ICONS.check)]), text);
+  };
+  const savePin = async pin => {
+    try {
+      await postJson('/pin', { token: session.token, pin });
+      state.me.hasPin = pin !== null;
+      renderStatus();
+      showMessage(pin === null ? 'PIN removed' : 'PIN saved', false);
+    } catch (e) {
+      showMessage(e.message || 'Could not save the PIN', true);
+    }
+  };
+  const renderStatus = () => {
+    const hasPin = !!state?.me?.hasPin;
+    const pin = pinInput(hasPin ? 'New 4-digit PIN' : '4-digit PIN');
+    const form = el('form', { class: 'pin-form', onsubmit: event => {
+      event.preventDefault();
+      savePin(pin.value);
+    } }, pin, el('button', { type: 'submit' }, hasPin ? 'Change' : 'Set PIN'));
+    section.replaceChildren(
+      el('label', { class: 'field-label', lang: 'en' }, 'PIN'),
+      el('p', { class: 'muted', style: 'margin:0;font-size:14px' }, hasPin
+        ? 'Your name is protected. Anyone who types it must know the PIN.'
+        : 'Set a PIN so nobody else can play with your name. The host keeps it.'),
+      form,
+      ...(hasPin ? [el('button', { type: 'button', class: 'link muted', style: 'align-self:flex-start', onclick: () => savePin(null) }, 'Remove PIN')] : []),
+      message);
+  };
+  renderStatus();
+  return section;
+}
+
 function showSettings() {
   document.querySelector('.overlay')?.remove();
   const name = el('input', { placeholder: 'Your name', maxLength: 24, autocomplete: 'nickname', required: true, value: state?.me.name ?? session.name ?? '' });
+  const namePin = pinInput('PIN of that name');
+  namePin.hidden = true;
+  namePin.required = false;
   const message = el('p', { class: 'sent' });
   const save = el('button', { type: 'submit' }, 'Save name');
   const leave = el('button', { type: 'button', class: 'danger' }, 'Leave the game');
@@ -392,17 +504,25 @@ function showSettings() {
     save.disabled = true;
     showMessage('', false);
     try {
-      const response = await fetch('/rename', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token: session.token, name: name.value }) });
-      const body = await response.json();
-      if (!response.ok) throw new Error(body.error);
+      const body = await postJson('/rename', { token: session.token, name: name.value, pin: namePin.hidden ? null : namePin.value });
       saveSession({ ...session, name: body.name });
       name.value = body.name;
+      namePin.hidden = true;
+      namePin.value = '';
       message.replaceChildren(icon(ICONS.check), 'Name saved');
     } catch (e) {
+      if (e.needsPin) {
+        namePin.hidden = false;
+        namePin.focus();
+      }
       showMessage(e.message || 'Could not change the name', true);
     }
     save.disabled = false;
   };
+  name.addEventListener('input', () => {
+    namePin.hidden = true;
+    namePin.value = '';
+  });
   let isConfirmingLeave = false;
   leave.addEventListener('click', async () => {
     if (!isConfirmingLeave) {
@@ -428,20 +548,53 @@ function showSettings() {
       el('button', { type: 'button', class: 'icon-button', onclick: close, title: 'Close' }, icon(ICONS.close))),
     el('form', { onsubmit: rename },
       el('label', { class: 'field-label', lang: 'en' }, 'Your name'),
-      name, save, message),
+      name, namePin, save, message),
+    pinSection(),
     el('div', { class: 'sheet-section' },
-      el('label', { class: 'field-label', lang: 'en' }, 'Reactions'),
-      el('label', { class: 'switch-row' },
-        el('span', { class: 'switch-text' },
-          el('strong', {}, 'Show reactions'),
-          el('span', { class: 'muted', style: 'font-size:14px' }, "See other players' emojis and send your own.")),
-        el('input', { type: 'checkbox', role: 'switch', checked: areReactionsShown(), onchange: event => setReactionsShown(event.target.checked) }))),
+      el('label', { class: 'field-label', lang: 'en' }, 'Preferences'),
+      switchRow('Show reactions', "See other players' emojis and send your own.", 'showReactions'),
+      switchRow('Sound', 'A chime and a buzz when a question starts.', 'sound'),
+      el('p', { class: 'muted', style: 'margin:0;font-size:13px' }, 'Saved with your name, so they follow you to any device.')),
     el('div', { class: 'sheet-section' },
       el('label', { class: 'field-label', lang: 'en' }, 'Leave'),
       el('p', { class: 'muted', style: 'margin:0;font-size:14px' }, 'Leaving removes you and your score from this game. You can join again with any free name.'),
       leave)));
   overlay.addEventListener('click', event => { if (event.target === overlay) close(); });
   document.body.append(overlay);
+}
+
+let audio = null;
+
+function unlockSound() {
+  try {
+    audio ??= new (window.AudioContext || window.webkitAudioContext)();
+    if (audio.state === 'suspended') audio.resume();
+  } catch {}
+}
+
+document.addEventListener('pointerdown', unlockSound, { passive: true });
+
+function playChime() {
+  if (!audio || audio.state !== 'running') return;
+  const start = audio.currentTime;
+  [[880, 0], [1320, 0.14]].forEach(([frequency, delay]) => {
+    const tone = audio.createOscillator();
+    const volume = audio.createGain();
+    tone.type = 'sine';
+    tone.frequency.value = frequency;
+    volume.gain.setValueAtTime(0.0001, start + delay);
+    volume.gain.exponentialRampToValueAtTime(0.25, start + delay + 0.02);
+    volume.gain.exponentialRampToValueAtTime(0.0001, start + delay + 0.35);
+    tone.connect(volume).connect(audio.destination);
+    tone.start(start + delay);
+    tone.stop(start + delay + 0.4);
+  });
+}
+
+function alertQuestionStart() {
+  if (!preference('sound')) return;
+  navigator.vibrate?.([60, 40, 60]);
+  playChime();
 }
 
 const DISMISSED_KEY = 'party-dismissed-announcement';
@@ -516,30 +669,13 @@ const icon = path => {
   svg.innerHTML = path;
   return svg;
 };
-const SHOW_REACTIONS_KEY = 'party-show-reactions';
 const MAX_REACTION_TOASTS = 2;
 const reactionToasts = el('div', { class: 'reaction-toasts', role: 'status' });
 document.body.append(reactionToasts);
 let reactionsLeft = null;
 
-function areReactionsShown() {
-  try {
-    return localStorage.getItem(SHOW_REACTIONS_KEY) !== 'off';
-  } catch {
-    return true;
-  }
-}
+const areReactionsShown = () => preference('showReactions');
 
-function setReactionsShown(areShown) {
-  try {
-    localStorage.setItem(SHOW_REACTIONS_KEY, areShown ? 'on' : 'off');
-  } catch {}
-  if (!areShown) {
-    isReactionTrayOpen = false;
-    reactionToasts.replaceChildren();
-  }
-  updateReactions();
-}
 
 function showOthersReaction(reaction) {
   if (!areReactionsShown() || !state || renderedScreen === 'join' || renderedScreen === 'closed') return;
@@ -637,6 +773,7 @@ const ICONS = {
   clock: '<circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>',
   smile: '<circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><path d="M9 9h.01"/><path d="M15 9h.01"/>',
   hourglass: '<path d="M5 22h14"/><path d="M5 2h14"/><path d="M17 22v-4.2a2 2 0 0 0-.6-1.4L12 12l-4.4 4.4a2 2 0 0 0-.6 1.4V22"/><path d="M7 2v4.2a2 2 0 0 0 .6 1.4L12 12l4.4-4.4a2 2 0 0 0 .6-1.4V2"/>',
+  lock: '<rect width="18" height="11" x="3" y="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>',
   megaphone: '<path d="m3 11 18-5v12L3 14v-3z"/><path d="M11.6 16.8a3 3 0 1 1-5.8-1.6"/>',
 };
 
@@ -846,6 +983,12 @@ function renderScreen(next) {
   state = next;
   if ('isNightMode' in next) document.documentElement.dataset.theme = next.isNightMode ? 'dark' : 'light';
   deadline = next.remainingMs == null || next.isPaused ? null : Date.now() + next.remainingMs;
+  if (next.phase === 'moved') {
+    events.close();
+    const previousName = session?.name;
+    saveSession(null);
+    return showJoin('', { previousName, note: 'You joined with this name on another device. Type your name to play here again.' });
+  }
   if (next.phase === 'kicked') {
     events.close();
     const previousName = session?.name;
@@ -868,6 +1011,7 @@ function renderScreen(next) {
     updateSkip();
     return updateAnswerStatus();
   }
+  if (next.phase === 'question' && renderedScreen !== screen) alertQuestionStart();
   renderedScreen = screen;
   const done = rendered => {
     updateSkip();

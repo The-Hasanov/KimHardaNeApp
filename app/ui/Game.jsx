@@ -3,7 +3,7 @@ import { toast } from 'sonner';
 import { cn } from 'cn';
 import {
   ArrowRightIcon, EyeIcon, FlagIcon, Gamepad2Icon, ImageIcon, PauseIcon, PlayIcon, PresentationIcon, RotateCcwIcon, SettingsIcon,
-  ShuffleIcon, SkipForwardIcon, SparklesIcon, UsersIcon,
+  ShuffleIcon, SkipForwardIcon, SparklesIcon, TrophyIcon, UserRoundIcon, UsersIcon,
 } from 'lucide-react';
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter,
@@ -24,7 +24,8 @@ import {
   KEY_HINT_ON_PRIMARY_BUTTON, Media, NextQuestionNumber, QuestionOnScreen, WARNING_AT_SECONDS_LEFT, formatClock, playTenSecondsLeftTone,
   playTimeUpTone, withLineBreaks,
 } from './gameShared';
-import PartyScreen from './Party';
+import PartyScreen, { AllTimeLeaderboard } from './Party';
+import Profiles from './Profiles';
 import { PlayHistory, PlayResults, PlayRound } from './Play';
 
 const { api } = window;
@@ -204,6 +205,25 @@ function GameSetup({ mode, onModeChange, isAiReady, onOpenSettings, onStart, ...
   );
 }
 
+const GAME_SECTIONS = [['play', PlayIcon, 'Play'], ['profiles', UserRoundIcon, 'Profiles'], ['leaderboard', TrophyIcon, 'Leaderboard']];
+
+function GameSections({ section, onSectionChange, children }) {
+  return (
+    <div className="flex h-full flex-col">
+      <div className="shrink-0 border-b">
+        <Tabs value={section} onValueChange={onSectionChange} className="mx-auto max-w-3xl px-6">
+          <TabsList variant="line" className="h-10">
+            {GAME_SECTIONS.map(([value, Icon, label]) => (
+              <TabsTrigger key={value} value={value} className="px-2.5"><Icon />{label}</TabsTrigger>
+            ))}
+          </TabsList>
+        </Tabs>
+      </div>
+      <div className="min-h-0 flex-1 overflow-y-auto">{children}</div>
+    </div>
+  );
+}
+
 function AnswerCard({ question, number, isRevealed, onReveal }) {
   return (
     <div id={`answer-${number}`} className={cn('space-y-3 rounded-lg border p-5', isRevealed && 'border-primary/40')}>
@@ -230,6 +250,7 @@ export default function Game({ isVisible, lists, listId, onListIdChange, isAiRea
   const [mode, setMode] = useState(() => localStorage.getItem('gameMode') ?? 'host');
   const [playGameId, setPlayGameId] = useState(null);
   const [phase, setPhase] = useState('setup');
+  const [section, setSection] = useState('play');
   const [questions, setQuestions] = useState(null);
   const [secondsPerQuestion, setSecondsPerQuestion] = useState(DEFAULT_SECONDS_PER_QUESTION);
   const [secondsBetweenQuestions, setSecondsBetweenQuestions] = useState(0);
@@ -435,10 +456,14 @@ export default function Game({ isVisible, lists, listId, onListIdChange, isAiRea
 
   if (phase === 'setup') {
     return (
-      <div className="h-full overflow-y-auto">
-        <GameSetup mode={mode} onModeChange={changeMode} isAiReady={isAiReady} onOpenSettings={onOpenSettings} onStart={startGame}
-          {...roundSettingsProps} />
-      </div>
+      <GameSections section={section} onSectionChange={setSection}>
+        {section === 'profiles' ? <Profiles /> : section === 'leaderboard' ? (
+          <div className="mx-auto max-w-3xl px-6 py-8"><AllTimeLeaderboard /></div>
+        ) : (
+          <GameSetup mode={mode} onModeChange={changeMode} isAiReady={isAiReady} onOpenSettings={onOpenSettings} onStart={startGame}
+            {...roundSettingsProps} />
+        )}
+      </GameSections>
     );
   }
 

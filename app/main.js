@@ -10,6 +10,7 @@ const ai = require('./ai');
 const scraper = require('./scraper');
 const { judgeAnswer } = require('./judge');
 const { openParty } = require('./party');
+const { PlayerProfiles } = require('./profiles');
 const transfer = require('./transfer');
 const { findSamsungTvs, openInTvBrowser, isLocalNetworkAddress } = require('./samsungTv');
 
@@ -256,9 +257,10 @@ app.whenReady().then(() => {
     action(party.game, ...args);
     return party.game.hostView();
   };
+  const playerProfiles = new PlayerProfiles(store.partyProfileStorage);
   handle('party-open', async () => {
     await closeParty();
-    party = await openParty({ judge: judgeNow, onChange: sendPartyState, onReaction: reaction => win.webContents.send('party-reaction', reaction), onRoundFinished: results => {
+    party = await openParty({ judge: judgeNow, profiles: playerProfiles, onChange: sendPartyState, onReaction: reaction => win.webContents.send('party-reaction', reaction), onRoundFinished: results => {
       store.addPartyResults(results);
       win.webContents.send('party-results', store.partyResults());
     } });
@@ -283,6 +285,18 @@ app.whenReady().then(() => {
   handle('reset-party-results', () => {
     store.resetPartyResults();
     return store.partyResults();
+  });
+  handle('party-profiles', () => store.partyProfiles());
+  handle('clear-party-profile-pin', name => {
+    store.clearPartyProfilePin(name);
+    party?.game.profileChanged(name);
+    return store.partyProfiles();
+  });
+  handle('delete-party-profile', (name, options) => {
+    store.deletePartyProfile(name, options);
+    party?.game.profileChanged(name);
+    if (options?.withResults) win.webContents.send('party-results', store.partyResults());
+    return store.partyProfiles();
   });
   handle('party-state', () => party?.game.hostView() ?? null);
   handle('party-open-display', () => party && openPartyDisplay(win, party.game.port));

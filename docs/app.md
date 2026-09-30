@@ -89,7 +89,15 @@ npm test         # offline tests for the scraper, search, ranking, edits, data u
 their answers and score leave the party, and their phone asks for a name again, so it is not a ban. A phone that
 loses the connection keeps its place and reconnects by itself, even after minutes or a page reload; only a removed
 player or a closed party has to join again. The phone's *Settings* (tap the name, or the button in the lobby) change the name, never to a name
-someone else has, and *Leave the game* removes the player and their score, as if the host had removed them. While a
+someone else has, and *Leave the game* removes the player and their score, as if the host had removed them. **Profiles**: the first time a name joins, the host app saves a
+profile for it (`party_profiles` table, carried through updates) with the player's preferences (*Show reactions*, and *Sound*:
+a chime and a buzz when a question starts). In *Settings* a player can set, change or remove a 4-digit **PIN** (stored as a
+salted scrypt hash). A name with a PIN asks for it on joining, or when another player renames to it; five wrong tries lock
+that name for a minute. Typing the right PIN for a name that is already in the game moves that player to the new device with
+their score, and the old phone goes back to the name screen. A name without a PIN is accepted as before, and a known name
+loads its profile. The host's *Game* tab has *Play*, *Profiles* and *Leaderboard* sections: *Profiles* lists every profile
+with its PIN state, rounds and last game, and can *Clear PIN* (for a player who forgot it) or delete a profile, optionally
+with its all-time results. While a
 question runs, a phone that switches to another tab or app, or loses the connection, gets a warning sign on the
 host's screen only, with how many times, and a short toast there names the player as it happens (one toast per
 player and question, updated with the count); the count starts again at each question. *Message* in the party header sends a clue or
@@ -100,7 +108,7 @@ paused, and never while the host checks answers (between questions when the answ
 while an answer is still *not sure*): phones then show that the host is checking, and only the host moves on. Phones
 and the host see how many tapped, and the count starts again at each step. Every finished round adds
 each player's correct, wrong and unanswered questions (counted from the question they joined at) to the
-**all-time leaderboard** in the party lobby, kept per name in the `party_results` table and carried through
+**all-time leaderboard** (in the party lobby and the Game tab's *Leaderboard*), kept per name in the `party_results` table and carried through
 updates; *Reset* there deletes them. Each answer keeps its time: seconds from the question's start to the last change of the
 answer, pauses left out (sending the same answer again keeps the first time). The host sees it next to every answer,
 phones see their own after the reveal, and every leaderboard (host, TV, phones, all-time) shows each player's average
@@ -114,8 +122,8 @@ question runs they sit in a row just above the answer bar; one a
 second and ten a minute per player (the tray shows how many are left). The host app queues every reaction and shows it as a small toast
 with the player's name in the TV's bottom-right corner (five at a time, about 4 s each) and on the other players' phones
 (two at a time, about 3 s each), in the order sent; one that waits too long (15 s for the TV, 8 s for phones) is dropped, and it shows next to the player's name in the
-host's player lists for a few seconds when it reaches the TV. *Show reactions* in the phone's Settings hides them and the tray for that player (remembered
-on the device); *Reactions* in
+host's player lists for a few seconds when it reaches the TV. *Show reactions* in the phone's Settings hides them and the tray for that player (saved in the
+player's profile); *Reactions* in
 the party header turns them off and on for everyone. Windows
   Firewall asks once whether KimHardaNeApp may accept connections on private networks; allow it.
 - **Lists**: *Add to list* in the editor puts the open question into one or more of your lists, or creates a
