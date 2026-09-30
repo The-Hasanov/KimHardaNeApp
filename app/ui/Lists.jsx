@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { cn } from 'cn';
-import { ArrowDownIcon, ArrowUpIcon, ListIcon, PencilIcon, PlayIcon, PlusIcon, SquarePenIcon, Trash2Icon, XIcon } from 'lucide-react';
+import { ArrowDownIcon, ArrowUpIcon, FileDownIcon, FileUpIcon, ListIcon, PencilIcon, PlayIcon, PlusIcon, SquarePenIcon, Trash2Icon, XIcon } from 'lucide-react';
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter,
   AlertDialogHeader, AlertDialogTitle,
@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/button';
 import { Dialog, DialogClose, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from '@/components/ui/empty';
 import { Input } from '@/components/ui/input';
+import { exportedMessage, importDetails, questionCountLabel, runTransfer } from './transferMessages';
 
 const { api } = window;
 const withLineBreaks = text => (text ?? '').replaceAll('/-/', '\n');
@@ -98,6 +99,15 @@ export default function Lists({ lists, isVisible, hideAnswers, onListsChanged, o
     setSelectedListId(null);
     onListsChanged();
   };
+  const importList = () => runTransfer(api.importList, async ({ listId, summary }) => {
+    await onListsChanged();
+    setSelectedListId(listId);
+    toast.success(`Imported a list of ${questionCountLabel(summary.total)}`, { description: importDetails(summary, { isList: true }) });
+  });
+  const exportList = () => runTransfer(() => api.exportList(selectedListId), result => {
+    const { title, description } = exportedMessage(result);
+    toast.success(title, { description });
+  });
   const moveQuestion = async (index, direction) => {
     const reordered = [...questions];
     [reordered[index], reordered[index + direction]] = [reordered[index + direction], reordered[index]];
@@ -115,7 +125,10 @@ export default function Lists({ lists, isVisible, hideAnswers, onListsChanged, o
       <aside className="flex w-64 shrink-0 flex-col border-r">
         <div className="flex h-12 shrink-0 items-center justify-between border-b px-4">
           <span className="text-sm font-medium">Lists</span>
-          <Button size="sm" variant="outline" onClick={() => setNameDialog('create')}><PlusIcon />New list</Button>
+          <div className="flex gap-1">
+            <Button size="icon-sm" variant="ghost" onClick={importList} aria-label="Import a list" title="Import a list from a KimHardaNeApp file"><FileUpIcon /></Button>
+            <Button size="sm" variant="outline" onClick={() => setNameDialog('create')}><PlusIcon />New list</Button>
+          </div>
         </div>
         <nav className="min-h-0 flex-1 overflow-y-auto p-2">
           {lists.map(list => (
@@ -138,7 +151,10 @@ export default function Lists({ lists, isVisible, hideAnswers, onListsChanged, o
               <EmptyTitle>No lists yet</EmptyTitle>
               <EmptyDescription>Create a list, then add questions to it from the question editor with “Add to list”.</EmptyDescription>
             </EmptyHeader>
-            <EmptyContent><Button onClick={() => setNameDialog('create')}><PlusIcon />New list</Button></EmptyContent>
+            <EmptyContent className="flex-row justify-center gap-2">
+              <Button onClick={() => setNameDialog('create')}><PlusIcon />New list</Button>
+              <Button variant="outline" onClick={importList}><FileUpIcon />Import a list</Button>
+            </EmptyContent>
           </Empty>
         ) : (
           <div className="flex h-full flex-col">
@@ -148,6 +164,7 @@ export default function Lists({ lists, isVisible, hideAnswers, onListsChanged, o
                 <p className="text-xs text-muted-foreground">{questionCount(questions.length)}</p>
               </div>
               <Button onClick={() => onStartGame(selectedList.id)} disabled={!questions.length}><PlayIcon />Start game</Button>
+              <Button variant="outline" onClick={exportList} disabled={!questions.length} title="Save this list and its questions, with pictures, to a file"><FileDownIcon />Export</Button>
               <Button variant="outline" onClick={() => setNameDialog('rename')}><PencilIcon />Rename</Button>
               <Button variant="outline" onClick={() => setIsConfirmingDelete(true)}><Trash2Icon />Delete</Button>
             </div>

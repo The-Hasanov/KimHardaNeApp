@@ -4,12 +4,13 @@ const { autoUpdater } = require('electron-updater');
 const { execFile } = require('node:child_process');
 const fs = require('node:fs');
 const path = require('node:path');
-const { Store } = require('./store');
+const { Store, OWN_PACKAGE_ID } = require('./store');
 const { installData } = require('./data');
 const ai = require('./ai');
 const scraper = require('./scraper');
 const { judgeAnswer } = require('./judge');
 const { openParty } = require('./party');
+const transfer = require('./transfer');
 const { findSamsungTvs, openInTvBrowser } = require('./samsungTv');
 
 const WHAT_WHERE_WHEN_GAME_ID = 1;
@@ -211,7 +212,7 @@ app.whenReady().then(() => {
   });
   const handle = (channel, fn) => ipcMain.handle(channel, async (_e, ...args) => { await ready; return fn(...args); });
 
-  handle('info', () => ({ version: app.getVersion(), rows: store.rows.length, games: store.games(), dataUpdate, dataDate: dataDate() }));
+  handle('info', () => ({ version: app.getVersion(), rows: store.rows.length, ownCount: store.rows.filter(row => row.package_id === OWN_PACKAGE_ID).length, games: store.games(), dataUpdate, dataDate: dataDate() }));
   handle('ai-status', () => aiStatus);
   handle('set-ai-search', async isOn => {
     writeSettings({ aiSearch: isOn });
@@ -304,6 +305,49 @@ app.whenReady().then(() => {
     return store.get(row.uid);
   });
   handle('delete-question', uid => store.deleteQuestion(uid));
+  const QUESTION_FILES = [{ name: 'KimHardaNeApp questions', extensions: ['json'] }];
+  const fileNameOf = name => String(name).replace(/[\\/:*?"<>|]+/g, '-').trim() || 'Questions';
+  const embedCreated = async uids => {
+    if (uids.length && isAiReady()) await ai.embedRows(store, uids.map(uid => store.rows[store.pos.get(uid)]));
+  };
+  const saveQuestionsFile = async (name, data) => {
+    const { canceled, filePath } = await dialog.showSaveDialog(win, {
+      title: 'Export questions', defaultPath: path.join(app.getPath('documents'), `${fileNameOf(name)}.json`), filters: QUESTION_FILES,
+    });
+    if (canceled) return null;
+    fs.writeFileSync(filePath, JSON.stringify(data, null, 2));
+    return { file: filePath, count: data.questions.length };
+  };
+  const openQuestionsFile = async () => {
+    const { canceled, filePaths } = await dialog.showOpenDialog(win, { title: 'Import questions', properties: ['openFile'], filters: QUESTION_FILES });
+    if (canceled) return null;
+    try {
+      return { data: JSON.parse(fs.readFileSync(filePaths[0], 'utf8')), fileName: path.basename(filePaths[0], path.extname(filePaths[0])) };
+    } catch {
+      throw new Error('This file could not be read as KimHardaNeApp questions');
+    }
+  };
+  const ownQuestions = () => store.rows.filter(row => row.package_id === OWN_PACKAGE_ID).map(row => store.get(row.uid));
+  handle('export-own-questions', () => saveQuestionsFile('My questions', transfer.exportFile(ownQuestions())));
+  handle('import-own-questions', async () => {
+    const opened = await openQuestionsFile();
+    if (!opened) return null;
+    const { createdUids, summary } = transfer.importOwnQuestions(store, opened.data);
+    await embedCreated(createdUids);
+    return summary;
+  });
+  handle('export-list', listId => {
+    const list = store.allLists().find(candidate => candidate.id === listId);
+    if (!list) throw new Error('This list no longer exists');
+    return saveQuestionsFile(list.name, transfer.exportFile(store.listQuestions(listId), { list }));
+  });
+  handle('import-list', async () => {
+    const opened = await openQuestionsFile();
+    if (!opened) return null;
+    const { listId, createdUids, summary } = transfer.importList(store, opened.data, { fileName: opened.fileName });
+    await embedCreated(createdUids);
+    return { listId, summary };
+  });
   handle('pick-question-image', async (uid, column) => {
     const { canceled, filePaths } = await dialog.showOpenDialog(win, {
       title: 'Add a picture', properties: ['openFile'], filters: [{ name: 'Pictures', extensions: ['png', 'jpg', 'jpeg', 'gif', 'webp'] }],

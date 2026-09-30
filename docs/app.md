@@ -137,6 +137,14 @@ for reduced motion. Windows
   games and parties treat them like any other question, and *My questions* in the game filter finds them in search too.
   Like edits, they survive refreshes and version updates, and `npm run dist` leaves them out of the installer.
   Only your own questions can be deleted.
+- **Import and export**: *Export* on the *Custom* tab saves all your own questions, and *Export* on a list saves that list
+  with its questions in order, to a `.json` file (`transfer.js`) that carries every text field, the sources and the
+  pictures (embedded when they are on this computer, as links otherwise). *Import* on the *Custom* tab adds the file's
+  questions to your own, skipping ones you already have (same text and answer, ignoring case, diacritics and spacing)
+  and question bank questions already in this computer's bank. *Import* on the *Lists* tab (the icon next to *New list*)
+  creates a new list from the file, named after it (with a number if the name is taken): question bank questions found
+  here are used as they are, your own questions already here are reused, and every other question, custom or from a
+  question bank this computer lacks, is added to your own questions first. A message sums up what was added.
 - **Images** are shown from `data/images/` when `scraper.js images` has fetched them, otherwise from the site.
 - **Refresh data** (header button) runs the scraper inside the app and brings the open database up to date.
   *Quick* (~2 min) lists every package, fetches the ones not stored yet and runs the author check. *Full*

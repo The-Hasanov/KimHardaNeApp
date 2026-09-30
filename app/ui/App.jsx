@@ -3,7 +3,7 @@ import { toast } from 'sonner';
 import { useDefaultLayout } from 'react-resizable-panels';
 import { cn } from 'cn';
 import {
-  DownloadIcon, EyeIcon, FileTextIcon, ImagePlusIcon, LayersIcon, PencilIcon, RefreshCwIcon, RotateCcwIcon, SaveIcon, SearchIcon,
+  DownloadIcon, EyeIcon, FileDownIcon, FileUpIcon, FileTextIcon, ImagePlusIcon, LayersIcon, PencilIcon, RefreshCwIcon, RotateCcwIcon, SaveIcon, SearchIcon,
   ListIcon, ListPlusIcon, MoonIcon, NotebookPenIcon, PlusIcon, SearchXIcon, SettingsIcon, SparklesIcon, SquareIcon, TimerIcon, Trash2Icon, UserIcon, XIcon, ZapIcon,
 } from 'lucide-react';
 import {
@@ -37,6 +37,7 @@ import Game from './Game';
 import Lists, { ListNameDialog } from './Lists';
 import SettingsDialog, { describeAiWork } from './Settings';
 import { setNightMode, useNightMode } from './theme';
+import { exportedMessage, importDetails, questionCountLabel, runTransfer } from './transferMessages';
 
 const { api } = window;
 const FIELDS = [
@@ -438,6 +439,17 @@ export default function App() {
     setTimeout(() => document.getElementById('f-text')?.focus());
   }
 
+  const importOwnQuestions = () => runTransfer(api.importOwnQuestions, async summary => {
+    setInfo(await api.info());
+    const details = importDetails(summary, { isList: false });
+    if (summary.added) toast.success(`Imported ${questionCountLabel(summary.added)}`, { description: details });
+    else toast.info('Nothing new to import', { description: details });
+  });
+  const exportOwnQuestions = () => runTransfer(api.exportOwnQuestions, result => {
+    const { title, description } = exportedMessage(result);
+    toast.success(title, { description });
+  });
+
   async function deleteCurrent() {
     try {
       await api.deleteQuestion(current.uid);
@@ -602,7 +614,11 @@ export default function App() {
             <TooltipContent>Night mode</TooltipContent>
           </Tooltip>
         )}
-        {isMine && <Button variant="outline" className="ml-auto" onClick={startNewQuestion}><PlusIcon />New question</Button>}
+        {isMine && <>
+          <Button variant="ghost" className="ml-auto" onClick={importOwnQuestions} title="Add questions from a KimHardaNeApp file"><FileUpIcon />Import</Button>
+          <Button variant="ghost" onClick={exportOwnQuestions} disabled={!info?.ownCount} title="Save your questions, with their pictures, to a file"><FileDownIcon />Export</Button>
+          <Button variant="outline" onClick={startNewQuestion}><PlusIcon />New question</Button>
+        </>}
         {view === 'search' && <>
         <InputGroup className="min-w-40 flex-1 basis-40">
           <InputGroupAddon><SearchIcon /></InputGroupAddon>

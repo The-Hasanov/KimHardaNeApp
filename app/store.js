@@ -276,14 +276,23 @@ class Store {
   }
 
   setOwnImage(uid, column, file = null) {
+    if (!file) return this.setOwnImageBytes(uid, column, null);
+    const extension = path.extname(file).toLowerCase();
+    if (!IMAGE_TYPES[extension]) throw new Error('Pick a PNG, JPEG, GIF or WebP picture');
+    return this.setOwnImageBytes(uid, column, { bytes: fs.readFileSync(file), extension });
+  }
+
+  setOwnImageBytes(uid, column, picture) {
     const i = this.pos.get(uid);
     if (i === undefined || this.rows[i].package_id !== OWN_PACKAGE_ID) throw new Error('Pictures can be added to your own questions only');
     if (!IMAGE_COLUMNS.includes(column)) throw new Error(`unknown picture ${column}`);
     let url = null;
-    if (file) {
-      const extension = path.extname(file).toLowerCase();
+    if (picture?.remoteUrl) {
+      if (!/^https?:\/\//.test(picture.remoteUrl)) throw new Error('A picture link must start with http or https');
+      url = picture.remoteUrl;
+    } else if (picture) {
+      const { bytes, extension } = picture;
       if (!IMAGE_TYPES[extension]) throw new Error('Pick a PNG, JPEG, GIF or WebP picture');
-      const bytes = fs.readFileSync(file);
       const sha256 = crypto.createHash('sha256').update(bytes).digest('hex');
       const relative = `images/own/${sha256}${extension}`;
       fs.mkdirSync(path.join(this.roots[0], 'images', 'own'), { recursive: true });
@@ -422,4 +431,4 @@ class Store {
   }
 }
 
-module.exports = { Store, OWN_PACKAGE_ID, OWN_IMAGE_PREFIX, TUNING, LISTS_SCHEMA, PLAY_SCHEMA, PARTY_RESULTS_SCHEMA, EMBEDDINGS_SCHEMA, fold, passage, embeddable, hashOf, DIM };
+module.exports = { Store, OWN_PACKAGE_ID, OWN_IMAGE_PREFIX, IMAGE_TYPES, IMAGE_COLUMNS, TUNING, LISTS_SCHEMA, PLAY_SCHEMA, PARTY_RESULTS_SCHEMA, EMBEDDINGS_SCHEMA, fold, passage, embeddable, hashOf, DIM };
