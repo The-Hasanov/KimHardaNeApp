@@ -634,3 +634,85 @@ test('videos and audio stream to the TV and phones in ranges, so they can seek a
     await close();
   }
 });
+
+const THREE_QUESTIONS = [...QUESTIONS, { uid: 'q3', text: 'Longest river?', answer: 'Kür', accepted_answers: null, comment: null, rekvizit_src: null }];
+
+async function playQuestion(game, answers) {
+  for (const [player, given] of answers) game.submitAnswer(player.token, given);
+  await game.closeAnswers();
+}
+
+test('a round with a point pool refuses to start when there are more questions than picks', () => {
+  const game = newGame();
+  game.join('Aysel');
+  const pointSystem = { name: 'Tight', mode: 'pool', pool: [{ points: 10, uses: 1 }, { points: 30, uses: 1 }] };
+  assert.throws(() => game.startRound({ ...ROUND, questions: THREE_QUESTIONS, pointSystem }), /3 questions.*only 2 picks/);
+  assert.equal(game.phase, 'lobby');
+  game.startRound({ ...ROUND, pointSystem });
+  assert.equal(game.phase, 'question');
+});
+
+test('players pick pool values within their uses, and an unpicked question takes the lowest free value', async () => {
+  const game = newGame();
+  const aysel = game.join('Aysel');
+  const nicat = game.join('Nicat');
+  const pointSystem = { name: 'Pool', mode: 'pool', pool: [{ points: 10, uses: 2 }, { points: 20, wrong: -10, uses: 1 }, { points: 30, wrong: -20, unanswered: -10, uses: 1 }] };
+  game.startRound({ ...ROUND, questions: THREE_QUESTIONS, pointSystem });
+  assert.deepEqual(game.playerView(aysel).stake, { pick: 0, isPicked: false, isRisked: false, usesLeft: [2, 1, 1], risksLeft: 0 });
+  game.setStake(aysel.token, { pick: 2 });
+  assert.throws(() => game.setStake(aysel.token, { pick: 5 }), /Pick/);
+  assert.throws(() => game.setStake(aysel.token, { isRisked: true }), /no risk/);
+  await playQuestion(game, [[aysel, 'Bakı'], [nicat, 'Gəncə']]);
+  assert.equal(game.playerView(aysel).reveal.points, 30);
+  assert.equal(game.playerView(nicat).reveal.points, 0);
+  game.next();
+  assert.deepEqual(game.playerView(aysel).stake.usesLeft, [2, 1, 0]);
+  assert.throws(() => game.setStake(aysel.token, { pick: 2 }), /No 30s left/);
+  game.setStake(aysel.token, { pick: 1 });
+  game.setStake(nicat.token, { pick: 2 });
+  await playQuestion(game, [[aysel, 'Səməd Vurğun']]);
+  assert.equal(game.playerView(aysel).reveal.points, -10);
+  assert.equal(game.playerView(nicat).reveal.points, -10);
+  assert.deepEqual(game.leaderboard().map(entry => [entry.name, entry.score]), [['Aysel', 20], ['Nicat', -10]]);
+  assert.equal(game.hostView().answers[0].stake.pick, 1);
+});
+
+test('risk uses the risk points and runs out at the limit, and an unanswered risk is not used up', async () => {
+  const game = newGame();
+  const aysel = game.join('Aysel');
+  const pointSystem = { name: 'Risky', simple: { correct: 3, wrong: -1, unanswered: 0 }, risk: { isOn: true, correct: 6, wrong: -6, limit: 1 } };
+  game.startRound({ ...ROUND, questions: THREE_QUESTIONS, pointSystem });
+  game.setStake(aysel.token, { isRisked: true });
+  await playQuestion(game, []);
+  assert.equal(game.playerView(aysel).reveal.points, 0);
+  game.next();
+  assert.equal(game.playerView(aysel).stake.risksLeft, 1);
+  game.setStake(aysel.token, { isRisked: true });
+  game.setStake(aysel.token, { isRisked: false });
+  game.setStake(aysel.token, { isRisked: true });
+  await playQuestion(game, [[aysel, 'Nizami Gəncəvi']]);
+  assert.equal(game.playerView(aysel).reveal.points, 6);
+  game.next();
+  assert.equal(game.playerView(aysel).stake.risksLeft, 0);
+  assert.throws(() => game.setStake(aysel.token, { isRisked: true }), /No risks left/);
+});
+
+test('streak bonuses and all or nothing count through a whole round and reach the all-time results', async () => {
+  const reports = [];
+  const game = new PartyGame({ judge: judgeByText, onRoundFinished: results => reports.push(results) });
+  const aysel = game.join('Aysel');
+  const nicat = game.join('Nicat');
+  const pointSystem = { name: 'Perfect', simple: { correct: 2 }, streak: { isOn: true, from: 2, bonus: 1 }, allOrNothing: { isOn: true, perfectBonus: 5 } };
+  game.startRound({ ...ROUND, questions: THREE_QUESTIONS, pointSystem });
+  await playQuestion(game, [[aysel, 'Bakı'], [nicat, 'Bakı']]);
+  game.next();
+  await playQuestion(game, [[aysel, 'Nizami Gəncəvi'], [nicat, 'Nizami Gəncəvi']]);
+  assert.equal(game.playerView(aysel).reveal.streakBonus, 1);
+  game.next();
+  await playQuestion(game, [[aysel, 'Kür'], [nicat, 'Araz']]);
+  assert.equal(game.playerView(nicat).reveal.isRoundLost, true);
+  game.next();
+  assert.equal(game.phase, 'finished');
+  assert.deepEqual(game.leaderboard().map(entry => [entry.name, entry.score]), [['Aysel', 2 + 3 + 3 + 5], ['Nicat', 0]]);
+  assert.deepEqual(reports[0].map(({ name, points }) => [name, points]), [['Aysel', 13], ['Nicat', 0]]);
+});

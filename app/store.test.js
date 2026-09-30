@@ -223,3 +223,15 @@ test('party results add up per player name across rounds, rank by points then ti
   s.resetPartyResults();
   assert.deepEqual(s.partyResults(), []);
 });
+
+test('point systems are saved by name, renamed, and deleted', () => {
+  const s = store();
+  const id = s.savePointSystem({ name: 'Brave pool', mode: 'pool', pool: [{ points: 10 }] });
+  assert.throws(() => s.savePointSystem({ name: 'brave POOL', mode: 'simple' }), /already exists/);
+  s.savePointSystem({ id, name: 'Brave pool', mode: 'pool', pool: [{ points: 20 }] });
+  assert.deepEqual(s.pointSystem(id).pool, [{ points: 20 }]);
+  const other = s.savePointSystem({ name: 'Classic', mode: 'simple' });
+  assert.deepEqual(s.pointSystems().map(system => system.name), ['Brave pool', 'Classic']);
+  s.deletePointSystem(other);
+  assert.deepEqual(s.pointSystems().map(system => system.id), [id]);
+});

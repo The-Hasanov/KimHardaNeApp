@@ -168,6 +168,33 @@ header .bar { gap: 6px; }
 .pin-form .pin-input { flex: 1; min-width: 0; font-size: 20px; }
 .lock-badge { width: 56px; height: 56px; border-radius: 50%; display: grid; place-items: center; background: var(--card); border: 1px solid var(--border); margin-bottom: 4px; }
 .lock-badge svg { width: 26px; height: 26px; }
+.rules { display: flex; flex-direction: column; gap: 2px; font-size: 14px; color: var(--muted); }
+.stakes { display: flex; flex-direction: column; gap: 8px; }
+.stakes[hidden] { display: none; }
+.stake-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.stake-label { font-size: 12px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
+.stake-hint { font-size: 13px; font-weight: 500; color: var(--muted); text-align: right; }
+.pool-picks { display: flex; gap: 8px; }
+.pool-pick { flex: 1; min-width: 0; min-height: 52px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px; padding: 6px 4px; border-radius: 12px; border: 1px solid var(--border); background: var(--card); color: var(--fg); }
+.pool-pick .pool-points { font-size: 20px; font-weight: 800; font-variant-numeric: tabular-nums; line-height: 1.1; }
+.pool-pick .pool-left { font-size: 11px; font-weight: 600; color: var(--muted); }
+.pool-pick.on { background: var(--primary); color: var(--primary-fg); border-color: var(--primary); }
+.pool-pick.on .pool-left { color: inherit; opacity: .75; }
+.pool-pick.auto { outline: 2px dashed color-mix(in srgb, var(--primary-fg) 45%, transparent); outline-offset: -5px; }
+.pool-pick:disabled { opacity: .4; }
+.risk-toggle { display: flex; align-items: center; gap: 12px; width: 100%; padding: 10px 14px; border-radius: 12px; border: 1px solid var(--border); background: var(--card); color: var(--fg); text-align: left; }
+.risk-toggle svg { flex: none; width: 22px; height: 22px; }
+.risk-toggle .risk-text { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.risk-toggle .risk-text strong { font-size: 15px; }
+.risk-toggle .stake-hint { text-align: left; }
+.risk-switch { flex: none; width: 40px; height: 24px; border-radius: 99px; background: var(--border); position: relative; transition: background-color .2s; }
+.risk-switch::after { content: ''; position: absolute; top: 3px; left: 3px; width: 18px; height: 18px; border-radius: 50%; background: #fff; transition: transform .2s; box-shadow: 0 1px 3px rgb(0 0 0 / .3); }
+.risk-toggle.on { border-color: color-mix(in srgb, var(--warn, #f59e0b) 60%, transparent); background: color-mix(in srgb, var(--warn, #f59e0b) 14%, var(--card)); }
+.risk-toggle.on svg { color: var(--warn, #f59e0b); }
+.risk-toggle.on .risk-switch { background: var(--warn, #f59e0b); }
+.risk-toggle.on .risk-switch::after { transform: translateX(16px); }
+.verdict .bonus { font-size: .75em; font-weight: 700; opacity: .8; }
+.round-lost { font-size: 14px; font-weight: 600; color: var(--bad); }
 .field-label { font-size: 13px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
 .icon-button { width: 36px; height: 36px; padding: 0; display: grid; place-items: center; border-radius: 50%; background: var(--card); color: var(--fg); border: 1px solid var(--border); }
 .sent { display: flex; align-items: center; gap: 6px; color: var(--good); font-size: 14px; margin: 0; min-height: 1.5em; }
@@ -292,7 +319,7 @@ function celebrate(pieces) {
 
 const secondsLabel = seconds => `${seconds.toFixed(1)} s`;
 const pointsLabel = points => (points > 0 ? `+${points}` : points < 0 ? `−${-points}` : '0');
-const rulesText = () => `Correct ${pointsLabel(state.rules.pointsForCorrect)} · Wrong ${pointsLabel(state.rules.pointsForWrong)} · No answer 0`;
+const rulesBlock = () => el('div', { class: 'rules' }, (state.rules.pointsSummary ?? []).map(line => el('span', {}, line)));
 const imageUrl = (route) => `${route}?token=${encodeURIComponent(session.token)}&question=${state.index}`;
 
 function show(...children) {
@@ -773,6 +800,7 @@ const ICONS = {
   clock: '<circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>',
   smile: '<circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><path d="M9 9h.01"/><path d="M15 9h.01"/>',
   hourglass: '<path d="M5 22h14"/><path d="M5 2h14"/><path d="M17 22v-4.2a2 2 0 0 0-.6-1.4L12 12l-4.4 4.4a2 2 0 0 0-.6 1.4V22"/><path d="M7 2v4.2a2 2 0 0 0 .6 1.4L12 12l4.4-4.4a2 2 0 0 0 .6-1.4V2"/>',
+  dice: '<rect width="12" height="12" x="2" y="10" rx="2"/><path d="m17.92 14 3.5-3.5a2.24 2.24 0 0 0 0-3l-5-4.92a2.24 2.24 0 0 0-3 0L10 6"/><path d="M6 18h.01"/><path d="M10 14h.01"/><path d="M15 6h.01"/><path d="M18 9h.01"/>',
   lock: '<rect width="18" height="11" x="3" y="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>',
   megaphone: '<path d="m3 11 18-5v12L3 14v-3z"/><path d="M11.6 16.8a3 3 0 1 1-5.8-1.6"/>',
 };
@@ -960,8 +988,63 @@ function composerDock() {
     state.reactions.map(emoji => el('button', { type: 'button', title: `Send ${emoji}`, onclick: event => sendReaction(event.currentTarget, emoji) }, emoji)));
   return el('div', { class: 'composer-dock', id: 'composer-dock' },
     emojis,
+    el('div', { class: 'stakes', id: 'stakes', hidden: true }),
     el('form', { class: 'composer', onsubmit: send }, input, button),
     el('div', { class: 'composer-meta' }, status, skipChip()));
+}
+
+let stakeError = '';
+
+async function sendStake(change) {
+  stakeError = '';
+  state.stake = { ...state.stake, ...change, ...('pick' in change && { isPicked: true }) };
+  updateStakes();
+  navigator.vibrate?.(10);
+  try {
+    const body = await postJson('/stake', { token: session.token, ...change });
+    state.stake = body.stake;
+  } catch (e) {
+    stakeError = e.message || 'Could not save';
+  }
+  updateStakes();
+}
+
+const stakeHint = (...parts) => el('span', { class: 'stake-hint' }, parts.filter(Boolean).join(' · '));
+
+function updateStakes() {
+  const row = document.getElementById('stakes');
+  if (!row) return;
+  const system = state.rules.pointSystem;
+  const stake = state.stake;
+  const hasPool = system?.mode === 'pool';
+  const hasRisk = !!system?.risk?.isOn;
+  row.hidden = !stake || (!hasPool && !hasRisk);
+  if (row.hidden) return;
+  const error = stakeError && el('span', { class: 'stake-hint error-text' }, stakeError);
+  if (hasPool) {
+    const picked = system.pool[stake.pick];
+    row.replaceChildren(
+      el('div', { class: 'stake-head' }, el('span', { class: 'stake-label', lang: 'en' }, 'Play for'),
+        error || stakeHint(`Right +${picked.points}`, `Wrong ${pointsLabel(picked.wrong)}`, `No answer ${pointsLabel(picked.unanswered)}`)),
+      el('div', { class: 'pool-picks', role: 'radiogroup', ariaLabel: 'Points for this question' }, system.pool.map((entry, index) => {
+        const left = stake.usesLeft[index];
+        const isChosen = index === stake.pick;
+        return el('button', {
+          type: 'button', role: 'radio', class: `pool-pick${isChosen ? ' on' : ''}${isChosen && !stake.isPicked ? ' auto' : ''}`, disabled: left != null && left <= 0 && !isChosen,
+          ariaChecked: String(isChosen), onclick: () => !isChosen && sendStake({ pick: index }),
+        }, el('span', { class: 'pool-points' }, entry.points), left != null && el('span', { class: 'pool-left' }, left <= 0 ? 'used' : `${left} left`));
+      })));
+    return;
+  }
+  const risks = stake.risksLeft >= 99 ? '' : stake.isRisked ? '' : `${stake.risksLeft} left`;
+  const canRisk = stake.isRisked || stake.risksLeft > 0;
+  row.replaceChildren(el('button', {
+    type: 'button', class: `risk-toggle${stake.isRisked ? ' on' : ''}`, disabled: !canRisk, ariaPressed: String(!!stake.isRisked),
+    onclick: () => sendStake({ isRisked: !stake.isRisked }),
+  }, icon(ICONS.dice), el('span', { class: 'risk-text' },
+    el('strong', {}, stake.isRisked ? 'Risked' : canRisk ? 'Risk it' : 'No risks left'),
+    error || stakeHint(`Right ${pointsLabel(system.risk.correct)}`, `Wrong ${pointsLabel(system.risk.wrong)}`, risks)),
+  el('span', { class: 'risk-switch' })));
 }
 
 function updateAnswerStatus() {
@@ -1009,6 +1092,7 @@ function renderScreen(next) {
     const nameElement = document.getElementById('me-name');
     if (nameElement) nameElement.textContent = next.me.name;
     updateSkip();
+    updateStakes();
     return updateAnswerStatus();
   }
   if (next.phase === 'question' && renderedScreen !== screen) alertQuestionStart();
@@ -1037,7 +1121,8 @@ function renderScreen(next) {
   if (next.phase === 'question') {
     isAway = false;
     if (document.visibilityState === 'hidden') reportAway();
-    show(topBar(), questionBlock(), el('p', { class: 'muted', style: 'margin:0;font-size:14px' }, rulesText()), composerDock());
+    show(topBar(), questionBlock(), rulesBlock(), composerDock());
+    updateStakes();
     updateSkip();
     return updateAnswerStatus();
   }
@@ -1048,11 +1133,13 @@ function renderScreen(next) {
   }
   if (next.phase === 'reveal') {
     const reveal = next.reveal;
-    const verdict = reveal.isCorrect == null ? el('div', { class: 'verdict bad' }, 'No answer')
+    const earned = el('span', { class: 'points' }, pointsLabel(reveal.points), reveal.streakBonus > 0 && el('span', { class: 'bonus' }, ` ${pointsLabel(reveal.streakBonus)} streak`));
+    const verdict = reveal.isCorrect == null ? el('div', { class: 'verdict bad' }, 'No answer', reveal.points !== 0 && earned)
       : reveal.isPending ? el('div', { class: 'verdict' }, '? The host is checking')
-      : el('div', { class: `verdict ${reveal.isCorrect ? 'good' : 'bad'}` }, reveal.isCorrect ? '✓ Correct' : '✗ Wrong', el('span', { class: 'points' }, pointsLabel(reveal.points)));
+      : el('div', { class: `verdict ${reveal.isCorrect ? 'good' : 'bad'}` }, reveal.isCorrect ? '✓ Correct' : '✗ Wrong', earned);
     return done(show(topBar(), el('div', { class: 'card' },
       verdict,
+      reveal.isRoundLost && next.rules.pointSystem.allOrNothing.isOn && el('span', { class: 'round-lost' }, 'All or nothing: this round now scores 0 for you'),
       next.myAnswer != null && el('span', { class: 'muted' }, `Your answer: ${next.myAnswer || '—'}`),
       reveal.seconds != null && el('span', { class: 'time-note' }, icon(ICONS.clock), `Answered in ${secondsLabel(reveal.seconds)}`),
       el('p', { class: 'answer' }, reveal.answer),

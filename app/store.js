@@ -34,6 +34,9 @@ const PARTY_PROFILES_SCHEMA = `
 CREATE TABLE IF NOT EXISTS party_profiles (
   name_key TEXT PRIMARY KEY, name TEXT NOT NULL, pin_hash TEXT, pin_salt TEXT, preferences TEXT NOT NULL DEFAULT '{}',
   created_at TEXT NOT NULL, last_seen_at TEXT NOT NULL);`;
+const POINT_SYSTEMS_SCHEMA = `
+CREATE TABLE IF NOT EXISTS point_systems (
+  id INTEGER PRIMARY KEY, name TEXT NOT NULL UNIQUE COLLATE NOCASE, settings TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL);`;
 const POOL = 500;
 const OWN_PACKAGE_ID = 0;
 const OWN_GAME_ID = 0;
@@ -71,6 +74,7 @@ class Store {
     this.db.exec(PLAY_SCHEMA);
     this.db.exec(PARTY_RESULTS_SCHEMA);
     this.db.exec(PARTY_PROFILES_SCHEMA);
+    this.db.exec(POINT_SYSTEMS_SCHEMA);
     const resultColumns = this.db.prepare('PRAGMA table_info(party_results)').all().map(c => c.name);
     if (!resultColumns.includes('correct_ms')) this.db.exec('ALTER TABLE party_results ADD COLUMN correct_ms INTEGER NOT NULL DEFAULT 0');
     if (!resultColumns.includes('points')) this.db.exec('ALTER TABLE party_results ADD COLUMN points INTEGER NOT NULL DEFAULT 0; UPDATE party_results SET points = correct');
@@ -483,9 +487,33 @@ class Store {
     if (withResults) this.db.prepare('DELETE FROM party_results WHERE name_key = ?').run(key);
   }
 
+  pointSystems() {
+    return this.db.prepare('SELECT id, name, settings, updated_at FROM point_systems ORDER BY name COLLATE NOCASE').all()
+      .map(({ settings, ...row }) => ({ ...JSON.parse(settings), ...row }));
+  }
+
+  pointSystem(id) {
+    return this.pointSystems().find(system => system.id === id) ?? null;
+  }
+
+  savePointSystem({ id = null, name, ...settings }) {
+    const clash = this.db.prepare('SELECT id FROM point_systems WHERE name = ? AND id IS NOT ?').get(name, id);
+    if (clash) throw new Error(`A point system named “${name}” already exists`);
+    const json = JSON.stringify(settings);
+    if (id == null) {
+      return Number(this.db.prepare("INSERT INTO point_systems (name, settings, created_at, updated_at) VALUES (?, ?, datetime('now'), datetime('now'))").run(name, json).lastInsertRowid);
+    }
+    this.db.prepare("UPDATE point_systems SET name = ?, settings = ?, updated_at = datetime('now') WHERE id = ?").run(name, json, id);
+    return id;
+  }
+
+  deletePointSystem(id) {
+    this.db.prepare('DELETE FROM point_systems WHERE id = ?').run(id);
+  }
+
   games() {
     return this.db.prepare('SELECT game_id AS id, game_name AS name, COUNT(*) AS n FROM questions GROUP BY game_id ORDER BY game_id').all();
   }
 }
 
-module.exports = { Store, OWN_PACKAGE_ID, OWN_IMAGE_PREFIX, MEDIA_TYPES, IMAGE_COLUMNS, mediaKind, TUNING, LISTS_SCHEMA, PLAY_SCHEMA, PARTY_RESULTS_SCHEMA, PARTY_PROFILES_SCHEMA, EMBEDDINGS_SCHEMA, fold, passage, embeddable, hashOf, DIM };
+module.exports = { Store, OWN_PACKAGE_ID, OWN_IMAGE_PREFIX, MEDIA_TYPES, IMAGE_COLUMNS, mediaKind, TUNING, LISTS_SCHEMA, PLAY_SCHEMA, PARTY_RESULTS_SCHEMA, PARTY_PROFILES_SCHEMA, POINT_SYSTEMS_SCHEMA, EMBEDDINGS_SCHEMA, fold, passage, embeddable, hashOf, DIM };

@@ -2,7 +2,7 @@ import { createContext, useContext, useEffect, useMemo, useRef, useState } from 
 import QRCode from 'qrcode';
 import { cn } from 'cn';
 import {
-  AppWindowIcon, ArrowRightIcon, CastIcon, MegaphoneIcon, SendIcon, SmilePlusIcon, CheckIcon, ChevronDownIcon, CircleHelpIcon, DoorClosedIcon, EyeIcon, EyeOffIcon, FlagIcon, GamepadIcon, PauseIcon, PlayIcon, QrCodeIcon,
+  AppWindowIcon, ArrowRightIcon, CastIcon, DicesIcon, MegaphoneIcon, SendIcon, SmilePlusIcon, CheckIcon, ChevronDownIcon, CircleHelpIcon, DoorClosedIcon, EyeIcon, EyeOffIcon, FlagIcon, GamepadIcon, PauseIcon, PlayIcon, QrCodeIcon,
   RotateCcwIcon, SkipForwardIcon, TimerIcon, Trash2Icon, TriangleAlertIcon, TrophyIcon, TvIcon, UserXIcon, UsersIcon, WifiOffIcon, XIcon,
 } from 'lucide-react';
 import {
@@ -43,6 +43,16 @@ const OUTCOMES = {
   wrong: { label: 'Wrong', Icon: XIcon, className: 'text-destructive' },
   unsure: { label: 'Not sure', Icon: CircleHelpIcon, className: 'text-amber-600 dark:text-amber-400' },
 };
+
+function StakeBadge({ stake, pointSystem }) {
+  if (pointSystem?.mode === 'pool' && Number.isInteger(stake?.pick)) {
+    return <Badge variant="outline" className="shrink-0 tabular-nums" title="Points picked for this question">{pointSystem.pool[stake.pick]?.points}</Badge>;
+  }
+  if (stake?.isRisked) {
+    return <Badge variant="outline" className="shrink-0 border-amber-500/50 text-amber-700 dark:text-amber-400" title="Risked this answer"><DicesIcon />Risk</Badge>;
+  }
+  return null;
+}
 
 function JoinQrCode({ url, className = 'size-64' }) {
   const [svg, setSvg] = useState('');
@@ -155,7 +165,7 @@ function Podium({ party }) {
           Round {party.round} · {winners.length > 1 ? 'shared first place' : 'winner'}
         </p>
         <h1 className="text-4xl font-bold">Congratulations, {namesOf(winners)}!</h1>
-        <p className="text-muted-foreground">Correct {pointsLabel(party.rules.pointsForCorrect)} · wrong {pointsLabel(party.rules.pointsForWrong)} · no answer 0 · ties go to the faster average</p>
+        <p className="text-muted-foreground">{party.rules.pointSystem?.name}: {party.rules.pointsSummary?.join(' · ')} · ties go to the faster average</p>
       </div>
       <div className="flex items-end justify-center gap-3">
         {podiumOrder.map(entry => {
@@ -313,7 +323,8 @@ function LiveAnswers({ party, onKick }) {
             <li key={player.id} className="flex items-center gap-2 px-3 py-2">
               <OnlineDot isOnline={player.isOnline} />
               <div className="min-w-0 flex-1">
-                <p className="flex items-center gap-1.5 text-sm font-medium"><span className="truncate">{player.name}</span><AwayWarning timesAway={player.timesAway} /><PlayerReaction playerId={player.id} /></p>
+                <p className="flex items-center gap-1.5 text-sm font-medium"><span className="truncate">{player.name}</span><AwayWarning timesAway={player.timesAway} /><PlayerReaction playerId={player.id} />
+                  {showsAnswers && <StakeBadge stake={answer?.stake} pointSystem={party.rules.pointSystem} />}</p>
                 {showsAnswers && (
                   <p className={cn('truncate text-sm', !answer?.given && 'text-muted-foreground')} title={answer?.given}>
                     {answer ? answer.given || 'Blank' : 'No answer yet'}
@@ -352,10 +363,10 @@ function PlayerAnswers({ party, answers = party.answers, position = party.index 
           return (
             <li key={answer.playerId} className="flex flex-wrap items-center gap-x-4 gap-y-1 px-4 py-2.5">
               <span className="flex w-32 items-center gap-1.5 font-medium"><span className="truncate">{answer.name}</span><AwayWarning timesAway={timesAway.get(answer.playerId)} /></span>
-              <span className="min-w-0 flex-1 truncate">{answer.given || '—'}</span>
+              <span className="flex min-w-0 flex-1 items-center gap-2"><span className="truncate">{answer.given || '—'}</span><StakeBadge stake={answer.stake} pointSystem={party.rules.pointSystem} /></span>
               <span className="w-14 text-right text-sm text-muted-foreground tabular-nums" title="Answer time">{answerSeconds(answer) != null && secondsLabel(answerSeconds(answer))}</span>
               <span className={cn('flex items-center gap-1 text-sm font-semibold', className)}><Icon className="size-4" />{label}</span>
-              <span className="w-8 text-right text-sm tabular-nums">{pointsLabel(answer.points)}</span>
+              <span className="w-10 text-right text-sm tabular-nums">{pointsLabel(answer.points)}</span>
               <CallButtons answer={answer} position={position} isCalledNow={answer.isCorrect ? true : outcomeOf(answer) === 'wrong' ? false : null} />
             </li>
           );

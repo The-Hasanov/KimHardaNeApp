@@ -11,6 +11,7 @@ const scraper = require('./scraper');
 const { judgeAnswer } = require('./judge');
 const { openParty } = require('./party');
 const { PlayerProfiles } = require('./profiles');
+const { CLASSIC_POINT_SYSTEM, normalizePointSystem, summaryOf } = require('./scoring');
 const transfer = require('./transfer');
 const { findSamsungTvs, openInTvBrowser, isLocalNetworkAddress } = require('./samsungTv');
 
@@ -267,7 +268,9 @@ app.whenReady().then(() => {
     openPartyDisplay(win, party.game.port);
     return party.game.hostView();
   });
-  handle('party-start-round', withParty((game, { uids, ...rules }) => game.startRound({ questions: uids.map(uid => store.get(uid)).filter(Boolean), ...rules })));
+  handle('party-start-round', withParty((game, { uids, pointSystemId, ...rules }) => game.startRound({
+    questions: uids.map(uid => store.get(uid)).filter(Boolean), ...rules, pointSystem: store.pointSystem(pointSystemId) ?? undefined,
+  })));
   handle('party-skip-wait', withParty(game => game.skipWait()));
   handle('party-pause', withParty(game => game.pause()));
   handle('party-resume', withParty(game => game.resume()));
@@ -285,6 +288,20 @@ app.whenReady().then(() => {
   handle('reset-party-results', () => {
     store.resetPartyResults();
     return store.partyResults();
+  });
+  const pointSystemsWithSummary = () => {
+    if (!store.pointSystems().length) store.savePointSystem(normalizePointSystem(CLASSIC_POINT_SYSTEM));
+    return store.pointSystems().map(system => ({ ...system, summary: summaryOf(normalizePointSystem(system)) }));
+  };
+  handle('point-systems', pointSystemsWithSummary);
+  handle('save-point-system', system => {
+    const id = store.savePointSystem({ id: system.id ?? null, ...normalizePointSystem(system) });
+    return { id, pointSystems: pointSystemsWithSummary() };
+  });
+  handle('delete-point-system', id => {
+    if (store.pointSystems().length <= 1) throw new Error('Keep at least one point system');
+    store.deletePointSystem(id);
+    return pointSystemsWithSummary();
   });
   handle('party-profiles', () => store.partyProfiles());
   handle('clear-party-profile-pin', name => {

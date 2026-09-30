@@ -3,7 +3,7 @@ import { toast } from 'sonner';
 import { cn } from 'cn';
 import {
   ArrowRightIcon, EyeIcon, FlagIcon, Gamepad2Icon, ImageIcon, PauseIcon, PlayIcon, PresentationIcon, RotateCcwIcon, SettingsIcon,
-  ShuffleIcon, SkipForwardIcon, SparklesIcon, TrophyIcon, UserRoundIcon, UsersIcon,
+  ShuffleIcon, SigmaIcon, SkipForwardIcon, SparklesIcon, TrophyIcon, UserRoundIcon, UsersIcon,
 } from 'lucide-react';
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter,
@@ -21,11 +21,12 @@ import { Spinner } from '@/components/ui/spinner';
 import { Switch } from '@/components/ui/switch';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
-  KEY_HINT_ON_PRIMARY_BUTTON, Media, NextQuestionNumber, QuestionOnScreen, WARNING_AT_SECONDS_LEFT, formatClock, playTenSecondsLeftTone,
+  KEY_HINT_ON_PRIMARY_BUTTON, Media, NextQuestionNumber, NumberField, QuestionOnScreen, WARNING_AT_SECONDS_LEFT, formatClock, playTenSecondsLeftTone,
   playTimeUpTone, withLineBreaks,
 } from './gameShared';
 import PartyScreen, { AllTimeLeaderboard } from './Party';
 import Profiles from './Profiles';
+import PointSystems, { PointSystemSelect, roundProblemOf, usePointSystems } from './PointSystems';
 import { PlayHistory, PlayResults, PlayRound } from './Play';
 
 const { api } = window;
@@ -38,24 +39,6 @@ const MIN_SECONDS_TO_CHECK_ANSWERS = 15;
 const DEFAULT_SECONDS_ON_ANSWER = 10;
 const RANDOM_GAME_TITLE = 'Random · Nə? Harada? Nə zaman?';
 
-function NumberField({ id, label, value, min, max, step = 1, onChange }) {
-  const [draft, setDraft] = useState(String(value));
-  useEffect(() => setDraft(String(value)), [value]);
-  const isAllowed = number => Number.isFinite(number) && number >= min && number <= max;
-  return (
-    <div className="grid gap-2">
-      <Label htmlFor={id}>{label}</Label>
-      <Input id={id} type="number" min={min} max={max} step={step} value={draft} className="w-28"
-        onChange={e => {
-          setDraft(e.target.value);
-          const number = Math.round(Number(e.target.value));
-          if (e.target.value.trim() !== '' && isAllowed(number)) onChange(number);
-        }}
-        onBlur={() => setDraft(String(value))} />
-    </div>
-  );
-}
-
 const MODE_DESCRIPTIONS = {
   host: summary => `Host mode: ${summary} and a timer. Answers stay hidden until you end the game.`,
   play: summary => `Play mode: answer ${summary} yourself against the clock, then mark each answer correct or wrong, or let AI search check it.`,
@@ -64,10 +47,10 @@ const MODE_DESCRIPTIONS = {
 const TIMING_HELP = {
   host: "Between questions the next question's number fills the screen; Space skips the wait. Auto-start starts each question's timer as soon as the question appears.",
   play: "Between questions the next question's number fills the screen; Space skips the wait. Each question's timer starts as soon as it appears.",
-  party: "Between questions the next question's number fills every screen. Autoplay moves on to the next question once the answer has been shown for that many seconds; Pause holds it. Showing the answers at the end keeps every answer and score hidden until the last question: you check each question's answers during the seconds between questions (Pause gives more time), and the last one's before you show the answers one by one. A blank answer scores 0; a wrong one scores the points for a wrong answer (use a negative number as a penalty).",
+  party: "Between questions the next question's number fills every screen. Autoplay moves on to the next question once the answer has been shown for that many seconds; Pause holds it. Showing the answers at the end keeps every answer and score hidden until the last question: you check each question's answers during the seconds between questions (Pause gives more time), and the last one's before you show the answers one by one. The point system sets the points: make and change them under Point systems.",
 };
 
-function RoundSettings({ mode, questions, lists, listId, onListIdChange, onNewSet, settings, onSettingsChange, action }) {
+function RoundSettings({ mode, questions, lists, listId, onListIdChange, onNewSet, settings, onSettingsChange, pointSystems, onManagePointSystems, action }) {
   const chosenList = lists.find(list => list.id === listId);
   return (
     <div className="space-y-4">
@@ -145,10 +128,8 @@ function RoundSettings({ mode, questions, lists, listId, onListIdChange, onNewSe
             <NumberField id="seconds-on-answer" label="Seconds on the answer" value={settings.secondsOnAnswer} min={3} max={120} step={5}
               onChange={secondsOnAnswer => onSettingsChange({ secondsOnAnswer })} />
           )}
-          <NumberField id="points-for-correct" label="Points for correct" value={settings.pointsForCorrect} min={1} max={10}
-            onChange={pointsForCorrect => onSettingsChange({ pointsForCorrect })} />
-          <NumberField id="points-for-wrong" label="Points for wrong" value={settings.pointsForWrong} min={-10} max={0}
-            onChange={pointsForWrong => onSettingsChange({ pointsForWrong })} />
+          <PointSystemSelect pointSystems={pointSystems} value={settings.pointSystemId} questionCount={questions?.length ?? 0}
+            onChange={pointSystemId => onSettingsChange({ pointSystemId })} onManage={onManagePointSystems} />
         </>}
         <p className="basis-full text-xs text-muted-foreground">{TIMING_HELP[mode]}</p>
       </div>
@@ -205,7 +186,7 @@ function GameSetup({ mode, onModeChange, isAiReady, onOpenSettings, onStart, ...
   );
 }
 
-const GAME_SECTIONS = [['play', PlayIcon, 'Play'], ['profiles', UserRoundIcon, 'Profiles'], ['leaderboard', TrophyIcon, 'Leaderboard']];
+const GAME_SECTIONS = [['play', PlayIcon, 'Play'], ['points', SigmaIcon, 'Point systems'], ['profiles', UserRoundIcon, 'Profiles'], ['leaderboard', TrophyIcon, 'Leaderboard']];
 
 function GameSections({ section, onSectionChange, children }) {
   return (
@@ -255,8 +236,8 @@ export default function Game({ isVisible, lists, listId, onListIdChange, isAiRea
   const [secondsPerQuestion, setSecondsPerQuestion] = useState(DEFAULT_SECONDS_PER_QUESTION);
   const [secondsBetweenQuestions, setSecondsBetweenQuestions] = useState(0);
   const [shouldAutoStartTimer, setShouldAutoStartTimer] = useState(false);
-  const [pointsForCorrect, setPointsForCorrect] = useState(1);
-  const [pointsForWrong, setPointsForWrong] = useState(0);
+  const [pointSystems, setPointSystems] = usePointSystems();
+  const [pointSystemId, setPointSystemId] = useState(() => Number(localStorage.getItem('pointSystemId')) || null);
   const [isAutoplay, setIsAutoplay] = useState(false);
   const [isRevealAtEnd, setIsRevealAtEnd] = useState(false);
   const [secondsOnAnswer, setSecondsOnAnswer] = useState(DEFAULT_SECONDS_ON_ANSWER);
@@ -327,8 +308,10 @@ export default function Game({ isVisible, lists, listId, onListIdChange, isAiRea
     setPhase('setup');
     pickQuestions();
   };
+  const chosenPointSystem = pointSystems?.find(system => system.id === pointSystemId) ?? pointSystems?.[0];
+  const pointsProblem = roundProblemOf(chosenPointSystem, questions?.length ?? 0);
   const roundSettingsValues = {
-    secondsPerQuestion, secondsBetweenQuestions, shouldAutoStartTimer, pointsForCorrect, pointsForWrong, isAutoplay, secondsOnAnswer, randomCount, includeOwn, isRevealAtEnd,
+    secondsPerQuestion, secondsBetweenQuestions, shouldAutoStartTimer, pointSystemId: chosenPointSystem?.id ?? null, isAutoplay, secondsOnAnswer, randomCount, includeOwn, isRevealAtEnd,
   };
   const changeRoundSettings = changes => {
     if ('secondsPerQuestion' in changes) {
@@ -337,8 +320,10 @@ export default function Game({ isVisible, lists, listId, onListIdChange, isAiRea
     }
     if ('secondsBetweenQuestions' in changes) setSecondsBetweenQuestions(changes.secondsBetweenQuestions);
     if ('shouldAutoStartTimer' in changes) setShouldAutoStartTimer(changes.shouldAutoStartTimer);
-    if ('pointsForCorrect' in changes) setPointsForCorrect(changes.pointsForCorrect);
-    if ('pointsForWrong' in changes) setPointsForWrong(changes.pointsForWrong);
+    if ('pointSystemId' in changes) {
+      setPointSystemId(changes.pointSystemId);
+      localStorage.setItem('pointSystemId', String(changes.pointSystemId));
+    }
     if ('isAutoplay' in changes) setIsAutoplay(changes.isAutoplay);
     if ('isRevealAtEnd' in changes) {
       setIsRevealAtEnd(changes.isRevealAtEnd);
@@ -357,8 +342,11 @@ export default function Game({ isVisible, lists, listId, onListIdChange, isAiRea
     }
   };
   const roundSettingsProps = {
-    questions, lists, listId, onListIdChange, onNewSet: () => pickQuestions(), settings: roundSettingsValues, onSettingsChange: changeRoundSettings,
+    questions, lists, listId, onListIdChange, onNewSet: () => pickQuestions(), settings: roundSettingsValues, onSettingsChange: changeRoundSettings, pointSystems,
   };
+  useEffect(() => {
+    if (section === 'play') api.pointSystems().then(setPointSystems);
+  }, [section]);
   useEffect(() => { api.onParty(setPartyState); }, []);
   const openParty = async () => {
     try {
@@ -369,10 +357,10 @@ export default function Game({ isVisible, lists, listId, onListIdChange, isAiRea
     }
   };
   const startPartyRound = () => api.partyStartRound({
-    uids: questions.map(question => question.uid), secondsPerQuestion, pointsForCorrect, pointsForWrong,
+    uids: questions.map(question => question.uid), secondsPerQuestion, pointSystemId: chosenPointSystem?.id,
     secondsBetweenQuestions: isRevealAtEnd ? Math.max(secondsBetweenQuestions, MIN_SECONDS_TO_CHECK_ANSWERS) : secondsBetweenQuestions,
     secondsOnAnswer: isAutoplay ? secondsOnAnswer : 0, revealAtEnd: isRevealAtEnd,
-  });
+  }).catch(e => toast.error('Could not start the round', { description: e.message.replace(/^Error invoking remote method '[^']+': (Error: )?/, '') }));
   const partyBackToLobby = async keepScores => {
     await api.partyBackToLobby(keepScores);
     pickQuestions();
@@ -457,11 +445,11 @@ export default function Game({ isVisible, lists, listId, onListIdChange, isAiRea
   if (phase === 'setup') {
     return (
       <GameSections section={section} onSectionChange={setSection}>
-        {section === 'profiles' ? <Profiles /> : section === 'leaderboard' ? (
+        {section === 'points' ? <PointSystems /> : section === 'profiles' ? <Profiles /> : section === 'leaderboard' ? (
           <div className="mx-auto max-w-3xl px-6 py-8"><AllTimeLeaderboard /></div>
         ) : (
           <GameSetup mode={mode} onModeChange={changeMode} isAiReady={isAiReady} onOpenSettings={onOpenSettings} onStart={startGame}
-            {...roundSettingsProps} />
+            {...roundSettingsProps} onManagePointSystems={() => setSection('points')} />
         )}
       </GameSections>
     );
@@ -472,7 +460,7 @@ export default function Game({ isVisible, lists, listId, onListIdChange, isAiRea
       <PartyScreen party={partyState} isVisible={isVisible} onBackToLobby={partyBackToLobby} onClose={closeParty}
         lobbySettings={
           <RoundSettings mode="party" {...roundSettingsProps} action={
-            <Button size="lg" onClick={startPartyRound} disabled={!questions?.length || !partyState.players.length}>
+            <Button size="lg" onClick={startPartyRound} disabled={!questions?.length || !partyState.players.length || !!pointsProblem}>
               <PlayIcon />Start round {partyState.round + 1}
             </Button>
           } />

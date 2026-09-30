@@ -9,6 +9,7 @@ const QRCode = require('qrcode');
 const { matchesAsText } = require('./judge');
 const { MEDIA_TYPES } = require('./store');
 const { PlayerProfiles } = require('./profiles');
+const { CLASSIC_POINT_SYSTEM, normalizePointSystem, roundProblem, summaryOf, usesLeft, pickFor, risksLeft, scoreRound } = require('./scoring');
 
 const PARTY_LIMITS = { players: 100, nameLength: 24, answerLength: 200, messageLength: 300, bodyBytes: 4096 };
 const PREFERRED_PORT = 8765;
@@ -28,7 +29,7 @@ const REACTION_SCREENS = {
   tv: { atOnce: 5, shownMs: 4200, maxWaitMs: 15000 },
   players: { atOnce: 2, shownMs: 3000, maxWaitMs: 8000 },
 };
-const DEFAULT_RULES = { secondsPerQuestion: 60, secondsBetweenQuestions: 0, secondsOnAnswer: 0, pointsForCorrect: 1, pointsForWrong: 0 };
+const DEFAULT_RULES = { secondsPerQuestion: 60, secondsBetweenQuestions: 0, secondsOnAnswer: 0, pointSystem: normalizePointSystem(CLASSIC_POINT_SYSTEM) };
 
 class PartyError extends Error {
   constructor(status, message) {
@@ -69,6 +70,7 @@ class PartyGame {
     this.round = 0;
     this.questions = [];
     this.answers = [];
+    this.stakes = [];
     this.rulings = [];
     this.closedCount = 0;
     this.skips = { key: null, playerIds: new Set() };
@@ -204,6 +206,85 @@ class PartyGame {
     this.changed();
   }
 
+  firstPositionOf(player) {
+    return player.countsFrom.round === this.round ? player.countsFrom.position : 0;
+  }
+
+  stakesBefore(player, position = this.index) {
+    return this.stakes.slice(this.firstPositionOf(player), position).map(stakes => stakes.get(player.id) ?? null);
+  }
+
+  setStake(token, { pick, isRisked } = {}) {
+    const player = this.playerByToken(token);
+    if (this.phase !== 'question') throw new PartyError(409, 'Answers are closed');
+    const system = this.rules.pointSystem;
+    const before = this.stakesBefore(player);
+    const stake = { ...this.stakes[this.index].get(player.id) };
+    if (pick !== undefined) {
+      if (system.mode !== 'pool' || !Number.isInteger(pick) || !system.pool[pick]) throw new PartyError(400, 'Pick one of the points');
+      const left = usesLeft(system, before)[pick];
+      if (left != null && left <= 0) throw new PartyError(409, `No ${system.pool[pick].points}s left this round`);
+      stake.pick = pick;
+    }
+    if (isRisked !== undefined) {
+      if (!system.risk.isOn) throw new PartyError(400, 'This round has no risk');
+      if (isRisked && !stake.isRisked && risksLeft(system, before) <= 0) throw new PartyError(409, 'No risks left this round');
+      stake.isRisked = !!isRisked;
+    }
+    this.stakes[this.index].set(player.id, stake);
+    this.changed();
+    return this.stakeView(player);
+  }
+
+  settleStakes(position) {
+    const system = this.rules.pointSystem;
+    for (const player of this.players.values()) {
+      if (this.firstPositionOf(player) > position) continue;
+      const stake = { ...this.stakes[position].get(player.id) };
+      const answer = this.answers[position].get(player.id);
+      if (system.mode === 'pool') stake.pick = pickFor(system, this.stakesBefore(player, position), stake.pick);
+      if (!answer || isBlank(answer.given)) stake.isRisked = false;
+      this.stakes[position].set(player.id, stake);
+    }
+  }
+
+  stakeView(player) {
+    const system = this.rules.pointSystem;
+    if (!PHASES_WITH_QUESTION.includes(this.phase)) return null;
+    const before = this.stakesBefore(player);
+    const stake = this.stakes[this.index]?.get(player.id) ?? {};
+    return {
+      pick: system.mode === 'pool' ? pickFor(system, before, stake.pick) : null,
+      isPicked: Number.isInteger(stake.pick),
+      isRisked: !!stake.isRisked,
+      usesLeft: system.mode === 'pool' ? usesLeft(system, before) : null,
+      risksLeft: system.risk.isOn ? Math.min(99, risksLeft(system, before)) : 0,
+    };
+  }
+
+  outcomeAt(player, position) {
+    const answer = this.answers[position]?.get(player.id);
+    if (answer?.isCorrect === true) return 'correct';
+    if (!answer || isBlank(answer.given)) return position < this.closedCount ? 'unanswered' : 'pending';
+    return answer.isCorrect === false ? 'wrong' : 'pending';
+  }
+
+  scoreOf(player, upTo = this.revealedCount) {
+    const first = this.firstPositionOf(player);
+    const entries = [];
+    for (let position = first; position < upTo; position++) {
+      entries.push({ outcome: this.outcomeAt(player, position), stake: this.stakes[position]?.get(player.id) });
+    }
+    return scoreRound(this.rules.pointSystem, entries, { isComplete: upTo >= this.questions.length && this.questions.length > 0 });
+  }
+
+  pointsAt(player, position) {
+    if (!player || position < this.firstPositionOf(player)) return 0;
+    const { perQuestion } = this.scoreOf(player, position + 1);
+    const last = perQuestion.at(-1);
+    return last ? last.points + last.streakBonus : 0;
+  }
+
   rulingFor(position, given) {
     if (isBlank(given)) return null;
     const rulings = this.rulings[position] ?? [];
@@ -334,13 +415,17 @@ class PartyGame {
     ({ waiting: () => this.openAnswers(), question: () => this.closeAnswers(), reveal: () => this.next() })[this.phase]();
   }
 
-  startRound({ questions, secondsPerQuestion, secondsBetweenQuestions, secondsOnAnswer = 0, pointsForCorrect, pointsForWrong, revealAtEnd = false }) {
+  startRound({ questions, secondsPerQuestion, secondsBetweenQuestions, secondsOnAnswer = 0, pointSystem, pointsForCorrect = 1, pointsForWrong = 0, revealAtEnd = false }) {
     if (this.phase !== 'lobby' || !questions.length) return;
+    const system = normalizePointSystem(pointSystem ?? { name: 'Classic', simple: { correct: pointsForCorrect, wrong: pointsForWrong, unanswered: 0 } });
+    const problem = roundProblem(system, questions.length);
+    if (problem) throw new PartyError(400, problem);
     this.questions = questions;
     this.answers = questions.map(() => new Map());
+    this.stakes = questions.map(() => new Map());
     this.rulings = questions.map(() => []);
     this.closedCount = 0;
-    this.rules = { secondsPerQuestion, secondsBetweenQuestions, secondsOnAnswer, pointsForCorrect, pointsForWrong, revealAtEnd: !!revealAtEnd };
+    this.rules = { secondsPerQuestion, secondsBetweenQuestions, secondsOnAnswer, pointSystem: system, pointsSummary: summaryOf(system), revealAtEnd: !!revealAtEnd };
     this.revealedCount = 0;
     this.round += 1;
     this.goTo(0);
@@ -361,6 +446,7 @@ class PartyGame {
     }
     this.questions = [];
     this.answers = [];
+    this.stakes = [];
     this.rulings = [];
     this.index = -1;
     this.phase = 'lobby';
@@ -438,6 +524,7 @@ class PartyGame {
     const position = this.index;
     const answers = this.answers;
     this.closedCount = position + 1;
+    this.settleStakes(position);
     for (const answer of answers[position].values()) {
       if (answer.hostCall === undefined) {
         try {
@@ -510,26 +597,15 @@ class PartyGame {
 
   roundResults() {
     return [...this.players.values()].map(player => {
-      const result = { name: player.name, points: 0, correct: 0, wrong: 0, unanswered: 0, correctMs: 0 };
-      const firstPosition = player.countsFrom.round === this.round ? player.countsFrom.position : 0;
-      for (const answers of this.answers.slice(firstPosition, this.closedCount)) {
-        const answer = answers.get(player.id);
-        result.points += this.pointsFor(answer);
-        if (answer?.isCorrect) {
-          result.correct += 1;
-          result.correctMs += answer.ms ?? 0;
-        }
-        else if (!answer || isBlank(answer.given)) result.unanswered += 1;
-        else if (answer.isCorrect === false) result.wrong += 1;
+      const result = { name: player.name, points: this.scoreOf(player, this.closedCount).total, correct: 0, wrong: 0, unanswered: 0, correctMs: 0 };
+      for (let position = this.firstPositionOf(player); position < this.closedCount; position++) {
+        const outcome = this.outcomeAt(player, position);
+        if (outcome === 'pending') continue;
+        result[outcome] += 1;
+        if (outcome === 'correct') result.correctMs += this.answers[position].get(player.id).ms ?? 0;
       }
       return result;
     }).filter(result => result.correct + result.wrong + result.unanswered > 0);
-  }
-
-  pointsFor(answer) {
-    if (answer?.isCorrect === undefined) return 0;
-    if (answer.isCorrect) return this.rules.pointsForCorrect;
-    return answer.given ? this.rules.pointsForWrong : 0;
   }
 
   correctTimes(playerId) {
@@ -544,7 +620,7 @@ class PartyGame {
     const byTime = (a, b) => (a.avgSeconds ?? Infinity) - (b.avgSeconds ?? Infinity) || 0;
     const scored = [...this.players.values()]
       .map(p => {
-        const roundScore = this.answers.slice(0, this.revealedCount).reduce((sum, answers) => sum + this.pointsFor(answers.get(p.id)), 0);
+        const roundScore = this.scoreOf(p).total;
         const times = this.correctTimes(p.id);
         const avgSeconds = times.count ? Math.round(times.ms / times.count / 100) / 10 : null;
         return { id: p.id, name: p.name, roundScore, score: (this.bankedScores.get(p.id) ?? 0) + roundScore, avgSeconds };
@@ -561,7 +637,8 @@ class PartyGame {
   hostView() {
     const current = this.answers[this.index];
     const answerRows = position => [...(this.answers[position] ?? [])].map(([playerId, answer]) => ({
-      playerId, name: this.players.get(playerId)?.name, points: this.pointsFor(answer), ...answer,
+      playerId, name: this.players.get(playerId)?.name, points: this.pointsAt(this.players.get(playerId), position), ...answer,
+      stake: this.stakes[position]?.get(playerId) ?? null,
     }));
     const checkedIndex = this.rules.revealAtEnd && this.phase === 'waiting' ? this.index - 1 : -1;
     return {
@@ -609,9 +686,10 @@ class PartyGame {
       partyId: this.id, phase: this.phase, round: this.round, index: this.index, total: this.questions.length,
       remainingMs: this.remainingMs(), isPaused: this.pausedRemainingMs != null, playerCount: this.players.size, isNightMode: this.isNightMode,
       rules: {
-        pointsForCorrect: this.rules.pointsForCorrect, pointsForWrong: this.rules.pointsForWrong, secondsPerQuestion: this.rules.secondsPerQuestion,
+        pointSystem: this.rules.pointSystem, pointsSummary: this.rules.pointsSummary ?? summaryOf(this.rules.pointSystem), secondsPerQuestion: this.rules.secondsPerQuestion,
         secondsBetweenQuestions: this.rules.secondsBetweenQuestions, secondsOnAnswer: this.rules.secondsOnAnswer,
       },
+      stake: this.stakeView(player),
       me: { name: player.name, hasPin: !!player.hasPin, preferences: player.preferences, score: me?.score ?? 0, roundScore: me?.roundScore ?? 0, rank: me?.rank ?? null, avgSeconds: me?.avgSeconds ?? null },
       question: PHASES_WITH_QUESTION.includes(this.phase) ? {
         text: question.text, noteBefore: question.note_before, handoutText: question.rekvizit_text, hasHandoutImage: !!question.rekvizit_src, handoutKind: question.rekvizit_kind ?? 'image',
@@ -623,12 +701,19 @@ class PartyGame {
       announcement: this.announcement,
       reveal: this.phase === 'reveal' ? {
         answer: question.answer, acceptedAnswers: question.accepted_answers, comment: question.comment,
-        hasAnswerImage: !!question.source_media_src, answerKind: question.source_media_kind ?? 'image', isCorrect: myAnswer ? !!myAnswer.isCorrect : null, points: this.pointsFor(myAnswer),
+        hasAnswerImage: !!question.source_media_src, answerKind: question.source_media_kind ?? 'image', isCorrect: myAnswer?.given ? !!myAnswer.isCorrect : null, ...this.revealedPointsOf(player),
         seconds: myAnswer?.ms != null && myAnswer.given ? Math.round(myAnswer.ms / 100) / 10 : null,
         isPending: !!myAnswer && myAnswer.verdict === 'unsure' && !myAnswer.decidedByHost,
       } : null,
       leaderboard: showsLeaderboard ? leaderboard.slice(0, 10).map(({ name, score, rank, avgSeconds }) => ({ name, score, rank, avgSeconds })) : null,
     };
+  }
+
+  revealedPointsOf(player) {
+    if (this.index < this.firstPositionOf(player)) return { points: 0, streakBonus: 0, isRoundLost: false };
+    const { perQuestion, isBroken } = this.scoreOf(player, this.index + 1);
+    const { points = 0, streakBonus = 0 } = perQuestion.at(-1) ?? {};
+    return { points, streakBonus, isRoundLost: isBroken };
   }
 
   changed() {
@@ -786,6 +871,10 @@ async function route(game, req, res) {
   if (req.method === 'POST' && url.pathname === '/skip') {
     game.toggleSkip((await readJson(req)).token);
     return sendJson(res, 200, { ok: true });
+  }
+  if (req.method === 'POST' && url.pathname === '/stake') {
+    const body = await readJson(req);
+    return sendJson(res, 200, { stake: game.setStake(body.token, { pick: body.pick, isRisked: body.isRisked }) });
   }
   if (req.method === 'POST' && url.pathname === '/answer') {
     const body = await readJson(req);

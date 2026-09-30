@@ -76,8 +76,19 @@ npm test         # offline tests for the scraper, search, ranking, edits, data u
   status and a small *Done* chip (the Skip vote, held for a second) under it. When the time is up (or *Close answers now*),
   AI search checks every answer as in Play mode (with AI search off the host marks each one, and phones show
   *The host is checking* until then); phones then show their verdict, the answer and the
-  leaderboard, and the host sees every answer and can overrule it. The host sets the points for a correct
-  answer and for a wrong one (for example −1; a blank answer always scores 0). *Show the answers: At the end of
+  leaderboard, and the host sees every answer and can overrule it. Each round uses a **point system**,
+  picked in the round settings and kept under *Game → Point systems* (`point_systems` table, carried through updates;
+  a *Classic* one, correct +1, is made on first use). A point system has either *fixed points* (correct, wrong and no
+  answer, negative for a penalty) or a *point pool* (values such as 10, 20 and 30, each with its own wrong and no-answer
+  points and an optional number of uses per round): phones show the values as buttons above the answer bar, with the uses
+  left, and a question without a pick plays for the lowest free value. A round cannot start when it has more questions
+  than a limited pool has picks. Extras can be switched on together: a *streak bonus* from the nth correct answer in a
+  row (the same bonus each time, or growing by the bonus), *all or nothing* (a player scores for the round only with no
+  wrong answer, and with no blank one unless *No answer counts as wrong* is off; an optional *perfect round bonus* is
+  added at the end), and *risk* (fixed points only): a *Risk it* switch on the phone uses the risked correct and wrong
+  points, up to an optional number of risks per round; a risked question left blank is not used up. The host sees each
+  player's pick or risk next to the answer, phones see their points with the streak bonus after the reveal, and the
+  scoring rules sit in `scoring.js`. *Show the answers: At the end of
   the round* keeps every answer and score hidden from phones and the TV; it needs seconds between questions, and
   during them the host checks the previous question's answers. After the last question the host checks its answers,
   presses *Show the answers* and steps through them with *Next answer*, and the scores grow as they are revealed. After the last question the

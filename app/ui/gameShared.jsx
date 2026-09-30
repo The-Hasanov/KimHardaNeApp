@@ -1,7 +1,30 @@
 import { useEffect, useRef, useState } from 'react';
 import { cn } from 'cn';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 
 export const WARNING_AT_SECONDS_LEFT = 10;
+
+export function NumberField({ id, label, value, min, max, step = 1, onChange, isOptional = false, placeholder, className = 'w-28' }) {
+  const shown = value == null ? '' : String(value);
+  const [draft, setDraft] = useState(shown);
+  useEffect(() => setDraft(shown), [shown]);
+  const isAllowed = number => Number.isFinite(number) && number >= min && number <= max;
+  return (
+    <div className="grid gap-2">
+      {label && <Label htmlFor={id}>{label}</Label>}
+      <Input id={id} type="number" min={min} max={max} step={step} value={draft} placeholder={placeholder} className={className}
+        aria-label={label ? undefined : placeholder}
+        onChange={e => {
+          setDraft(e.target.value);
+          if (isOptional && e.target.value.trim() === '') return onChange(null);
+          const number = Math.round(Number(e.target.value));
+          if (e.target.value.trim() !== '' && isAllowed(number)) onChange(number);
+        }}
+        onBlur={() => setDraft(shown)} />
+    </div>
+  );
+}
 
 export function Media({ src, kind, alt, className }) {
   if (kind === 'video') return <video src={src} controls playsInline preload="metadata" className={cn('rounded-lg border bg-black', className)} />;
