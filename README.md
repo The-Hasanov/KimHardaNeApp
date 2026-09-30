@@ -13,7 +13,9 @@ game from the app. Bring your own questions or use the bundled question bank.
 - **Party mode**: players join by scanning a QR code, with nothing to install. The TV shows each question with
   its pictures, a countdown with sound for the last 10 seconds, the answer with everyone's result, and the
   leaderboard. Typed answers are checked by a local AI model, or marked by the host when AI search is off,
-  and the host can overrule any verdict.
+  and the host can overrule any verdict, or mark answers while the question is still running. Players can skip
+  a wait together, rename themselves and reconnect without losing their place, and an all-time leaderboard adds up
+  every round.
 - **Any TV**: a TV window on a second screen, Miracast, or the web browser of a Samsung Smart TV.
 - **Host controls**: points for right and wrong answers, pause, autoplay, answers shown after each question or
   all at the end of the round, several rounds with or without keeping the scores, and no question shown twice

@@ -262,3 +262,140 @@ test('answers can wait for the end of the round: the host checks them between qu
   game.next();
   assert.equal(game.phase, 'finished');
 });
+
+const goOnline = (game, player) => game.streams.add({ playerId: player.id, view: () => null, send() {}, end() {} });
+
+test('the host sees answers while the question runs and can call them early; a changed answer drops the call', async () => {
+  const game = new PartyGame({ judge: async () => ({ verdict: 'wrong', similarity: null, closestAnswer: null }) });
+  const aysel = game.join('Aysel');
+  const nicat = game.join('Nicat');
+  const leyla = game.join('Leyla');
+  game.startRound(ROUND);
+  game.submitAnswer(aysel.token, 'Bakı şəhəri');
+  game.submitAnswer(nicat.token, 'Gəncə');
+  assert.deepEqual(game.hostView().answers.map(a => [a.name, a.given]), [['Aysel', 'Bakı şəhəri'], ['Nicat', 'Gəncə']]);
+  game.setCorrect(aysel.id, 0, true);
+  game.setCorrect(nicat.id, 0, false);
+  game.submitAnswer(leyla.token, 'baki seheri');
+  assert.equal(game.hostView().answers.find(a => a.name === 'Leyla').hostCall, true, 'the same answer follows the host call');
+  game.submitAnswer(aysel.token, 'Bakı şəhəri');
+  game.submitAnswer(nicat.token, 'Şəki');
+  assert.equal(game.hostView().answers.find(a => a.name === 'Aysel').hostCall, true, 'resending the same answer keeps the call');
+  assert.equal(game.hostView().answers.find(a => a.name === 'Nicat').hostCall, undefined, 'a changed answer loses the call');
+  await game.closeAnswers();
+  assert.deepEqual(game.hostView().answers.map(a => [a.name, a.isCorrect]), [['Aysel', true], ['Nicat', false], ['Leyla', true]]);
+  game.finish();
+});
+
+test('after the check, a host call applies to the same answers of other players', async () => {
+  const game = new PartyGame({ judge: async () => ({ verdict: 'unsure', similarity: null, closestAnswer: null }) });
+  const aysel = game.join('Aysel');
+  const nicat = game.join('Nicat');
+  const leyla = game.join('Leyla');
+  game.startRound(ROUND);
+  game.submitAnswer(aysel.token, 'Baki');
+  game.submitAnswer(nicat.token, 'baki');
+  game.submitAnswer(leyla.token, 'Baku');
+  await game.closeAnswers();
+  game.setCorrect(leyla.id, 0, false);
+  game.setCorrect(aysel.id, 0, true);
+  assert.deepEqual(game.hostView().answers.map(a => [a.name, a.isCorrect, a.decidedByHost]), [['Aysel', true, true], ['Nicat', true, true], ['Leyla', false, true]]);
+  game.setCorrect(nicat.id, 0, false);
+  assert.equal(game.hostView().answers.find(a => a.name === 'Aysel').isCorrect, true, 'a direct call is not overwritten by a later one');
+  game.finish();
+});
+
+test('when every online player taps skip the game moves on, and the count starts again at each step', async () => {
+  const game = newGame();
+  const aysel = game.join('Aysel');
+  const nicat = game.join('Nicat');
+  game.join('Offline');
+  goOnline(game, aysel);
+  goOnline(game, nicat);
+  game.startRound({ ...ROUND, secondsBetweenQuestions: 5 });
+  assert.equal(game.phase, 'waiting');
+  game.toggleSkip(aysel.token);
+  assert.deepEqual([game.playerView(aysel).skip, game.hostView().skips.count], [{ isAvailable: true, count: 1, of: 2, isMine: true }, 1]);
+  game.toggleSkip(aysel.token);
+  assert.equal(game.hostView().skips.count, 0, 'tapping again takes the skip back');
+  game.toggleSkip(aysel.token);
+  game.toggleSkip(nicat.token);
+  assert.deepEqual([game.phase, game.hostView().skips.count], ['question', 0]);
+  game.submitAnswer(aysel.token, 'Bakı');
+  game.pause();
+  game.toggleSkip(aysel.token);
+  game.toggleSkip(nicat.token);
+  assert.equal(game.phase, 'question', 'a paused game waits for the host');
+  game.resume();
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(game.phase, 'reveal');
+  game.toggleSkip(aysel.token);
+  game.kick(nicat.id);
+  assert.deepEqual([game.phase, game.index], ['waiting', 1], 'removing the last player who had not skipped moves on too');
+  assert.throws(() => game.toggleSkip('forged'), /Join/);
+  game.finish();
+  assert.throws(() => game.toggleSkip(aysel.token), /Nothing to skip/);
+});
+
+test('players can rename to a free name, and a removed player can join again', () => {
+  const game = newGame();
+  const aysel = game.join('Aysel');
+  game.join('Nicat');
+  assert.throws(() => game.rename(aysel.token, 'nicat'), /taken/);
+  assert.throws(() => game.rename(aysel.token, '  '), /name/);
+  assert.equal(game.rename(aysel.token, 'AYSEL').name, 'AYSEL', 'a player may change the case of the own name');
+  assert.equal(game.rename(aysel.token, 'Aysel Q').name, 'Aysel Q');
+  assert.equal(game.playerView(aysel).me.name, 'Aysel Q');
+  game.kick(aysel.id);
+  assert.throws(() => game.playerByToken(aysel.token), /Join/);
+  assert.equal(game.join('Aysel Q').name, 'Aysel Q');
+});
+
+test('a finished round reports correct, wrong and unanswered questions per player, from the question they joined at', async () => {
+  const reports = [];
+  const game = new PartyGame({ judge: judgeByText, onRoundFinished: results => reports.push(results) });
+  const aysel = game.join('Aysel');
+  const nicat = game.join('Nicat');
+  game.startRound(ROUND);
+  game.submitAnswer(aysel.token, 'Bakı');
+  game.submitAnswer(nicat.token, 'Gəncə');
+  await game.closeAnswers();
+  const leyla = game.join('Leyla');
+  game.next();
+  game.submitAnswer(nicat.token, ' ');
+  game.submitAnswer(leyla.token, 'Nizami Gəncəvi');
+  await game.closeAnswers();
+  game.next();
+  assert.deepEqual(reports, [[
+    { name: 'Aysel', correct: 1, wrong: 0, unanswered: 1 },
+    { name: 'Nicat', correct: 0, wrong: 1, unanswered: 1 },
+    { name: 'Leyla', correct: 1, wrong: 0, unanswered: 0 },
+  ]]);
+});
+
+test('the party server lets a phone check its place, rename and skip', async () => {
+  const { game, close } = await openParty({ judge: judgeByText }, { port: 0 });
+  const base = `http://127.0.0.1:${game.port}`;
+  try {
+    const post = (route, body) => fetch(base + route, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    const { token } = await (await post('/join', { name: 'Aysel' })).json();
+    await post('/join', { name: 'Nicat' });
+    assert.deepEqual(await (await fetch(`${base}/me?token=${token}`)).json(), { name: 'Aysel', partyId: game.id });
+    assert.equal((await fetch(`${base}/me?token=forged`)).status, 401);
+    assert.equal((await post('/rename', { token, name: 'nicat' })).status, 409);
+    assert.deepEqual(await (await post('/rename', { token, name: 'Aysel Q' })).json(), { name: 'Aysel Q' });
+    assert.equal((await post('/skip', { token })).status, 409);
+    const events = await fetch(`${base}/events?token=${token}`);
+    const reader = events.body.getReader();
+    await reader.read();
+    assert.equal(game.hostView().players.find(p => p.name === 'Aysel Q').isOnline, true);
+    game.startRound({ ...ROUND, secondsBetweenQuestions: 5 });
+    assert.equal((await post('/skip', { token })).status, 200);
+    assert.equal(game.phase, 'question', 'the only online player skipped the wait');
+    reader.cancel();
+    await new Promise(resolve => setTimeout(resolve, 50));
+    assert.equal(game.hostView().players.find(p => p.name === 'Aysel Q').isOnline, false);
+  } finally {
+    await close();
+  }
+});

@@ -38,6 +38,13 @@ contextBridge.exposeInMainWorld('api', {
   partyKick: playerId => ipcRenderer.invoke('party-kick', playerId),
   partyBackToLobby: keepScores => ipcRenderer.invoke('party-back-to-lobby', keepScores),
   partyClose: () => ipcRenderer.invoke('party-close'),
+  partyResults: () => ipcRenderer.invoke('party-results'),
+  resetPartyResults: () => ipcRenderer.invoke('reset-party-results'),
+  onPartyResults: cb => {
+    const listener = (_e, results) => cb(results);
+    ipcRenderer.on('party-results', listener);
+    return () => ipcRenderer.removeListener('party-results', listener);
+  },
   partyState: () => ipcRenderer.invoke('party-state'),
   partyOpenDisplay: () => ipcRenderer.invoke('party-open-display'),
   partyCastMiracast: () => ipcRenderer.invoke('party-cast-miracast'),

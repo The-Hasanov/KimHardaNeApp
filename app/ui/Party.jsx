@@ -3,7 +3,7 @@ import QRCode from 'qrcode';
 import { cn } from 'cn';
 import {
   AppWindowIcon, ArrowRightIcon, CastIcon, CheckIcon, ChevronDownIcon, CircleHelpIcon, DoorClosedIcon, EyeIcon, EyeOffIcon, FlagIcon, GamepadIcon, PauseIcon, PlayIcon, QrCodeIcon,
-  RotateCcwIcon, SkipForwardIcon, TrophyIcon, TvIcon, UserXIcon, UsersIcon, WifiOffIcon, XIcon,
+  RotateCcwIcon, SkipForwardIcon, Trash2Icon, TrophyIcon, TvIcon, UserXIcon, UsersIcon, WifiOffIcon, XIcon,
 } from 'lucide-react';
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter,
@@ -80,19 +80,149 @@ function JoinCard({ urls }) {
   );
 }
 
-function Leaderboard({ entries, showsRoundScore = false }) {
+function OnlineDot({ isOnline }) {
+  return (
+    <span className={cn('size-2 shrink-0 rounded-full', isOnline ? 'bg-emerald-500' : 'bg-muted-foreground/40')}
+      title={isOnline ? 'Online' : 'Offline'} aria-label={isOnline ? 'Online' : 'Offline'} />
+  );
+}
+
+function KickButton({ player, onKick }) {
+  return (
+    <Button size="icon-xs" variant="ghost" className="text-muted-foreground" aria-label={`Remove ${player.name}`} title={`Remove ${player.name} from the game`}
+      onClick={() => onKick(player)}><UserXIcon /></Button>
+  );
+}
+
+function Leaderboard({ entries, players = [], onKick, showsRoundScore = false }) {
   if (!entries.length) return <p className="text-sm text-muted-foreground">No players yet.</p>;
+  const isOnline = new Map(players.map(player => [player.id, player.isOnline]));
   return (
     <ol className="space-y-1.5">
       {entries.map(entry => (
         <li key={entry.id} className={cn('flex items-center gap-3 rounded-lg bg-muted/50 px-3 py-2', entry.rank === 1 && 'bg-amber-500/15')}>
           <span className="w-6 text-right font-semibold text-muted-foreground tabular-nums">{entry.rank}</span>
+          {onKick && <OnlineDot isOnline={isOnline.get(entry.id)} />}
           <span className="min-w-0 flex-1 truncate font-medium">{entry.name}</span>
           {showsRoundScore && <span className="text-xs text-muted-foreground tabular-nums">{pointsLabel(entry.roundScore)} this round</span>}
           <span className="w-10 text-right text-lg font-semibold tabular-nums">{entry.score}</span>
+          {onKick && <KickButton player={entry} onKick={onKick} />}
         </li>
       ))}
     </ol>
+  );
+}
+
+function AllTimeLeaderboard() {
+  const [results, setResults] = useState(null);
+  const [isConfirmingReset, setIsConfirmingReset] = useState(false);
+  useEffect(() => {
+    api.partyResults().then(setResults);
+    return api.onPartyResults(setResults);
+  }, []);
+  const reset = async () => setResults(await api.resetPartyResults());
+  if (!results) return null;
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center gap-2">
+        <h2 className="flex items-center gap-2 font-medium"><TrophyIcon className="size-4" />All-time leaderboard</h2>
+        {results.length > 0 && (
+          <Button size="sm" variant="ghost" className="ml-auto text-muted-foreground" onClick={() => setIsConfirmingReset(true)}><Trash2Icon />Reset</Button>
+        )}
+      </div>
+      {results.length ? (
+        <div className="overflow-hidden rounded-lg border">
+          <table className="w-full text-sm">
+            <thead className="bg-muted/50 text-muted-foreground">
+              <tr className="text-left">
+                <th className="w-10 px-3 py-2 text-right font-medium">#</th>
+                <th className="px-3 py-2 font-medium">Player</th>
+                <th className="px-3 py-2 text-right font-medium">Correct</th>
+                <th className="px-3 py-2 text-right font-medium">Wrong</th>
+                <th className="px-3 py-2 text-right font-medium">No answer</th>
+                <th className="px-3 py-2 text-right font-medium">Rounds</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y">
+              {results.map((result, i) => (
+                <tr key={result.name}>
+                  <td className="px-3 py-2 text-right font-semibold text-muted-foreground tabular-nums">{i + 1}</td>
+                  <td className="max-w-48 truncate px-3 py-2 font-medium">{result.name}</td>
+                  <td className="px-3 py-2 text-right font-semibold tabular-nums text-emerald-600 dark:text-emerald-400">{result.correct}</td>
+                  <td className="px-3 py-2 text-right tabular-nums text-destructive">{result.wrong}</td>
+                  <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">{result.unanswered}</td>
+                  <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">{result.rounds}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : <p className="text-sm text-muted-foreground">Every finished round adds each player's correct, wrong and unanswered questions here.</p>}
+      <AlertDialog open={isConfirmingReset} onOpenChange={setIsConfirmingReset}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Reset the all-time leaderboard?</AlertDialogTitle>
+            <AlertDialogDescription>Every saved party result is deleted. This cannot be undone.</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Keep results</AlertDialogCancel>
+            <AlertDialogAction variant="destructive" onClick={reset}>Reset</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </div>
+  );
+}
+
+function CallButtons({ answer, position, isCalledNow = answer.isCorrect ?? answer.hostCall }) {
+  return (
+    <div className="flex gap-1">
+      <Button size="icon-sm" variant={isCalledNow === true ? 'default' : 'outline'} aria-label={`Mark ${answer.name} correct`}
+        onClick={() => api.partySetCorrect(answer.playerId, position, true)}><CheckIcon /></Button>
+      <Button size="icon-sm" variant={isCalledNow === false ? 'default' : 'outline'} aria-label={`Mark ${answer.name} wrong`}
+        onClick={() => api.partySetCorrect(answer.playerId, position, false)}><XIcon /></Button>
+    </div>
+  );
+}
+
+function LiveAnswers({ party, onKick }) {
+  const answersByPlayer = new Map(party.answers.map(answer => [answer.playerId, answer]));
+  const showsAnswers = party.phase !== 'waiting';
+  return (
+    <div className="space-y-2">
+      <h2 className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
+        {showsAnswers ? 'Answers' : 'Players'}
+        {showsAnswers && <span className="tabular-nums">{answersByPlayer.size} of {party.players.length}</span>}
+      </h2>
+      <ul className="divide-y rounded-lg border">
+        {party.players.map(player => {
+          const answer = showsAnswers ? answersByPlayer.get(player.id) : null;
+          return (
+            <li key={player.id} className="flex items-center gap-2 px-3 py-2">
+              <OnlineDot isOnline={player.isOnline} />
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-medium">{player.name}</p>
+                {showsAnswers && (
+                  <p className={cn('truncate text-sm', !answer?.given && 'text-muted-foreground')} title={answer?.given}>
+                    {answer ? answer.given || 'Blank' : 'No answer yet'}
+                    {answer?.hostCall !== undefined && !answer.isDirectCall && <span className="ml-1.5 text-xs text-muted-foreground">· same as your call</span>}
+                  </p>
+                )}
+              </div>
+              {answer?.given && <CallButtons answer={{ ...answer, name: player.name }} position={party.index} />}
+              <KickButton player={player} onKick={onKick} />
+            </li>
+          );
+        })}
+        {!party.players.length && <li className="px-3 py-2 text-sm text-muted-foreground">No players.</li>}
+      </ul>
+      {showsAnswers && party.phase === 'question' && (
+        <p className="text-xs text-muted-foreground">
+          Mark answers now to decide them before time is up. The same answer from another player follows your call; a player who
+          changes the answer loses the mark.
+        </p>
+      )}
+    </div>
   );
 }
 
@@ -111,12 +241,7 @@ function PlayerAnswers({ party, answers = party.answers, position = party.index 
               <span className="min-w-0 flex-1 truncate">{answer.given || '—'}</span>
               <span className={cn('flex items-center gap-1 text-sm font-semibold', className)}><Icon className="size-4" />{label}</span>
               <span className="w-8 text-right text-sm tabular-nums">{pointsLabel(answer.points)}</span>
-              <div className="flex gap-1">
-                <Button size="icon-sm" variant={answer.isCorrect ? 'default' : 'outline'} aria-label={`Mark ${answer.name} correct`}
-                  onClick={() => api.partySetCorrect(answer.playerId, position, true)}><CheckIcon /></Button>
-                <Button size="icon-sm" variant={!answer.isCorrect && outcomeOf(answer) === 'wrong' ? 'default' : 'outline'}
-                  aria-label={`Mark ${answer.name} wrong`} onClick={() => api.partySetCorrect(answer.playerId, position, false)}><XIcon /></Button>
-              </div>
+              <CallButtons answer={answer} position={position} isCalledNow={answer.isCorrect ? true : outcomeOf(answer) === 'wrong' ? false : null} />
             </li>
           );
         })}
@@ -129,7 +254,7 @@ function PlayerAnswers({ party, answers = party.answers, position = party.index 
   );
 }
 
-function QuestionForHost({ party }) {
+function QuestionForHost({ party, onKick }) {
   const isUpNext = party.phase === 'waiting';
   return (
     <div className="mx-auto grid max-w-6xl gap-8 px-8 py-8 lg:grid-cols-[1fr_20rem]">
@@ -151,17 +276,7 @@ function QuestionForHost({ party }) {
         </div>
         {isWaitingToReveal(party) && <PlayerAnswers party={party} />}
       </div>
-      <div className="space-y-2">
-        <h2 className="text-sm font-medium text-muted-foreground">Players</h2>
-        <ul className="space-y-1.5">
-          {party.players.map(player => (
-            <li key={player.id} className="flex items-center gap-2 rounded-lg bg-muted/50 px-3 py-2">
-              <span className="min-w-0 flex-1 truncate">{player.name}</span>
-              {player.hasAnswered && <CheckIcon className="size-4 text-emerald-600 dark:text-emerald-400" aria-label="Answered" />}
-            </li>
-          ))}
-        </ul>
-      </div>
+      <LiveAnswers party={party} onKick={onKick} />
     </div>
   );
 }
@@ -279,7 +394,7 @@ function TvMenu() {
   );
 }
 
-function PlayersInLobby({ players }) {
+function PlayersInLobby({ players, onKick }) {
   return (
     <div className="space-y-3">
       <h2 className="flex items-center gap-2 font-medium"><UsersIcon className="size-4" />Players <Badge variant="secondary">{players.length}</Badge></h2>
@@ -287,8 +402,9 @@ function PlayersInLobby({ players }) {
         <ul className="flex flex-wrap gap-2">
           {players.map(player => (
             <li key={player.id} className="flex items-center gap-1 rounded-full border py-1 pr-1 pl-3 text-sm animate-in fade-in-0 zoom-in-95">
-              {player.name}
-              <Button size="icon-xs" variant="ghost" aria-label={`Remove ${player.name}`} onClick={() => api.partyKick(player.id)}><UserXIcon /></Button>
+              <OnlineDot isOnline={player.isOnline} />
+              <span className="ml-1">{player.name}</span>
+              <KickButton player={player} onKick={onKick} />
             </li>
           ))}
         </ul>
@@ -299,6 +415,8 @@ function PlayersInLobby({ players }) {
 
 export default function PartyScreen({ party, isVisible, lobbySettings, onBackToLobby, onClose }) {
   const [isConfirmingClose, setIsConfirmingClose] = useState(false);
+  const [playerToKick, setPlayerToKick] = useState(null);
+  const kick = player => (party.phase === 'lobby' && party.round === 0 ? api.partyKick(player.id) : setPlayerToKick(player));
   const handleKeyDown = useRef(null);
   const deadline = useMemo(() => (party.remainingMs == null || party.isPaused ? null : Date.now() + party.remainingMs), [party]);
   const countdownSeconds = useCountdown(deadline, () => {});
@@ -361,7 +479,7 @@ export default function PartyScreen({ party, isVisible, lobbySettings, onBackToL
             <div className="grid gap-6 md:grid-cols-[auto_1fr]">
               <JoinCard urls={party.urls} />
               <div className="space-y-6">
-                <PlayersInLobby players={party.players} />
+                <PlayersInLobby players={party.players} onKick={kick} />
                 {party.round > 0 && (
                   <div className="space-y-2">
                     <h2 className="font-medium">Scores after round {party.round}</h2>
@@ -371,9 +489,10 @@ export default function PartyScreen({ party, isVisible, lobbySettings, onBackToL
               </div>
             </div>
             {lobbySettings}
+            <AllTimeLeaderboard />
           </div>
         )}
-        {['waiting', 'question', 'judging'].includes(party.phase) && <QuestionForHost party={party} />}
+        {['waiting', 'question', 'judging'].includes(party.phase) && <QuestionForHost party={party} onKick={kick} />}
         {party.phase === 'reveal' && (
           <div className="mx-auto grid max-w-6xl gap-8 px-8 py-8 lg:grid-cols-[1fr_20rem]">
             <div className="space-y-6">
@@ -383,7 +502,7 @@ export default function PartyScreen({ party, isVisible, lobbySettings, onBackToL
             </div>
             <div className="space-y-2">
               <h2 className="text-sm font-medium text-muted-foreground">Leaderboard</h2>
-              <Leaderboard entries={party.leaderboard} />
+              <Leaderboard entries={party.leaderboard} players={party.players} onKick={kick} />
             </div>
           </div>
         )}
@@ -396,7 +515,7 @@ export default function PartyScreen({ party, isVisible, lobbySettings, onBackToL
                 <p className="text-muted-foreground">Correct {pointsLabel(party.rules.pointsForCorrect)} · wrong {pointsLabel(party.rules.pointsForWrong)} · no answer 0</p>
               </div>
             </div>
-            <Leaderboard entries={party.leaderboard} showsRoundScore />
+            <Leaderboard entries={party.leaderboard} players={party.players} onKick={kick} showsRoundScore />
             <div className="flex flex-wrap gap-2">
               <Button size="lg" onClick={() => onBackToLobby(true)}><ArrowRightIcon />Next round (keep scores)</Button>
               <Button size="lg" variant="outline" onClick={() => onBackToLobby(false)}><RotateCcwIcon />New game (reset scores)</Button>
@@ -420,6 +539,11 @@ export default function PartyScreen({ party, isVisible, lobbySettings, onBackToL
               ? <Button size="lg" variant="outline" onClick={() => api.partyResume()}><PlayIcon />Resume{party.phase !== 'waiting' && <Kbd>Space</Kbd>}</Button>
               : <Button size="lg" variant="outline" onClick={() => api.partyPause()}><PauseIcon />Pause{party.phase !== 'waiting' && <Kbd>Space</Kbd>}</Button>
           )}
+          {party.skips.isAvailable && party.skips.count > 0 && (
+            <span className="text-sm text-muted-foreground" title="Moves on when every online player taps Skip on the phone">
+              <span className="font-semibold tabular-nums">{party.skips.count}</span> of {party.skips.of} want to skip
+            </span>
+          )}
           {party.phase === 'question' && <>
             <span className="text-lg"><span className="font-semibold tabular-nums">{answeredCount}</span> of {party.players.length} answered</span>
             <Button size="lg" variant="outline" className="ml-auto" onClick={() => api.partyCloseAnswers()}>Close answers now</Button>
@@ -438,6 +562,21 @@ export default function PartyScreen({ party, isVisible, lobbySettings, onBackToL
           )}
         </div>
       )}
+
+      <AlertDialog open={playerToKick != null} onOpenChange={isOpen => !isOpen && setPlayerToKick(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Remove {playerToKick?.name}?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Their answers and score are removed from this party. They are not banned: they can join again by typing a name.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Keep</AlertDialogCancel>
+            <AlertDialogAction variant="destructive" onClick={() => api.partyKick(playerToKick.id)}>Remove</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <AlertDialog open={isConfirmingClose} onOpenChange={setIsConfirmingClose}>
         <AlertDialogContent>

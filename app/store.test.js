@@ -231,3 +231,13 @@ test('pictures on your own questions are saved next to the database, shown from 
   assert.throws(() => s.setOwnImage(own.uid, 'text', picture), /unknown picture/);
   assert.throws(() => s.setOwnImage(own.uid, 'rekvizit_url', 'notes.txt'), /PNG, JPEG/);
 });
+
+test('party results add up per player name across rounds and can be reset', () => {
+  const s = store();
+  s.addPartyResults([{ name: 'Aysel', correct: 3, wrong: 1, unanswered: 1 }, { name: 'Nicat', correct: 1, wrong: 0, unanswered: 4 }]);
+  s.addPartyResults([{ name: 'aysel', correct: 2, wrong: 2, unanswered: 0 }]);
+  assert.deepEqual(s.partyResults().map(({ name, correct, wrong, unanswered, rounds }) => [name, correct, wrong, unanswered, rounds]),
+    [['aysel', 5, 3, 1, 2], ['Nicat', 1, 0, 4, 1]]);
+  s.resetPartyResults();
+  assert.deepEqual(s.partyResults(), []);
+});

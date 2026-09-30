@@ -257,7 +257,10 @@ app.whenReady().then(() => {
   };
   handle('party-open', async () => {
     await closeParty();
-    party = await openParty({ judge: judgeNow, onChange: sendPartyState });
+    party = await openParty({ judge: judgeNow, onChange: sendPartyState, onRoundFinished: results => {
+      store.addPartyResults(results);
+      win.webContents.send('party-results', store.partyResults());
+    } });
     openPartyDisplay(win, party.game.port);
     return party.game.hostView();
   });
@@ -273,6 +276,11 @@ app.whenReady().then(() => {
   handle('party-kick', withParty((game, playerId) => game.kick(playerId)));
   handle('party-back-to-lobby', withParty((game, keepScores) => game.backToLobby({ keepScores })));
   handle('party-close', closeParty);
+  handle('party-results', () => store.partyResults());
+  handle('reset-party-results', () => {
+    store.resetPartyResults();
+    return store.partyResults();
+  });
   handle('party-state', () => party?.game.hostView() ?? null);
   handle('party-open-display', () => party && openPartyDisplay(win, party.game.port));
   handle('party-cast-miracast', () => shell.openExternal('ms-settings-connectabledevices:devicediscovery'));

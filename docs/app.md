@@ -60,8 +60,10 @@ npm test         # offline tests for the scraper, search, ranking, edits, data u
   (`DisplaySwitch /extend`; Duplicate would show the host's answers) and the TV window moves to the new display
   by itself. The TV shows the join code, each question with its images and countdown, the answer with every
   player's result, and the leaderboard. The app window stays the host's
-  console: the question with its answer (only the host sees it) before and while it runs, who has answered,
-  and every control. *Game / Leaderboard / Join code* in the header picks what the TV shows; a choice other
+  console: the question with its answer (only the host sees it) before and while it runs, every player's answer
+  as it comes in, and every control. The host can already mark answers correct or wrong while the question runs; the call
+  also applies to the same answer (as `judge.js` compares text) from any other player the host has not marked directly, before
+  and after the check, and a player who changes the answer loses the mark (sending the same answer again keeps it). *Game / Leaderboard / Join code* in the header picks what the TV shows; a choice other
   than *Game* holds until the next question starts. *Pause* (Space during a question) freezes the countdown on
   every screen and phone. The TV counts the last 10 seconds of each question in big numbers with a beep per
   second and a tone when time is up; sounds play only from the TV page (after *Show on Samsung TV* the TV window
@@ -80,7 +82,16 @@ npm test         # offline tests for the scraper, search, ranking, edits, data u
   stay connected and the host picks the next questions in the lobby. Random questions never repeat one already
   shown while the party is open (lists play as chosen). Players can only join and send answers:
   every host control stays in the app, phones never receive an answer before the reveal, names and answers are
-  length-limited, and the host can remove a player. Party results are not saved. Windows
+  length-limited, and the host can remove a player at any time, online or not (a green dot marks who is online):
+their answers and score leave the party, and their phone asks for a name again, so it is not a ban. A phone that
+loses the connection keeps its place and reconnects by itself, even after minutes or a page reload; only a removed
+player or a closed party has to join again. Players can change their name from the phone (tap it), never to a name
+someone else has. Phones have a small *Skip* button while the next question's number, a question or an answer is
+shown: when every online player has tapped it (tap again to take it back), the game moves on, unless the host has
+paused; phones and the host see how many tapped, and the count starts again at each step. Every finished round adds
+each player's correct, wrong and unanswered questions (counted from the question they joined at) to the
+**all-time leaderboard** in the party lobby, kept per name in the `party_results` table and carried through
+updates; *Reset* there deletes them. Windows
   Firewall asks once whether KimHardaNeApp may accept connections on private networks; allow it.
 - **Lists**: *Add to list* in the editor puts the open question into one or more of your lists, or creates a
   new list with it. The **Lists** tab shows each list in order: move questions up or down, open one in the

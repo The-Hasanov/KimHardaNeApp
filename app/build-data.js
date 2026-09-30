@@ -69,7 +69,7 @@ async function main() {
   const shipped = new DatabaseSync(out);
   shipped.prepare('DELETE FROM questions WHERE package_id = ?').run(OWN_PACKAGE_ID);
   shipped.prepare('DELETE FROM images WHERE url LIKE ?').run(`${OWN_IMAGE_PREFIX}%`);
-  shipped.exec('DROP TABLE IF EXISTS embeddings; DROP TABLE IF EXISTS list_questions; DROP TABLE IF EXISTS lists; DROP TABLE IF EXISTS play_answers; DROP TABLE IF EXISTS play_games; VACUUM;');
+  shipped.exec('DROP TABLE IF EXISTS embeddings; DROP TABLE IF EXISTS list_questions; DROP TABLE IF EXISTS lists; DROP TABLE IF EXISTS play_answers; DROP TABLE IF EXISTS play_games; DROP TABLE IF EXISTS party_results; VACUUM;');
   shipped.close();
   await bundleImages(out);
   console.log(`bundle/3sual.sqlite: ${store.rows.length} questions, ${(fs.statSync(out).size / 1e6).toFixed(0)} MB`);

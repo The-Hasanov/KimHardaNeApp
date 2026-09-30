@@ -6,6 +6,7 @@ const os = require('node:os');
 const path = require('node:path');
 const { fileURLToPath } = require('node:url');
 const QRCode = require('qrcode');
+const { matchesAsText } = require('./judge');
 
 const PARTY_LIMITS = { players: 100, nameLength: 24, answerLength: 200, bodyBytes: 4096 };
 const PREFERRED_PORT = 8765;
@@ -17,6 +18,7 @@ const VIRTUAL_ADAPTER = /vEthernet|VirtualBox|VMware|WSL|Hyper-V|Loopback|Tailsc
 const PHASES_WITH_QUESTION = ['question', 'judging', 'reveal'];
 const TV_SCREENS = ['game', 'leaderboard', 'join'];
 const PAUSABLE_PHASES = ['waiting', 'question', 'reveal'];
+const SKIPPABLE_PHASES = ['waiting', 'question', 'reveal'];
 const DEFAULT_RULES = { secondsPerQuestion: 60, secondsBetweenQuestions: 0, secondsOnAnswer: 0, pointsForCorrect: 1, pointsForWrong: 0 };
 
 class PartyError extends Error {
@@ -25,6 +27,9 @@ class PartyError extends Error {
     this.status = status;
   }
 }
+
+const cleanName = name => String(name ?? '').replace(/\s+/g, ' ').trim().slice(0, PARTY_LIMITS.nameLength);
+const isBlank = given => !String(given ?? '').trim();
 
 function lanAddresses() {
   const isPrivate = address => /^(10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/.test(address);
@@ -37,15 +42,19 @@ function lanAddresses() {
 }
 
 class PartyGame {
-  constructor({ judge, onChange = () => {} }) {
+  constructor({ judge, onChange = () => {}, onRoundFinished = () => {} }) {
     this.id = crypto.randomBytes(6).toString('hex');
     this.judge = judge;
     this.onChange = onChange;
+    this.onRoundFinished = onRoundFinished;
     this.players = new Map();
     this.bankedScores = new Map();
     this.round = 0;
     this.questions = [];
     this.answers = [];
+    this.rulings = [];
+    this.closedCount = 0;
+    this.skips = { key: null, playerIds: new Set() };
     this.rules = { ...DEFAULT_RULES };
     this.phase = 'lobby';
     this.index = -1;
@@ -60,15 +69,39 @@ class PartyGame {
     this.urls = [];
   }
 
+  checkName(name, playerId = null) {
+    const clean = cleanName(name);
+    if (!clean) throw new PartyError(400, 'Type your name');
+    const isTaken = [...this.players.values()].some(p => p.id !== playerId && p.name.toLowerCase() === clean.toLowerCase());
+    if (isTaken) throw new PartyError(409, 'That name is taken');
+    return clean;
+  }
+
   join(name) {
-    const cleanName = String(name ?? '').replace(/\s+/g, ' ').trim().slice(0, PARTY_LIMITS.nameLength);
-    if (!cleanName) throw new PartyError(400, 'Type your name');
+    const clean = this.checkName(name);
     if (this.players.size >= PARTY_LIMITS.players) throw new PartyError(409, 'The game is full');
-    if ([...this.players.values()].some(p => p.name.toLowerCase() === cleanName.toLowerCase())) throw new PartyError(409, 'That name is taken');
-    const player = { id: crypto.randomUUID(), token: crypto.randomBytes(16).toString('hex'), name: cleanName };
+    // A player who joins during a round is counted in the all-time results from the next question only.
+    const player = { id: crypto.randomUUID(), token: crypto.randomBytes(16).toString('hex'), name: clean, countsFrom: { round: this.round, position: this.closedCount } };
     this.players.set(player.id, player);
     this.changed();
     return player;
+  }
+
+  rename(token, name) {
+    const player = this.playerByToken(token);
+    player.name = this.checkName(name, player.id);
+    this.changed();
+    return player;
+  }
+
+  isOnline(playerId) {
+    return [...this.streams].some(stream => stream.playerId === playerId);
+  }
+
+  presenceChanged() {
+    if (this.isClosed) return;
+    this.changed();
+    this.skipIfEveryoneAgrees();
   }
 
   playerByToken(token) {
@@ -81,21 +114,68 @@ class PartyGame {
     this.players.delete(playerId);
     this.bankedScores.delete(playerId);
     for (const answers of this.answers) answers.delete(playerId);
+    this.skips.playerIds.delete(playerId);
     for (const stream of this.streams) if (stream.playerId === playerId) stream.end({ phase: 'kicked' });
     this.changed();
+    this.skipIfEveryoneAgrees();
   }
 
   submitAnswer(token, given) {
     const player = this.playerByToken(token);
     if (this.phase !== 'question') throw new PartyError(409, 'Answers are closed');
-    this.answers[this.index].set(player.id, { given: String(given ?? '').trim().slice(0, PARTY_LIMITS.answerLength) });
+    const cleanGiven = String(given ?? '').trim().slice(0, PARTY_LIMITS.answerLength);
+    const answers = this.answers[this.index];
+    if (answers.get(player.id)?.given === cleanGiven) return;
+    // A changed answer drops the host's call on the old one, but takes the call the host made on the same answer from someone else.
+    const answer = { given: cleanGiven };
+    const ruling = this.rulingFor(this.index, cleanGiven);
+    if (ruling) answer.hostCall = ruling.isCorrect;
+    answers.set(player.id, answer);
     this.changed();
+  }
+
+  rulingFor(position, given) {
+    if (isBlank(given)) return null;
+    const rulings = this.rulings[position] ?? [];
+    return rulings.find(ruling => ruling.given === given) ?? rulings.find(ruling => matchesAsText(given, ruling.given)) ?? null;
+  }
+
+  skipKey() {
+    return `${this.round}:${this.phase}:${this.index}`;
+  }
+
+  skipStatus(playerId = null) {
+    const skipped = this.skips.key === this.skipKey() ? this.skips.playerIds : new Set();
+    const online = [...this.players.keys()].filter(id => this.isOnline(id));
+    return {
+      isAvailable: SKIPPABLE_PHASES.includes(this.phase), count: online.filter(id => skipped.has(id)).length, of: online.length,
+      ...(playerId && { isMine: skipped.has(playerId) }),
+    };
+  }
+
+  toggleSkip(token) {
+    const player = this.playerByToken(token);
+    if (!SKIPPABLE_PHASES.includes(this.phase)) throw new PartyError(409, 'Nothing to skip now');
+    if (this.skips.key !== this.skipKey()) this.skips = { key: this.skipKey(), playerIds: new Set() };
+    if (this.skips.playerIds.has(player.id)) this.skips.playerIds.delete(player.id);
+    else this.skips.playerIds.add(player.id);
+    this.changed();
+    this.skipIfEveryoneAgrees();
+  }
+
+  skipIfEveryoneAgrees() {
+    if (!SKIPPABLE_PHASES.includes(this.phase) || this.pausedRemainingMs != null) return;
+    const { count, of } = this.skipStatus();
+    if (!of || count < of) return;
+    ({ waiting: () => this.openAnswers(), question: () => this.closeAnswers(), reveal: () => this.next() })[this.phase]();
   }
 
   startRound({ questions, secondsPerQuestion, secondsBetweenQuestions, secondsOnAnswer = 0, pointsForCorrect, pointsForWrong, revealAtEnd = false }) {
     if (this.phase !== 'lobby' || !questions.length) return;
     this.questions = questions;
     this.answers = questions.map(() => new Map());
+    this.rulings = questions.map(() => []);
+    this.closedCount = 0;
     this.rules = { secondsPerQuestion, secondsBetweenQuestions, secondsOnAnswer, pointsForCorrect, pointsForWrong, revealAtEnd: !!revealAtEnd };
     this.revealedCount = 0;
     this.round += 1;
@@ -111,6 +191,7 @@ class PartyGame {
     }
     this.questions = [];
     this.answers = [];
+    this.rulings = [];
     this.index = -1;
     this.phase = 'lobby';
     this.screen = 'game';
@@ -150,6 +231,7 @@ class PartyGame {
     const whenTimeIsUp = { waiting: () => this.openAnswers(), question: () => this.closeAnswers(), reveal: () => this.next() };
     this.schedule(this.pausedRemainingMs / 1000, whenTimeIsUp[this.phase]);
     this.changed();
+    this.skipIfEveryoneAgrees();
   }
 
   setNightMode(isNightMode) {
@@ -184,13 +266,19 @@ class PartyGame {
     this.changed();
     const position = this.index;
     const answers = this.answers;
+    this.closedCount = position + 1;
     for (const answer of answers[position].values()) {
-      try {
-        Object.assign(answer, await this.judge(this.questions[position], answer.given));
-      } catch {
-        Object.assign(answer, { verdict: 'unsure', similarity: null, closestAnswer: null });
+      if (answer.hostCall === undefined) {
+        try {
+          Object.assign(answer, await this.judge(this.questions[position], answer.given));
+        } catch {
+          Object.assign(answer, { verdict: 'unsure', similarity: null, closestAnswer: null });
+        }
       }
-      answer.isCorrect = answer.verdict === 'correct';
+      // The host may have called this answer, or one like it, while it was being checked.
+      answer.hostCall ??= this.rulingFor(position, answer.given)?.isCorrect;
+      answer.decidedByHost = answer.hostCall !== undefined;
+      answer.isCorrect = answer.decidedByHost ? answer.hostCall : answer.verdict === 'correct';
     }
     if (this.phase !== 'judging' || this.answers !== answers) return;
     if (!this.rules.revealAtEnd) return this.showAnswer();
@@ -209,11 +297,23 @@ class PartyGame {
     this.changed();
   }
 
+  // The host's call on an answer also applies to the same answer from other players, unless the host called theirs directly.
   setCorrect(playerId, position, isCorrect) {
-    const answer = this.answers[position]?.get(playerId);
-    if (!answer || answer.isCorrect === undefined) return;
-    answer.isCorrect = isCorrect;
-    answer.decidedByHost = true;
+    const answers = this.answers[position];
+    const answer = answers?.get(playerId);
+    if (!answer) return;
+    answer.isDirectCall = true;
+    if (!isBlank(answer.given)) {
+      this.rulings[position] = [...(this.rulings[position] ?? []).filter(ruling => ruling.given !== answer.given), { given: answer.given, isCorrect }];
+    }
+    for (const other of answers.values()) {
+      const isSameAnswer = other === answer || (!other.isDirectCall && !isBlank(answer.given) && matchesAsText(other.given, answer.given));
+      if (!isSameAnswer) continue;
+      other.hostCall = isCorrect;
+      if (other.isCorrect === undefined) continue;
+      other.isCorrect = isCorrect;
+      other.decidedByHost = true;
+    }
     this.changed();
   }
 
@@ -235,6 +335,23 @@ class PartyGame {
     this.phase = 'finished';
     this.revealedCount = this.questions.length;
     this.changed();
+    const results = this.roundResults();
+    if (results.length) this.onRoundFinished(results);
+  }
+
+  // Per player, the questions of this round whose answers were closed while they played: correct, wrong or unanswered.
+  roundResults() {
+    return [...this.players.values()].map(player => {
+      const result = { name: player.name, correct: 0, wrong: 0, unanswered: 0 };
+      const firstPosition = player.countsFrom.round === this.round ? player.countsFrom.position : 0;
+      for (const answers of this.answers.slice(firstPosition, this.closedCount)) {
+        const answer = answers.get(player.id);
+        if (answer?.isCorrect) result.correct += 1;
+        else if (!answer || isBlank(answer.given)) result.unanswered += 1;
+        else if (answer.isCorrect === false) result.wrong += 1;
+      }
+      return result;
+    }).filter(result => result.correct + result.wrong + result.unanswered > 0);
   }
 
   pointsFor(answer) {
@@ -268,7 +385,8 @@ class PartyGame {
       id: this.id, phase: this.phase, round: this.round, index: this.index, total: this.questions.length,
       remainingMs: this.remainingMs(), isPaused: this.pausedRemainingMs != null, screen: this.screen,
       rules: this.rules, urls: this.urls, port: this.port, question: this.questions[this.index] ?? null,
-      players: [...this.players.values()].map(p => ({ id: p.id, name: p.name, hasAnswered: !!current?.has(p.id) })),
+      players: [...this.players.values()].map(p => ({ id: p.id, name: p.name, hasAnswered: !!current?.has(p.id), isOnline: this.isOnline(p.id) })),
+      skips: this.skipStatus(),
       answers: answerRows(this.index),
       previous: checkedIndex >= 0 ? { index: checkedIndex, question: this.questions[checkedIndex], answers: answerRows(checkedIndex) } : null,
       leaderboard: this.leaderboard(),
@@ -276,7 +394,7 @@ class PartyGame {
   }
 
   tvView() {
-    const { previous, ...view } = this.hostView();
+    const { previous, skips, ...view } = this.hostView();
     const question = PHASES_WITH_QUESTION.includes(this.phase) ? this.questions[this.index] : null;
     const isRevealed = this.phase === 'reveal';
     return {
@@ -290,7 +408,7 @@ class PartyGame {
           source_media_src: question.source_media_src && `/tv/answer-image?question=${this.index}`,
         }),
       },
-      answers: isRevealed ? view.answers.map(({ given, similarity, closestAnswer, ...result }) => result) : [],
+      answers: isRevealed ? view.answers.map(({ given, similarity, closestAnswer, hostCall, isDirectCall, ...result }) => result) : [],
       isNightMode: this.isNightMode,
     };
   }
@@ -310,6 +428,7 @@ class PartyGame {
         text: question.text, noteBefore: question.note_before, handoutText: question.rekvizit_text, hasHandoutImage: !!question.rekvizit_src,
       } : null,
       myAnswer: myAnswer?.given ?? null,
+      skip: this.skipStatus(player.id),
       reveal: this.phase === 'reveal' ? {
         answer: question.answer, acceptedAnswers: question.accepted_answers, comment: question.comment,
         hasAnswerImage: !!question.source_media_src, isCorrect: myAnswer ? !!myAnswer.isCorrect : null, points: this.pointsFor(myAnswer),
@@ -328,6 +447,7 @@ class PartyGame {
   }
 
   close() {
+    this.isClosed = true;
     this.stopTimer();
     for (const stream of this.streams) stream.end({ phase: 'closed' });
   }
@@ -369,17 +489,21 @@ function openEventStream(game, req, res, { playerId = null, view }) {
     view,
     send: view => res.write(`data: ${JSON.stringify(view)}\n\n`),
     end: view => {
+      game.streams.delete(stream);
       res.write(`data: ${JSON.stringify(view)}\n\n`);
       res.end();
     },
   };
-  const heartbeat = setInterval(() => res.write(': ping\n\n'), HEARTBEAT_MS);
+  const heartbeat = setInterval(() => res.write('event: ping\ndata: {}\n\n'), HEARTBEAT_MS);
   game.streams.add(stream);
   req.on('close', () => {
     clearInterval(heartbeat);
-    game.streams.delete(stream);
+    const wasOpen = game.streams.delete(stream);
+    if (playerId && wasOpen) game.presenceChanged();
   });
-  stream.send(view());
+  // A player coming online updates every screen, this stream included.
+  if (playerId) game.presenceChanged();
+  else stream.send(view());
 }
 
 function sendPage(res, file) {
@@ -415,6 +539,19 @@ async function route(game, req, res) {
   if (req.method === 'POST' && url.pathname === '/join') {
     const player = game.join((await readJson(req)).name);
     return sendJson(res, 200, { token: player.token, partyId: game.id });
+  }
+  if (req.method === 'GET' && url.pathname === '/me') {
+    const player = game.playerByToken(token);
+    return sendJson(res, 200, { name: player.name, partyId: game.id });
+  }
+  if (req.method === 'POST' && url.pathname === '/rename') {
+    const body = await readJson(req);
+    const player = game.rename(body.token, body.name);
+    return sendJson(res, 200, { name: player.name });
+  }
+  if (req.method === 'POST' && url.pathname === '/skip') {
+    game.toggleSkip((await readJson(req)).token);
+    return sendJson(res, 200, { ok: true });
   }
   if (req.method === 'POST' && url.pathname === '/answer') {
     const body = await readJson(req);

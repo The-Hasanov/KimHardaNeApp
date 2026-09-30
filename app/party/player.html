@@ -43,6 +43,16 @@ input:focus { outline: 2px solid var(--primary); outline-offset: 1px; }
 button { font: inherit; font-weight: 600; padding: 12px 16px; border-radius: 10px; border: 0; background: var(--primary); color: var(--primary-fg); cursor: pointer; }
 button:disabled { opacity: .5; }
 .error { color: var(--bad); font-size: 14px; min-height: 1.5em; margin: 0; }
+.link { background: none; color: inherit; padding: 0; font-weight: inherit; text-decoration: underline dotted; text-underline-offset: 3px; border-radius: 0; }
+.skip { background: var(--card); color: var(--fg); border: 1px solid var(--border); font-size: 13px; padding: 6px 12px; }
+.skip.on { background: var(--primary); color: var(--primary-fg); border-color: var(--primary); }
+.skip-row { display: flex; justify-content: flex-end; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); }
+.banner { position: fixed; left: 0; right: 0; top: 0; padding: 6px 12px; text-align: center; font-size: 14px; background: var(--warn); color: #000; z-index: 5; }
+.overlay { position: fixed; inset: 0; background: rgb(0 0 0 / .5); display: flex; align-items: center; justify-content: center; padding: 16px; z-index: 10; }
+.overlay .card { background: var(--bg); width: 100%; max-width: 420px; }
+.row { display: flex; gap: 8px; }
+.row button { flex: 1; }
+.secondary { background: var(--card); color: var(--fg); border: 1px solid var(--border); }
 .sent { color: var(--good); font-size: 14px; margin: 0; }
 .timer { font-size: 22px; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--fg); }
 .timer.low { color: var(--warn); }
@@ -69,6 +79,11 @@ let state = null;
 let deadline = null;
 let renderedScreen = null;
 let timerElement = null;
+let retryTimer = null;
+let lastHeardAt = Date.now();
+const SILENCE_BEFORE_RECONNECT_MS = 50000;
+const banner = el('div', { class: 'banner', hidden: true }, 'Connection lost. Reconnecting…');
+document.body.append(banner);
 
 function readSession() {
   try {
@@ -110,9 +125,10 @@ function show(...children) {
   app.replaceChildren(...children.flat().filter(Boolean));
 }
 
-function showJoin(errorText = '') {
+function showJoin(errorText = '', { previousName = session?.name ?? '', note = 'Type your name to join the game.' } = {}) {
   renderedScreen = 'join';
-  const name = el('input', { placeholder: 'Your name', maxLength: 24, autocomplete: 'nickname', required: true, value: session?.name ?? '' });
+  banner.hidden = true;
+  const name = el('input', { placeholder: 'Your name', maxLength: 24, autocomplete: 'nickname', required: true, value: previousName });
   const error = el('p', { class: 'error' }, errorText);
   const button = el('button', { type: 'submit' }, 'Join the game');
   const join = async event => {
@@ -132,21 +148,120 @@ function showJoin(errorText = '') {
   };
   show(el('div', { class: 'center' },
     el('h1', {}, 'Nə? Harada? Nə zaman?'),
-    el('p', { class: 'muted' }, 'Type your name to join the game.'),
+    el('p', { class: 'muted' }, note),
     el('form', { onsubmit: join, style: 'width:100%' }, name, button, error)));
   name.focus();
 }
 
 function connect() {
+  clearTimeout(retryTimer);
   events?.close();
+  lastHeardAt = Date.now();
   events = new EventSource(`/events?token=${encodeURIComponent(session.token)}`);
-  events.onmessage = message => render(JSON.parse(message.data));
+  events.onopen = () => { banner.hidden = true; };
+  events.onmessage = message => {
+    lastHeardAt = Date.now();
+    banner.hidden = true;
+    render(JSON.parse(message.data));
+  };
+  events.addEventListener('ping', () => { lastHeardAt = Date.now(); });
   events.onerror = () => {
-    if (events.readyState === EventSource.CLOSED && renderedScreen !== 'closed') {
+    if (renderedScreen === 'closed' || renderedScreen === 'join') return;
+    banner.hidden = false;
+    if (events.readyState === EventSource.CLOSED) checkSession();
+  };
+}
+
+// The phone keeps its place in the game until the host removes it or closes the game: a lost connection only retries.
+async function checkSession() {
+  clearTimeout(retryTimer);
+  events?.close();
+  if (!session?.token) return showJoin();
+  try {
+    const response = await fetch(`/me?token=${encodeURIComponent(session.token)}`, { cache: 'no-store' });
+    if (response.status === 401) {
+      const previousName = session.name;
       saveSession(null);
-      showJoin();
+      return showJoin('', { previousName, note: 'You are no longer in this game. Type your name to join again.' });
+    }
+    if (response.ok) {
+      const body = await response.json();
+      saveSession({ ...session, name: body.name });
+      return connect();
+    }
+  } catch {}
+  banner.hidden = false;
+  retryTimer = setTimeout(checkSession, 3000);
+}
+
+function reconnectIfDead() {
+  if (!session?.token || renderedScreen === 'closed' || renderedScreen === 'join') return;
+  const isSilent = Date.now() - lastHeardAt > SILENCE_BEFORE_RECONNECT_MS;
+  if (!events || events.readyState === EventSource.CLOSED || isSilent) checkSession();
+}
+
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') reconnectIfDead(); });
+window.addEventListener('online', reconnectIfDead);
+window.addEventListener('pageshow', reconnectIfDead);
+setInterval(reconnectIfDead, 10000);
+
+function showRename() {
+  const name = el('input', { placeholder: 'Your name', maxLength: 24, autocomplete: 'nickname', required: true, value: state?.me.name ?? session.name ?? '' });
+  const error = el('p', { class: 'error' });
+  const save = el('button', { type: 'submit' }, 'Save');
+  const overlay = el('div', { class: 'overlay' });
+  const close = () => overlay.remove();
+  const rename = async event => {
+    event.preventDefault();
+    save.disabled = true;
+    error.textContent = '';
+    try {
+      const response = await fetch('/rename', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token: session.token, name: name.value }) });
+      const body = await response.json();
+      if (!response.ok) throw new Error(body.error);
+      saveSession({ ...session, name: body.name });
+      close();
+    } catch (e) {
+      error.textContent = e.message || 'Could not change the name';
+      save.disabled = false;
     }
   };
+  overlay.append(el('form', { class: 'card', onsubmit: rename },
+    el('strong', {}, 'Change your name'),
+    name,
+    el('div', { class: 'row' }, el('button', { type: 'button', class: 'secondary', onclick: close }, 'Cancel'), save),
+    error));
+  overlay.addEventListener('click', event => { if (event.target === overlay) close(); });
+  document.body.append(overlay);
+  name.focus();
+  name.select();
+}
+
+const nameButton = () => el('button', { type: 'button', class: 'link', id: 'me-name', onclick: showRename, title: 'Change your name' }, state.me.name);
+
+async function toggleSkip() {
+  try {
+    await fetch('/skip', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token: session.token }) });
+  } catch {}
+}
+
+function skipRow() {
+  return el('div', { class: 'skip-row', id: 'skip-row' },
+    el('span', { id: 'skip-count' }),
+    el('button', { type: 'button', class: 'skip', id: 'skip-button', onclick: toggleSkip }, 'Skip'));
+}
+
+function updateSkip() {
+  const row = document.getElementById('skip-row');
+  if (!row) return;
+  const skip = state.skip;
+  row.hidden = !skip?.isAvailable;
+  if (row.hidden) return;
+  document.getElementById('skip-count').textContent = skip.count ? `${skip.count} of ${skip.of} want to skip` : 'Everyone taps Skip to move on';
+  const button = document.getElementById('skip-button');
+  button.textContent = skip.isMine ? '✓ Skip' : 'Skip';
+  button.classList.toggle('on', !!skip.isMine);
+  button.title = skip.isMine ? 'Tap again to take it back' : 'Move on when everyone taps Skip';
 }
 
 function leaderboard(entries) {
@@ -158,7 +273,7 @@ function topBar() {
   timerElement = el('span', { class: 'timer' });
   return el('div', { class: 'bar' },
     el('span', {}, `Round ${state.round} · Question `, el('strong', {}, state.index + 1), ` of ${state.total}`),
-    el('span', {}, `${state.me.name} · `, el('strong', {}, state.me.score)),
+    el('span', {}, nameButton(), ' · ', el('strong', {}, state.me.score)),
     timerElement);
 }
 
@@ -201,34 +316,53 @@ function render(next) {
   state = next;
   if ('isNightMode' in next) document.documentElement.dataset.theme = next.isNightMode ? 'dark' : 'light';
   deadline = next.remainingMs == null || next.isPaused ? null : Date.now() + next.remainingMs;
-  if (next.phase === 'closed' || next.phase === 'kicked') {
+  if (next.phase === 'kicked') {
+    events.close();
+    const previousName = session?.name;
+    saveSession(null);
+    return showJoin('', { previousName, note: 'The host removed you from the game. Type your name to join again.' });
+  }
+  if (next.phase === 'closed') {
     renderedScreen = 'closed';
     events.close();
     saveSession(null);
     return show(el('div', { class: 'center' },
-      el('h1', {}, next.phase === 'kicked' ? 'You were removed from the game' : 'The host closed the game'),
+      el('h1', {}, 'The host closed the game'),
       el('p', { class: 'muted' }, 'Thanks for playing!')));
   }
+  if (session && next.me && session.name !== next.me.name) saveSession({ ...session, name: next.me.name });
   const screen = `${next.phase}:${next.index}`;
-  if (screen === renderedScreen && next.phase === 'question') return updateAnswerStatus();
+  if (screen === renderedScreen && next.phase === 'question') {
+    const nameElement = document.getElementById('me-name');
+    if (nameElement) nameElement.textContent = next.me.name;
+    updateSkip();
+    return updateAnswerStatus();
+  }
   renderedScreen = screen;
+  const done = rendered => {
+    updateSkip();
+    return rendered;
+  };
   if (next.phase === 'lobby' && next.round > 0) {
     return show(el('div', { class: 'center', style: 'flex:0;padding-top:24px' },
       el('h1', {}, `Round ${next.round} is over`),
-      el('p', { class: 'muted' }, `Your score: ${next.me.score} · place ${next.me.rank} of ${next.playerCount}. Waiting for the next round…`)),
+      el('p', { class: 'muted' }, `Your score: ${next.me.score} · place ${next.me.rank} of ${next.playerCount}. Waiting for the next round…`),
+      el('button', { type: 'button', class: 'link muted', onclick: showRename }, 'Change name')),
       leaderboard(next.leaderboard));
   }
   if (next.phase === 'lobby') {
     return show(el('div', { class: 'center' },
       el('h1', {}, `You're in, ${next.me.name}!`),
-      el('p', { class: 'muted' }, `Waiting for the host to start… ${next.playerCount} ${next.playerCount === 1 ? 'player' : 'players'} joined.`)));
+      el('p', { class: 'muted' }, `Waiting for the host to start… ${next.playerCount} ${next.playerCount === 1 ? 'player' : 'players'} joined.`),
+      el('button', { type: 'button', class: 'link muted', onclick: showRename }, 'Change name')));
   }
   if (next.phase === 'waiting') {
-    return show(topBar(), el('div', { class: 'center' },
-      el('p', { class: 'muted' }, 'Question'), el('div', { class: 'big-number' }, next.index + 1), el('p', { class: 'muted' }, `of ${next.total}`)));
+    return done(show(topBar(), skipRow(), el('div', { class: 'center' },
+      el('p', { class: 'muted' }, 'Question'), el('div', { class: 'big-number' }, next.index + 1), el('p', { class: 'muted' }, `of ${next.total}`))));
   }
   if (next.phase === 'question') {
-    show(topBar(), questionBlock(), answerForm(), el('p', { class: 'muted', style: 'margin:0;font-size:14px' }, rulesText()));
+    show(topBar(), questionBlock(), answerForm(), skipRow(), el('p', { class: 'muted', style: 'margin:0;font-size:14px' }, rulesText()));
+    updateSkip();
     return updateAnswerStatus();
   }
   if (next.phase === 'judging') {
@@ -241,7 +375,7 @@ function render(next) {
     const verdict = reveal.isCorrect == null ? el('div', { class: 'verdict bad' }, 'No answer')
       : reveal.isPending ? el('div', { class: 'verdict' }, '? The host is checking')
       : el('div', { class: `verdict ${reveal.isCorrect ? 'good' : 'bad'}` }, reveal.isCorrect ? '✓ Correct' : '✗ Wrong', el('span', { class: 'muted', style: 'font-size:18px;margin-left:10px' }, pointsLabel(reveal.points)));
-    return show(topBar(), el('div', { class: 'card' },
+    return done(show(topBar(), skipRow(), el('div', { class: 'card' },
       verdict,
       next.myAnswer != null && el('span', { class: 'muted' }, `Your answer: ${next.myAnswer || '—'}`),
       el('p', { class: 'answer' }, reveal.answer),
@@ -249,7 +383,7 @@ function render(next) {
       reveal.comment && el('p', { class: 'pre muted', style: 'margin:0;font-size:14px' }, reveal.comment),
       reveal.hasAnswerImage && el('img', { class: 'handout', src: imageUrl('/answer-image'), alt: 'Answer' })),
       el('p', { class: 'muted', style: 'margin:0' }, `Your score: ${next.me.score} · place ${next.me.rank} of ${next.playerCount}`),
-      leaderboard(next.leaderboard));
+      leaderboard(next.leaderboard)));
   }
   if (next.phase === 'finished') {
     return show(el('div', { class: 'center', style: 'flex:0;padding-top:24px' },

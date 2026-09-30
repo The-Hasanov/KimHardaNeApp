@@ -25,6 +25,10 @@ CREATE TABLE IF NOT EXISTS lists (id INTEGER PRIMARY KEY, name TEXT NOT NULL, cr
 CREATE TABLE IF NOT EXISTS list_questions (
   list_id INTEGER NOT NULL, uid TEXT NOT NULL, position INTEGER NOT NULL, added_at TEXT NOT NULL,
   PRIMARY KEY (list_id, uid));`;
+const PARTY_RESULTS_SCHEMA = `
+CREATE TABLE IF NOT EXISTS party_results (
+  name_key TEXT PRIMARY KEY, name TEXT NOT NULL, correct INTEGER NOT NULL DEFAULT 0, wrong INTEGER NOT NULL DEFAULT 0,
+  unanswered INTEGER NOT NULL DEFAULT 0, rounds INTEGER NOT NULL DEFAULT 0, updated_at TEXT NOT NULL);`;
 const POOL = 500;
 const OWN_PACKAGE_ID = 0;
 const OWN_GAME_ID = 0;
@@ -50,6 +54,7 @@ class Store {
     this.db.exec(EMBEDDINGS_SCHEMA);
     this.db.exec(LISTS_SCHEMA);
     this.db.exec(PLAY_SCHEMA);
+    this.db.exec(PARTY_RESULTS_SCHEMA);
     this.loadRows();
     this.vecs = null;
     this.vectorCount = 0;
@@ -389,9 +394,29 @@ class Store {
       .map(answer => ({ ...answer, question: this.get(answer.uid) }));
   }
 
+  // All-time party results add up per player name, ignoring case; the latest spelling of the name is kept.
+  addPartyResults(results) {
+    const add = this.db.prepare(`INSERT INTO party_results (name_key, name, correct, wrong, unanswered, rounds, updated_at)
+      VALUES (?, ?, ?, ?, ?, 1, datetime('now'))
+      ON CONFLICT (name_key) DO UPDATE SET name = excluded.name, correct = correct + excluded.correct, wrong = wrong + excluded.wrong,
+        unanswered = unanswered + excluded.unanswered, rounds = rounds + 1, updated_at = excluded.updated_at`);
+    this.db.exec('BEGIN');
+    for (const { name, correct, wrong, unanswered } of results) add.run(name.toLowerCase(), name, correct, wrong, unanswered);
+    this.db.exec('COMMIT');
+  }
+
+  partyResults() {
+    return this.db.prepare(`SELECT name, correct, wrong, unanswered, rounds, updated_at FROM party_results
+      ORDER BY correct DESC, wrong ASC, unanswered ASC, name`).all();
+  }
+
+  resetPartyResults() {
+    this.db.exec('DELETE FROM party_results');
+  }
+
   games() {
     return this.db.prepare('SELECT game_id AS id, game_name AS name, COUNT(*) AS n FROM questions GROUP BY game_id ORDER BY game_id').all();
   }
 }
 
-module.exports = { Store, OWN_PACKAGE_ID, OWN_IMAGE_PREFIX, TUNING, LISTS_SCHEMA, PLAY_SCHEMA, EMBEDDINGS_SCHEMA, fold, passage, embeddable, hashOf, DIM };
+module.exports = { Store, OWN_PACKAGE_ID, OWN_IMAGE_PREFIX, TUNING, LISTS_SCHEMA, PLAY_SCHEMA, PARTY_RESULTS_SCHEMA, EMBEDDINGS_SCHEMA, fold, passage, embeddable, hashOf, DIM };
