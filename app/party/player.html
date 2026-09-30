@@ -26,8 +26,33 @@
 html, body { margin: 0; background: var(--bg); color: var(--fg); }
 body { font: 16px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; -webkit-text-size-adjust: 100%; }
 main { max-width: 640px; margin: 0 auto; padding: 16px 16px calc(24px + env(safe-area-inset-bottom)); min-height: 100dvh; display: flex; flex-direction: column; gap: 16px; }
-.bar { display: flex; align-items: center; justify-content: space-between; gap: 12px; font-size: 14px; color: var(--muted); }
+header { position: sticky; top: 0; z-index: 3; margin: -16px -16px 0; padding: 12px 16px 0; background: var(--bg); display: flex; flex-direction: column; gap: 10px; }
+.bar { display: flex; align-items: center; gap: 8px; font-size: 14px; color: var(--muted); }
 .bar strong { color: var(--fg); }
+.pill { display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 12px; border-radius: 999px; background: var(--card); border: 1px solid var(--border); color: var(--fg); font-size: 14px; font-weight: 600; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.pill .label { color: var(--muted); font-weight: 500; }
+.name-pill { min-width: 0; flex: 0 1 auto; }
+.name-pill span { overflow: hidden; text-overflow: ellipsis; }
+.name-pill svg { flex: none; opacity: .6; }
+.spacer { flex: 1; }
+.time-track { height: 4px; margin: 0 -16px; background: var(--card); }
+.time-fill { height: 100%; width: 100%; background: var(--primary); transform-origin: left; transition: transform .2s linear, background-color .3s; }
+.time-fill.low { background: var(--warn); }
+.dock { position: sticky; bottom: 0; z-index: 3; margin: auto -16px calc(-24px - env(safe-area-inset-bottom)); padding: 12px 16px calc(12px + env(safe-area-inset-bottom)); background: linear-gradient(to bottom, transparent, var(--bg) 16px); }
+.skip { width: 100%; display: flex; flex-direction: column; gap: 10px; padding: 12px 14px; border-radius: 14px; background: var(--card); color: var(--fg); border: 1px solid var(--border); text-align: left; transition: background-color .2s, border-color .2s, transform .1s; -webkit-tap-highlight-color: transparent; }
+.skip:active { transform: scale(.98); }
+.skip-main { display: flex; align-items: center; gap: 12px; }
+.skip-icon { flex: none; width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center; background: var(--bg); border: 1px solid var(--border); }
+.skip-text { flex: 1; min-width: 0; display: flex; flex-direction: column; line-height: 1.3; }
+.skip-title { font-size: 16px; font-weight: 700; }
+.skip-hint { font-size: 13px; font-weight: 500; color: var(--muted); }
+.skip-count { font-size: 15px; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--muted); }
+.skip-segments { display: flex; gap: 4px; height: 6px; }
+.skip-segments i { flex: 1; border-radius: 3px; background: var(--border); transition: background-color .25s; }
+.skip-segments i.on { background: var(--good); }
+.skip.on { border-color: color-mix(in srgb, var(--good) 55%, transparent); background: color-mix(in srgb, var(--good) 12%, var(--card)); }
+.skip.on .skip-icon { background: var(--good); border-color: var(--good); color: var(--bg); }
+.skip.on .skip-count { color: var(--good); }
 .center { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; gap: 8px; }
 h1 { font-size: 24px; line-height: 1.25; margin: 0; }
 .muted { color: var(--muted); }
@@ -44,21 +69,24 @@ button { font: inherit; font-weight: 600; padding: 12px 16px; border-radius: 10p
 button:disabled { opacity: .5; }
 .error { color: var(--bad); font-size: 14px; min-height: 1.5em; margin: 0; }
 .link { background: none; color: inherit; padding: 0; font-weight: inherit; text-decoration: underline dotted; text-underline-offset: 3px; border-radius: 0; }
-.skip { background: var(--card); color: var(--fg); border: 1px solid var(--border); font-size: 13px; padding: 6px 12px; }
-.skip.on { background: var(--primary); color: var(--primary-fg); border-color: var(--primary); }
-.skip-row { display: flex; justify-content: flex-end; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); }
-.banner { position: fixed; left: 0; right: 0; top: 0; padding: 6px 12px; text-align: center; font-size: 14px; background: var(--warn); color: #000; z-index: 5; }
+.ghost { display: inline-flex; align-items: center; gap: 6px; background: var(--card); color: var(--fg); border: 1px solid var(--border); border-radius: 999px; padding: 8px 14px; font-size: 14px; }
+.banner { position: fixed; left: 50%; top: 12px; transform: translateX(-50%); display: flex; align-items: center; gap: 8px; padding: 8px 14px; border-radius: 999px; font-size: 14px; font-weight: 600; background: var(--warn); color: #000; z-index: 5; box-shadow: 0 4px 16px rgb(0 0 0 / .25); }
+.banner[hidden] { display: none; }
+.dot-pulse { width: 8px; height: 8px; border-radius: 50%; background: currentColor; animation: pulse 1s ease-in-out infinite; }
+@keyframes pulse { 50% { opacity: .3; } }
 .overlay { position: fixed; inset: 0; background: rgb(0 0 0 / .5); display: flex; align-items: center; justify-content: center; padding: 16px; z-index: 10; }
 .overlay .card { background: var(--bg); width: 100%; max-width: 420px; }
 .row { display: flex; gap: 8px; }
 .row button { flex: 1; }
 .secondary { background: var(--card); color: var(--fg); border: 1px solid var(--border); }
-.sent { color: var(--good); font-size: 14px; margin: 0; }
-.timer { font-size: 22px; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--fg); }
+.sent { display: flex; align-items: center; gap: 6px; color: var(--good); font-size: 14px; margin: 0; min-height: 1.5em; }
+.sent.error-text { color: var(--bad); }
+.timer { font-size: 22px; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--fg); min-width: 3ch; text-align: right; }
 .timer.low { color: var(--warn); }
-.verdict { font-size: 32px; font-weight: 700; }
-.verdict.good { color: var(--good); }
-.verdict.bad { color: var(--bad); }
+.verdict { display: flex; align-items: center; gap: 10px; font-size: 28px; font-weight: 800; margin: -14px -14px 4px; padding: 14px; border-radius: 12px 12px 0 0; background: var(--card); }
+.verdict.good { color: var(--good); background: color-mix(in srgb, var(--good) 14%, transparent); }
+.verdict.bad { color: var(--bad); background: color-mix(in srgb, var(--bad) 12%, transparent); }
+.verdict .points { margin-left: auto; font-size: 20px; }
 .answer { font-size: 22px; font-weight: 700; margin: 0; }
 ol.board { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
 ol.board li { display: flex; gap: 10px; align-items: center; padding: 10px 12px; border-radius: 10px; background: var(--card); }
@@ -82,7 +110,7 @@ let timerElement = null;
 let retryTimer = null;
 let lastHeardAt = Date.now();
 const SILENCE_BEFORE_RECONNECT_MS = 50000;
-const banner = el('div', { class: 'banner', hidden: true }, 'Connection lost. Reconnecting…');
+const banner = el('div', { class: 'banner', hidden: true }, el('span', { class: 'dot-pulse' }), 'Reconnecting…');
 document.body.append(banner);
 
 function readSession() {
@@ -172,7 +200,6 @@ function connect() {
   };
 }
 
-// The phone keeps its place in the game until the host removes it or closes the game: a lost connection only retries.
 async function checkSession() {
   clearTimeout(retryTimer);
   events?.close();
@@ -237,7 +264,27 @@ function showRename() {
   name.select();
 }
 
-const nameButton = () => el('button', { type: 'button', class: 'link', id: 'me-name', onclick: showRename, title: 'Change your name' }, state.me.name);
+const icon = path => {
+  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  svg.setAttribute('viewBox', '0 0 24 24');
+  svg.setAttribute('width', '18');
+  svg.setAttribute('height', '18');
+  svg.setAttribute('fill', 'none');
+  svg.setAttribute('stroke', 'currentColor');
+  svg.setAttribute('stroke-width', '2.2');
+  svg.setAttribute('stroke-linecap', 'round');
+  svg.setAttribute('stroke-linejoin', 'round');
+  svg.innerHTML = path;
+  return svg;
+};
+const ICONS = {
+  skip: '<path d="m5 4 10 8-10 8z"/><path d="M19 5v14"/>',
+  check: '<path d="M20 6 9 17l-5-5"/>',
+  pencil: '<path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/>',
+};
+
+const nameButton = () => el('button', { type: 'button', class: 'pill name-pill', onclick: showRename, title: 'Change your name' },
+  el('span', { id: 'me-name' }, state.me.name), icon(ICONS.pencil));
 
 async function toggleSkip() {
   try {
@@ -245,23 +292,34 @@ async function toggleSkip() {
   } catch {}
 }
 
-function skipRow() {
-  return el('div', { class: 'skip-row', id: 'skip-row' },
-    el('span', { id: 'skip-count' }),
-    el('button', { type: 'button', class: 'skip', id: 'skip-button', onclick: toggleSkip }, 'Skip'));
+const SKIP_TITLES = { waiting: 'Start the question', question: "I'm done", reveal: 'Next' };
+const MAX_SKIP_SEGMENTS = 12;
+
+function skipDock() {
+  return el('div', { class: 'dock', id: 'skip-dock' },
+    el('button', { type: 'button', class: 'skip', id: 'skip-button', onclick: toggleSkip },
+      el('span', { class: 'skip-main' },
+        el('span', { class: 'skip-icon', id: 'skip-icon' }),
+        el('span', { class: 'skip-text' }, el('span', { class: 'skip-title', id: 'skip-title' }), el('span', { class: 'skip-hint', id: 'skip-hint' })),
+        el('span', { class: 'skip-count', id: 'skip-count' })),
+      el('span', { class: 'skip-segments', id: 'skip-segments' })));
 }
 
 function updateSkip() {
-  const row = document.getElementById('skip-row');
-  if (!row) return;
+  const dock = document.getElementById('skip-dock');
+  if (!dock) return;
   const skip = state.skip;
-  row.hidden = !skip?.isAvailable;
-  if (row.hidden) return;
-  document.getElementById('skip-count').textContent = skip.count ? `${skip.count} of ${skip.of} want to skip` : 'Everyone taps Skip to move on';
-  const button = document.getElementById('skip-button');
-  button.textContent = skip.isMine ? '✓ Skip' : 'Skip';
-  button.classList.toggle('on', !!skip.isMine);
-  button.title = skip.isMine ? 'Tap again to take it back' : 'Move on when everyone taps Skip';
+  dock.hidden = !skip?.isAvailable;
+  if (dock.hidden) return;
+  const others = skip.of - skip.count;
+  document.getElementById('skip-button').classList.toggle('on', !!skip.isMine);
+  document.getElementById('skip-icon').replaceChildren(icon(skip.isMine ? ICONS.check : ICONS.skip));
+  document.getElementById('skip-title').textContent = skip.isMine ? `Waiting for ${others} ${others === 1 ? 'player' : 'players'}` : SKIP_TITLES[state.phase];
+  document.getElementById('skip-hint').textContent = skip.isMine ? 'Tap to undo' : 'Moves on when everyone taps';
+  document.getElementById('skip-count').textContent = `${skip.count}/${skip.of}`;
+  const segmentCount = Math.min(skip.of, MAX_SKIP_SEGMENTS);
+  const filled = Math.round((skip.count / Math.max(skip.of, 1)) * segmentCount);
+  document.getElementById('skip-segments').replaceChildren(...Array.from({ length: segmentCount }, (_, i) => el('i', { class: i < filled ? 'on' : '' })));
 }
 
 function leaderboard(entries) {
@@ -269,13 +327,22 @@ function leaderboard(entries) {
     el('span', { class: 'rank' }, `${entry.rank}.`), el('span', { class: 'name' }, entry.name), el('span', { class: 'score' }, entry.score))));
 }
 
+let timeFillElement = null;
+
 function topBar() {
   timerElement = el('span', { class: 'timer' });
-  return el('div', { class: 'bar' },
-    el('span', {}, `Round ${state.round} · Question `, el('strong', {}, state.index + 1), ` of ${state.total}`),
-    el('span', {}, nameButton(), ' · ', el('strong', {}, state.me.score)),
-    timerElement);
+  timeFillElement = el('div', { class: 'time-fill' });
+  return el('header', {},
+    el('div', { class: 'bar' },
+      el('span', { class: 'pill' }, el('span', { class: 'label' }, 'Q'), `${state.index + 1}/${state.total}`),
+      nameButton(),
+      el('span', { class: 'pill' }, el('span', { class: 'label' }, 'Score'), state.me.score),
+      el('span', { class: 'spacer' }),
+      timerElement),
+    el('div', { class: 'time-track' }, timeFillElement));
 }
+
+const phaseSeconds = () => ({ waiting: state.rules.secondsBetweenQuestions, question: state.rules.secondsPerQuestion, reveal: state.rules.secondsOnAnswer })[state.phase];
 
 function questionBlock() {
   const question = state.question;
@@ -290,6 +357,10 @@ function questionBlock() {
 function answerForm() {
   const input = el('input', { placeholder: 'Your answer', maxLength: 200, autocomplete: 'off', autocapitalize: 'off', spellcheck: false, value: state.myAnswer ?? '' });
   const status = el('p', { class: 'sent', id: 'answer-status' });
+  const showError = text => {
+    status.classList.add('error-text');
+    status.textContent = text;
+  };
   const button = el('button', { type: 'submit' }, 'Send answer');
   const send = async event => {
     event.preventDefault();
@@ -300,7 +371,7 @@ function answerForm() {
       if (!response.ok) throw new Error(body.error);
       input.blur();
     } catch (e) {
-      status.textContent = e.message || 'Could not send';
+      showError(e.message || 'Could not send');
     }
     button.disabled = false;
   };
@@ -309,7 +380,9 @@ function answerForm() {
 
 function updateAnswerStatus() {
   const status = document.getElementById('answer-status');
-  if (status && state.myAnswer != null) status.textContent = `Sent: “${state.myAnswer || '—'}”. You can change it until time is up.`;
+  if (!status || state.myAnswer == null) return;
+  status.classList.remove('error-text');
+  status.replaceChildren(icon(ICONS.check), `Sent “${state.myAnswer || '—'}”. You can change it until time is up.`);
 }
 
 function render(next) {
@@ -347,21 +420,21 @@ function render(next) {
     return show(el('div', { class: 'center', style: 'flex:0;padding-top:24px' },
       el('h1', {}, `Round ${next.round} is over`),
       el('p', { class: 'muted' }, `Your score: ${next.me.score} · place ${next.me.rank} of ${next.playerCount}. Waiting for the next round…`),
-      el('button', { type: 'button', class: 'link muted', onclick: showRename }, 'Change name')),
+      el('button', { type: 'button', class: 'ghost', onclick: showRename }, icon(ICONS.pencil), 'Change name')),
       leaderboard(next.leaderboard));
   }
   if (next.phase === 'lobby') {
     return show(el('div', { class: 'center' },
       el('h1', {}, `You're in, ${next.me.name}!`),
       el('p', { class: 'muted' }, `Waiting for the host to start… ${next.playerCount} ${next.playerCount === 1 ? 'player' : 'players'} joined.`),
-      el('button', { type: 'button', class: 'link muted', onclick: showRename }, 'Change name')));
+      el('button', { type: 'button', class: 'ghost', style: 'margin-top:8px', onclick: showRename }, icon(ICONS.pencil), 'Change name')));
   }
   if (next.phase === 'waiting') {
-    return done(show(topBar(), skipRow(), el('div', { class: 'center' },
-      el('p', { class: 'muted' }, 'Question'), el('div', { class: 'big-number' }, next.index + 1), el('p', { class: 'muted' }, `of ${next.total}`))));
+    return done(show(topBar(), el('div', { class: 'center' },
+      el('p', { class: 'muted' }, 'Question'), el('div', { class: 'big-number' }, next.index + 1), el('p', { class: 'muted' }, `of ${next.total}`)), skipDock()));
   }
   if (next.phase === 'question') {
-    show(topBar(), questionBlock(), answerForm(), skipRow(), el('p', { class: 'muted', style: 'margin:0;font-size:14px' }, rulesText()));
+    show(topBar(), questionBlock(), answerForm(), el('p', { class: 'muted', style: 'margin:0;font-size:14px' }, rulesText()), skipDock());
     updateSkip();
     return updateAnswerStatus();
   }
@@ -374,8 +447,8 @@ function render(next) {
     const reveal = next.reveal;
     const verdict = reveal.isCorrect == null ? el('div', { class: 'verdict bad' }, 'No answer')
       : reveal.isPending ? el('div', { class: 'verdict' }, '? The host is checking')
-      : el('div', { class: `verdict ${reveal.isCorrect ? 'good' : 'bad'}` }, reveal.isCorrect ? '✓ Correct' : '✗ Wrong', el('span', { class: 'muted', style: 'font-size:18px;margin-left:10px' }, pointsLabel(reveal.points)));
-    return done(show(topBar(), skipRow(), el('div', { class: 'card' },
+      : el('div', { class: `verdict ${reveal.isCorrect ? 'good' : 'bad'}` }, reveal.isCorrect ? '✓ Correct' : '✗ Wrong', el('span', { class: 'points' }, pointsLabel(reveal.points)));
+    return done(show(topBar(), el('div', { class: 'card' },
       verdict,
       next.myAnswer != null && el('span', { class: 'muted' }, `Your answer: ${next.myAnswer || '—'}`),
       el('p', { class: 'answer' }, reveal.answer),
@@ -383,7 +456,7 @@ function render(next) {
       reveal.comment && el('p', { class: 'pre muted', style: 'margin:0;font-size:14px' }, reveal.comment),
       reveal.hasAnswerImage && el('img', { class: 'handout', src: imageUrl('/answer-image'), alt: 'Answer' })),
       el('p', { class: 'muted', style: 'margin:0' }, `Your score: ${next.me.score} · place ${next.me.rank} of ${next.playerCount}`),
-      leaderboard(next.leaderboard)));
+      leaderboard(next.leaderboard), skipDock()));
   }
   if (next.phase === 'finished') {
     return show(el('div', { class: 'center', style: 'flex:0;padding-top:24px' },
@@ -397,10 +470,17 @@ function render(next) {
 setInterval(() => {
   if (!timerElement || !timerElement.isConnected) return;
   if (state?.isPaused && state.remainingMs != null) return (timerElement.textContent = `Paused ${clock(state.remainingMs)}`);
-  if (deadline == null) return (timerElement.textContent = '');
+  if (deadline == null) {
+    timerElement.textContent = '';
+    timeFillElement.style.transform = 'scaleX(0)';
+    return;
+  }
   const left = Math.max(0, deadline - Date.now());
+  const isLow = left <= 10000 && state.phase === 'question';
   timerElement.textContent = clock(left);
-  timerElement.classList.toggle('low', left <= 10000);
+  timerElement.classList.toggle('low', isLow);
+  timeFillElement.classList.toggle('low', isLow);
+  timeFillElement.style.transform = `scaleX(${phaseSeconds() ? Math.min(1, left / (phaseSeconds() * 1000)) : 0})`;
 }, 200);
 
 if (session?.token) connect();

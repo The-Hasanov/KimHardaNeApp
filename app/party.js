@@ -80,7 +80,6 @@ class PartyGame {
   join(name) {
     const clean = this.checkName(name);
     if (this.players.size >= PARTY_LIMITS.players) throw new PartyError(409, 'The game is full');
-    // A player who joins during a round is counted in the all-time results from the next question only.
     const player = { id: crypto.randomUUID(), token: crypto.randomBytes(16).toString('hex'), name: clean, countsFrom: { round: this.round, position: this.closedCount } };
     this.players.set(player.id, player);
     this.changed();
@@ -126,7 +125,6 @@ class PartyGame {
     const cleanGiven = String(given ?? '').trim().slice(0, PARTY_LIMITS.answerLength);
     const answers = this.answers[this.index];
     if (answers.get(player.id)?.given === cleanGiven) return;
-    // A changed answer drops the host's call on the old one, but takes the call the host made on the same answer from someone else.
     const answer = { given: cleanGiven };
     const ruling = this.rulingFor(this.index, cleanGiven);
     if (ruling) answer.hostCall = ruling.isCorrect;
@@ -275,7 +273,6 @@ class PartyGame {
           Object.assign(answer, { verdict: 'unsure', similarity: null, closestAnswer: null });
         }
       }
-      // The host may have called this answer, or one like it, while it was being checked.
       answer.hostCall ??= this.rulingFor(position, answer.given)?.isCorrect;
       answer.decidedByHost = answer.hostCall !== undefined;
       answer.isCorrect = answer.decidedByHost ? answer.hostCall : answer.verdict === 'correct';
@@ -297,7 +294,6 @@ class PartyGame {
     this.changed();
   }
 
-  // The host's call on an answer also applies to the same answer from other players, unless the host called theirs directly.
   setCorrect(playerId, position, isCorrect) {
     const answers = this.answers[position];
     const answer = answers?.get(playerId);
@@ -339,7 +335,6 @@ class PartyGame {
     if (results.length) this.onRoundFinished(results);
   }
 
-  // Per player, the questions of this round whose answers were closed while they played: correct, wrong or unanswered.
   roundResults() {
     return [...this.players.values()].map(player => {
       const result = { name: player.name, correct: 0, wrong: 0, unanswered: 0 };
@@ -422,7 +417,10 @@ class PartyGame {
     return {
       partyId: this.id, phase: this.phase, round: this.round, index: this.index, total: this.questions.length,
       remainingMs: this.remainingMs(), isPaused: this.pausedRemainingMs != null, playerCount: this.players.size, isNightMode: this.isNightMode,
-      rules: { pointsForCorrect: this.rules.pointsForCorrect, pointsForWrong: this.rules.pointsForWrong },
+      rules: {
+        pointsForCorrect: this.rules.pointsForCorrect, pointsForWrong: this.rules.pointsForWrong, secondsPerQuestion: this.rules.secondsPerQuestion,
+        secondsBetweenQuestions: this.rules.secondsBetweenQuestions, secondsOnAnswer: this.rules.secondsOnAnswer,
+      },
       me: { name: player.name, score: me?.score ?? 0, roundScore: me?.roundScore ?? 0, rank: me?.rank ?? null },
       question: PHASES_WITH_QUESTION.includes(this.phase) ? {
         text: question.text, noteBefore: question.note_before, handoutText: question.rekvizit_text, hasHandoutImage: !!question.rekvizit_src,
@@ -501,7 +499,6 @@ function openEventStream(game, req, res, { playerId = null, view }) {
     const wasOpen = game.streams.delete(stream);
     if (playerId && wasOpen) game.presenceChanged();
   });
-  // A player coming online updates every screen, this stream included.
   if (playerId) game.presenceChanged();
   else stream.send(view());
 }

@@ -145,7 +145,7 @@ function AllTimeLeaderboard() {
             </thead>
             <tbody className="divide-y">
               {results.map((result, i) => (
-                <tr key={result.name}>
+                <tr key={result.name} className={cn(i === 0 && 'bg-amber-500/10')}>
                   <td className="px-3 py-2 text-right font-semibold text-muted-foreground tabular-nums">{i + 1}</td>
                   <td className="max-w-48 truncate px-3 py-2 font-medium">{result.name}</td>
                   <td className="px-3 py-2 text-right font-semibold tabular-nums text-emerald-600 dark:text-emerald-400">{result.correct}</td>
@@ -177,11 +177,30 @@ function AllTimeLeaderboard() {
 function CallButtons({ answer, position, isCalledNow = answer.isCorrect ?? answer.hostCall }) {
   return (
     <div className="flex gap-1">
-      <Button size="icon-sm" variant={isCalledNow === true ? 'default' : 'outline'} aria-label={`Mark ${answer.name} correct`}
+      <Button size="icon-sm" variant="outline" aria-label={`Mark ${answer.name} correct`} aria-pressed={isCalledNow === true}
+        className={cn(isCalledNow === true && 'border-emerald-600 bg-emerald-600 text-white hover:bg-emerald-600/90 hover:text-white dark:border-emerald-500 dark:bg-emerald-500 dark:hover:bg-emerald-500/90')}
         onClick={() => api.partySetCorrect(answer.playerId, position, true)}><CheckIcon /></Button>
-      <Button size="icon-sm" variant={isCalledNow === false ? 'default' : 'outline'} aria-label={`Mark ${answer.name} wrong`}
+      <Button size="icon-sm" variant="outline" aria-label={`Mark ${answer.name} wrong`} aria-pressed={isCalledNow === false}
+        className={cn(isCalledNow === false && 'border-destructive bg-destructive text-white hover:bg-destructive/90 hover:text-white dark:border-destructive dark:bg-destructive dark:hover:bg-destructive/90')}
         onClick={() => api.partySetCorrect(answer.playerId, position, false)}><XIcon /></Button>
     </div>
+  );
+}
+
+function SkipProgress({ skips }) {
+  const segmentCount = Math.min(skips.of, 12);
+  const filled = Math.round((skips.count / Math.max(skips.of, 1)) * segmentCount);
+  return (
+    <span className="flex items-center gap-2.5 rounded-full border px-3 py-1.5 text-sm animate-in fade-in-0"
+      title="Moves on when every online player taps Skip on the phone">
+      <SkipForwardIcon className="size-4 text-emerald-600 dark:text-emerald-400" />
+      <span><span className="font-semibold tabular-nums">{skips.count}/{skips.of}</span> <span className="text-muted-foreground">want to skip</span></span>
+      <span className="flex gap-0.5">
+        {Array.from({ length: segmentCount }, (_, i) => (
+          <span key={i} className={cn('h-1.5 w-3 rounded-full bg-muted transition-colors', i < filled && 'bg-emerald-500')} />
+        ))}
+      </span>
+    </span>
   );
 }
 
@@ -539,11 +558,7 @@ export default function PartyScreen({ party, isVisible, lobbySettings, onBackToL
               ? <Button size="lg" variant="outline" onClick={() => api.partyResume()}><PlayIcon />Resume{party.phase !== 'waiting' && <Kbd>Space</Kbd>}</Button>
               : <Button size="lg" variant="outline" onClick={() => api.partyPause()}><PauseIcon />Pause{party.phase !== 'waiting' && <Kbd>Space</Kbd>}</Button>
           )}
-          {party.skips.isAvailable && party.skips.count > 0 && (
-            <span className="text-sm text-muted-foreground" title="Moves on when every online player taps Skip on the phone">
-              <span className="font-semibold tabular-nums">{party.skips.count}</span> of {party.skips.of} want to skip
-            </span>
-          )}
+          {party.skips.isAvailable && party.skips.count > 0 && <SkipProgress skips={party.skips} />}
           {party.phase === 'question' && <>
             <span className="text-lg"><span className="font-semibold tabular-nums">{answeredCount}</span> of {party.players.length} answered</span>
             <Button size="lg" variant="outline" className="ml-auto" onClick={() => api.partyCloseAnswers()}>Close answers now</Button>

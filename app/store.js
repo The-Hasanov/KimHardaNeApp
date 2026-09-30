@@ -394,7 +394,6 @@ class Store {
       .map(answer => ({ ...answer, question: this.get(answer.uid) }));
   }
 
-  // All-time party results add up per player name, ignoring case; the latest spelling of the name is kept.
   addPartyResults(results) {
     const add = this.db.prepare(`INSERT INTO party_results (name_key, name, correct, wrong, unanswered, rounds, updated_at)
       VALUES (?, ?, ?, ?, ?, 1, datetime('now'))
