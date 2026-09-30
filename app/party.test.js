@@ -315,7 +315,7 @@ test('when every online player taps skip the game moves on, and the count starts
   game.startRound({ ...ROUND, secondsBetweenQuestions: 5 });
   assert.equal(game.phase, 'waiting');
   game.toggleSkip(aysel.token);
-  assert.deepEqual([game.playerView(aysel).skip, game.hostView().skips.count], [{ isAvailable: true, count: 1, of: 2, isMine: true }, 1]);
+  assert.deepEqual([game.playerView(aysel).skip, game.hostView().skips.count], [{ isAvailable: true, isHostChecking: false, count: 1, of: 2, isMine: true }, 1]);
   game.toggleSkip(aysel.token);
   assert.equal(game.hostView().skips.count, 0, 'tapping again takes the skip back');
   game.toggleSkip(aysel.token);
@@ -460,5 +460,35 @@ test('the host sends one-way messages to every phone; they clear at the next que
   await game.closeAnswers();
   game.next();
   assert.equal(game.playerView(aysel).announcement, null);
+  game.finish();
+});
+
+test('players cannot skip while the host checks answers, but the host can still move on', async () => {
+  const unsureGame = new PartyGame({ judge: async () => ({ verdict: 'unsure', similarity: null, closestAnswer: null }) });
+  const aysel = unsureGame.join('Aysel');
+  goOnline(unsureGame, aysel);
+  unsureGame.startRound(ROUND);
+  unsureGame.submitAnswer(aysel.token, 'Baki');
+  await unsureGame.closeAnswers();
+  assert.deepEqual([unsureGame.phase, unsureGame.playerView(aysel).skip.isAvailable, unsureGame.playerView(aysel).skip.isHostChecking], ['reveal', false, true]);
+  assert.throws(() => unsureGame.toggleSkip(aysel.token), /checking/);
+  unsureGame.setCorrect(aysel.id, 0, true);
+  assert.equal(unsureGame.playerView(aysel).skip.isAvailable, true);
+  unsureGame.toggleSkip(aysel.token);
+  assert.deepEqual([unsureGame.phase, unsureGame.index], ['question', 1]);
+  unsureGame.finish();
+
+  const game = newGame();
+  const nicat = game.join('Nicat');
+  goOnline(game, nicat);
+  game.startRound({ ...ROUND, secondsBetweenQuestions: 30, revealAtEnd: true });
+  assert.equal(game.playerView(nicat).skip.isAvailable, true, 'the wait before the first question has nothing to check');
+  game.skipWait();
+  game.submitAnswer(nicat.token, 'Bakı');
+  await game.closeAnswers();
+  assert.deepEqual([game.phase, game.index, game.playerView(nicat).skip.isAvailable], ['waiting', 1, false]);
+  assert.throws(() => game.toggleSkip(nicat.token), /checking/);
+  game.skipWait();
+  assert.equal(game.phase, 'question', 'the host skips the wait as before');
   game.finish();
 });

@@ -92,7 +92,9 @@ host's screen only, with how many times; the count starts again at each question
 an announcement (up to 300 characters) to every phone, never to the TV; players cannot reply. It shows at the top of each
 phone, which vibrates where it can, until the player closes it, the host clears or replaces it, or the next question starts. Phones have a small *Skip* button while the next question's number, a question or an answer is
 shown: when every online player has tapped it (tap again to take it back), the game moves on, unless the host has
-paused; phones and the host see how many tapped, and the count starts again at each step. Every finished round adds
+paused, and never while the host checks answers (between questions when the answers show at the end of the round, or
+while an answer is still *not sure*): phones then show that the host is checking, and only the host moves on. Phones
+and the host see how many tapped, and the count starts again at each step. Every finished round adds
 each player's correct, wrong and unanswered questions (counted from the question they joined at) to the
 **all-time leaderboard** in the party lobby, kept per name in the `party_results` table and carried through
 updates; *Reset* there deletes them. Windows

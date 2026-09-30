@@ -41,6 +41,8 @@ header { position: sticky; top: 0; z-index: 3; margin: -16px -16px 0; padding: 1
 .dock { position: sticky; bottom: 0; z-index: 3; margin: auto -16px calc(-24px - env(safe-area-inset-bottom)); padding: 12px 16px calc(12px + env(safe-area-inset-bottom)); background: linear-gradient(to bottom, transparent, var(--bg) 16px); }
 .skip { width: 100%; display: flex; flex-direction: column; gap: 10px; padding: 12px 14px; border-radius: 14px; background: var(--card); color: var(--fg); border: 1px solid var(--border); text-align: left; transition: background-color .2s, border-color .2s, transform .1s; -webkit-tap-highlight-color: transparent; }
 .skip:active { transform: scale(.98); }
+.skip:disabled { opacity: 1; cursor: default; transform: none; }
+.skip:disabled .skip-title { color: var(--muted); }
 .skip-main { display: flex; align-items: center; gap: 12px; }
 .skip-icon { flex: none; width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center; background: var(--bg); border: 1px solid var(--border); }
 .skip-text { flex: 1; min-width: 0; display: flex; flex-direction: column; line-height: 1.3; }
@@ -391,6 +393,7 @@ const ICONS = {
   pencil: '<path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/>',
   settings: '<path d="M12.2 2h-.4a2 2 0 0 0-2 2v.2a2 2 0 0 1-1 1.7l-.4.3a2 2 0 0 1-2 0l-.2-.1a2 2 0 0 0-2.7.7l-.2.4a2 2 0 0 0 .7 2.7l.2.1a2 2 0 0 1 1 1.7v.5a2 2 0 0 1-1 1.7l-.2.1a2 2 0 0 0-.7 2.7l.2.4a2 2 0 0 0 2.7.7l.2-.1a2 2 0 0 1 2 0l.4.3a2 2 0 0 1 1 1.7v.2a2 2 0 0 0 2 2h.4a2 2 0 0 0 2-2v-.2a2 2 0 0 1 1-1.7l.4-.3a2 2 0 0 1 2 0l.2.1a2 2 0 0 0 2.7-.7l.2-.4a2 2 0 0 0-.7-2.7l-.2-.1a2 2 0 0 1-1-1.7v-.5a2 2 0 0 1 1-1.7l.2-.1a2 2 0 0 0 .7-2.7l-.2-.4a2 2 0 0 0-2.7-.7l-.2.1a2 2 0 0 1-2 0l-.4-.3a2 2 0 0 1-1-1.7V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/>',
   close: '<path d="M18 6 6 18"/><path d="m6 6 12 12"/>',
+  hourglass: '<path d="M5 22h14"/><path d="M5 2h14"/><path d="M17 22v-4.2a2 2 0 0 0-.6-1.4L12 12l-4.4 4.4a2 2 0 0 0-.6 1.4V22"/><path d="M7 2v4.2a2 2 0 0 0 .6 1.4L12 12l4.4-4.4a2 2 0 0 0 .6-1.4V2"/>',
   megaphone: '<path d="m3 11 18-5v12L3 14v-3z"/><path d="M11.6 16.8a3 3 0 1 1-5.8-1.6"/>',
 };
 
@@ -421,10 +424,21 @@ function updateSkip() {
   const dock = document.getElementById('skip-dock');
   if (!dock) return;
   const skip = state.skip;
-  dock.hidden = !skip?.isAvailable;
+  dock.hidden = !skip?.isAvailable && !skip?.isHostChecking;
   if (dock.hidden) return;
+  const button = document.getElementById('skip-button');
+  button.disabled = !skip.isAvailable;
+  if (!skip.isAvailable) {
+    button.classList.remove('on');
+    document.getElementById('skip-icon').replaceChildren(icon(ICONS.hourglass));
+    document.getElementById('skip-title').textContent = 'The host is checking answers';
+    document.getElementById('skip-hint').textContent = 'Only the host can move on now';
+    document.getElementById('skip-count').textContent = '';
+    document.getElementById('skip-segments').replaceChildren();
+    return;
+  }
   const others = skip.of - skip.count;
-  document.getElementById('skip-button').classList.toggle('on', !!skip.isMine);
+  button.classList.toggle('on', !!skip.isMine);
   document.getElementById('skip-icon').replaceChildren(icon(skip.isMine ? ICONS.check : ICONS.skip));
   document.getElementById('skip-title').textContent = skip.isMine ? `Waiting for ${others} ${others === 1 ? 'player' : 'players'}` : SKIP_TITLES[state.phase];
   document.getElementById('skip-hint').textContent = skip.isMine ? 'Tap to undo' : 'Moves on when everyone taps';

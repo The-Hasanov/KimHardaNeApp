@@ -176,18 +176,30 @@ class PartyGame {
     return `${this.round}:${this.phase}:${this.index}`;
   }
 
+  isHostChecking() {
+    if (this.phase === 'judging') return true;
+    if (this.phase === 'waiting') return this.rules.revealAtEnd && this.index > 0;
+    if (this.phase === 'reveal') return [...(this.answers[this.index]?.values() ?? [])].some(answer => answer.verdict === 'unsure' && !answer.decidedByHost);
+    return false;
+  }
+
+  canSkip() {
+    return SKIPPABLE_PHASES.includes(this.phase) && !this.isHostChecking();
+  }
+
   skipStatus(playerId = null) {
     const skipped = this.skips.key === this.skipKey() ? this.skips.playerIds : new Set();
     const online = [...this.players.keys()].filter(id => this.isOnline(id));
     return {
-      isAvailable: SKIPPABLE_PHASES.includes(this.phase), count: online.filter(id => skipped.has(id)).length, of: online.length,
+      isAvailable: this.canSkip(), isHostChecking: this.isHostChecking(), count: online.filter(id => skipped.has(id)).length, of: online.length,
       ...(playerId && { isMine: skipped.has(playerId) }),
     };
   }
 
   toggleSkip(token) {
     const player = this.playerByToken(token);
-    if (!SKIPPABLE_PHASES.includes(this.phase)) throw new PartyError(409, 'Nothing to skip now');
+    if (this.isHostChecking()) throw new PartyError(409, 'The host is checking the answers');
+    if (!this.canSkip()) throw new PartyError(409, 'Nothing to skip now');
     if (this.skips.key !== this.skipKey()) this.skips = { key: this.skipKey(), playerIds: new Set() };
     if (this.skips.playerIds.has(player.id)) this.skips.playerIds.delete(player.id);
     else this.skips.playerIds.add(player.id);
@@ -196,7 +208,7 @@ class PartyGame {
   }
 
   skipIfEveryoneAgrees() {
-    if (!SKIPPABLE_PHASES.includes(this.phase) || this.pausedRemainingMs != null) return;
+    if (!this.canSkip() || this.pausedRemainingMs != null) return;
     const { count, of } = this.skipStatus();
     if (!of || count < of) return;
     ({ waiting: () => this.openAnswers(), question: () => this.closeAnswers(), reveal: () => this.next() })[this.phase]();
