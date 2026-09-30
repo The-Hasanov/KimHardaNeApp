@@ -702,7 +702,7 @@ test('streak bonuses and all or nothing count through a whole round and reach th
   const game = new PartyGame({ judge: judgeByText, onRoundFinished: results => reports.push(results) });
   const aysel = game.join('Aysel');
   const nicat = game.join('Nicat');
-  const pointSystem = { name: 'Perfect', simple: { correct: 2 }, streak: { isOn: true, from: 2, bonus: 1 }, allOrNothing: { isOn: true, perfectBonus: 5 } };
+  const pointSystem = { name: 'Perfect', simple: { correct: 2 }, streak: { isOn: true, from: 2, bonus: 1 }, allOrNothing: { isOn: true }, perfectBonus: { isOn: true, points: 5 } };
   game.startRound({ ...ROUND, questions: THREE_QUESTIONS, pointSystem });
   await playQuestion(game, [[aysel, 'Bakı'], [nicat, 'Bakı']]);
   game.next();
@@ -711,6 +711,7 @@ test('streak bonuses and all or nothing count through a whole round and reach th
   game.next();
   await playQuestion(game, [[aysel, 'Kür'], [nicat, 'Araz']]);
   assert.equal(game.playerView(nicat).reveal.isRoundLost, true);
+  assert.equal(game.playerView(aysel).reveal.perfectBonus, 5);
   game.next();
   assert.equal(game.phase, 'finished');
   assert.deepEqual(game.leaderboard().map(entry => [entry.name, entry.score]), [['Aysel', 2 + 3 + 3 + 5], ['Nicat', 0]]);

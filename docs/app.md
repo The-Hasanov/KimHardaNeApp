@@ -90,8 +90,9 @@ npm test         # offline tests for the scraper, search, ranking, edits, data u
   left, and a question without a pick plays for the lowest free value. A round cannot start when it has more questions
   than a limited pool has picks. Extras can be switched on together: a *streak bonus* from the nth correct answer in a
   row (the same bonus each time, or growing by the bonus), *all or nothing* (a player scores for the round only with no
-  wrong answer, and with no blank one unless *No answer counts as wrong* is off; an optional *perfect round bonus* is
-  added at the end), and *risk* (fixed points only): a *Risk it* switch on the phone uses the risked correct and wrong
+  wrong answer, and with no blank one unless *No answer counts as wrong* is off), an *all correct bonus* for any point
+  system (extra points at the end of a round for players with every answer right, shown on the phone at the last
+  answer; with all or nothing and *No answer counts as wrong* off, a blank answer does not lose it), and *risk* (fixed points only): a *Risk it* switch on the phone uses the risked correct and wrong
   points, up to an optional number of risks per round; a risked question left blank is not used up. The host sees each
   player's pick or risk next to the answer, phones see their points with the streak bonus after the reveal, and the
   scoring rules sit in `scoring.js`. *Show the answers: At the end of

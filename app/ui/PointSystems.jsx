@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { cn } from 'cn';
-import { CopyIcon, DicesIcon, FlameIcon, LayoutTemplateIcon, PencilIcon, PlusIcon, SigmaIcon, Trash2Icon, TriangleAlertIcon, XIcon } from 'lucide-react';
+import { AwardIcon, CopyIcon, DicesIcon, FlameIcon, LayoutTemplateIcon, PencilIcon, PlusIcon, SigmaIcon, Trash2Icon, TriangleAlertIcon, XIcon } from 'lucide-react';
 import { toast } from 'sonner';
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter,
@@ -25,7 +25,8 @@ const NEW_POINT_SYSTEM = {
   simple: { correct: 1, wrong: 0, unanswered: 0 },
   pool: [{ points: 10, wrong: 0, unanswered: 0, uses: null }, { points: 20, wrong: -10, unanswered: 0, uses: null }, { points: 30, wrong: -20, unanswered: -10, uses: null }],
   streak: { isOn: false, from: 3, bonus: 1, isGrowing: false },
-  allOrNothing: { isOn: false, unansweredCountsAsWrong: true, perfectBonus: 0 },
+  allOrNothing: { isOn: false, unansweredCountsAsWrong: true },
+  perfectBonus: { isOn: false, points: 5 },
   risk: { isOn: false, correct: 2, wrong: -2, limit: null },
 };
 
@@ -105,10 +106,15 @@ function streakExample(draft) {
 }
 
 function allOrNothingExample(draft) {
-  const { perfectBonus, unansweredCountsAsWrong } = draft.allOrNothing;
-  const base = draft.mode === 'pool' ? 'the picked points' : `5 × ${draft.simple.correct} = ${5 * draft.simple.correct}`;
-  const perfect = draft.mode === 'pool' ? `${base}${perfectBonus ? ` ${signed(perfectBonus)}` : ''}` : `${5 * draft.simple.correct + perfectBonus}`;
-  return `5 questions, all correct: ${perfect}${perfectBonus && draft.mode !== 'pool' ? ` (with the ${signed(perfectBonus)} bonus)` : ''}. One wrong answer${unansweredCountsAsWrong ? ' or no answer' : ''}: 0 for the round.`;
+  const all = draft.mode === 'pool' ? 'the picked points' : `5 × ${draft.simple.correct} = ${5 * draft.simple.correct}`;
+  return `5 questions, all correct: ${all}. One wrong answer${draft.allOrNothing.unansweredCountsAsWrong ? ' or no answer' : ''}: 0 for the round.`;
+}
+
+function perfectBonusExample(draft) {
+  const bonus = signed(draft.perfectBonus.points);
+  if (draft.mode === 'pool') return `A round with every answer right gets the picked points ${bonus}.`;
+  const earned = 5 * draft.simple.correct;
+  return `5 questions, all correct: ${earned} ${bonus} = ${earned + draft.perfectBonus.points}. One wrong${draft.allOrNothing.isOn && !draft.allOrNothing.unansweredCountsAsWrong ? '' : ' or missing'} answer and there is no bonus.`;
 }
 
 function PoolEditor({ pool, onChange }) {
@@ -208,14 +214,18 @@ function PointSystemEditor({ system, onOpenChange, onSaved }) {
           </ExtraCard>
           <ExtraCard id="all-or-nothing" Icon={SigmaIcon} title="All or nothing" description="Players score only when they answer every question in the round correctly."
             isOn={draft.allOrNothing.isOn} onToggle={isOn => set('allOrNothing', { isOn })}>
-            <NumberField id="perfect-bonus" label="Perfect round bonus" value={draft.allOrNothing.perfectBonus} min={0} max={POINTS.max}
-              onChange={perfectBonus => set('allOrNothing', { perfectBonus })} />
             <div className="flex h-8 items-center gap-2">
               <Switch id="unanswered-counts" checked={draft.allOrNothing.unansweredCountsAsWrong}
                 onCheckedChange={unansweredCountsAsWrong => set('allOrNothing', { unansweredCountsAsWrong })} />
               <Label htmlFor="unanswered-counts" className="font-normal">No answer counts as wrong</Label>
             </div>
             <Example>{allOrNothingExample(draft)}</Example>
+          </ExtraCard>
+          <ExtraCard id="perfect-bonus" Icon={AwardIcon} title="All correct bonus" description="Extra points at the end of a round for players who got every answer right."
+            isOn={draft.perfectBonus.isOn} onToggle={isOn => set('perfectBonus', { isOn })}>
+            <NumberField id="perfect-bonus-points" label="Bonus" value={draft.perfectBonus.points} min={1} max={POINTS.max}
+              onChange={points => set('perfectBonus', { points })} />
+            <Example>{perfectBonusExample(draft)}</Example>
           </ExtraCard>
           <ExtraCard id="risk" Icon={DicesIcon} title="Risk" description="Players can risk an answer: more points when right, a bigger loss when wrong."
             isOn={draft.risk.isOn} onToggle={isOn => set('risk', { isOn })} isDisabled={draft.mode === 'pool'}

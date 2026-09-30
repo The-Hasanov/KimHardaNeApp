@@ -26,15 +26,33 @@ test('a growing streak bonus grows by the bonus with every correct answer in a r
   assert.deepEqual(perQuestion(round(points, [C, C, C, C, C])), [1, 1, 2, 3, 4]);
 });
 
-test('all or nothing pays only a clean round, with an optional perfect round bonus', () => {
-  const points = system({ simple: { correct: 2, wrong: -1, unanswered: -1 }, allOrNothing: { isOn: true, perfectBonus: 5 } });
+test('all or nothing pays only a clean round, and can have the all correct bonus', () => {
+  const points = system({ simple: { correct: 2, wrong: -1, unanswered: -1 }, allOrNothing: { isOn: true }, perfectBonus: { isOn: true, points: 5 } });
   assert.equal(round(points, [C, C, C, C, C], { isComplete: true }).total, 15);
   assert.equal(round(points, [C, C, C, C, C]).total, 10);
   assert.equal(round(points, [C, C, W, C, C], { isComplete: true }).total, 0);
   assert.equal(round(points, [C, C, U, C, C], { isComplete: true }).total, 0);
-  const lenient = system({ simple: { correct: 2, unanswered: -1 }, allOrNothing: { isOn: true, unansweredCountsAsWrong: false, perfectBonus: 5 } });
+  const lenient = system({ simple: { correct: 2, unanswered: -1 }, allOrNothing: { isOn: true, unansweredCountsAsWrong: false }, perfectBonus: { isOn: true, points: 5 } });
   assert.equal(round(lenient, [C, C, U, C, C], { isComplete: true }).total, 13);
   assert.equal(round(lenient, [U, U], { isComplete: true }).total, 0);
+});
+
+test('the all correct bonus works in any point system, only for a finished round with every answer right', () => {
+  const points = system({ simple: { correct: 1, wrong: -1 }, perfectBonus: { isOn: true, points: 4 } });
+  assert.equal(round(points, [C, C, C], { isComplete: true }).total, 7);
+  assert.equal(round(points, [C, C, C]).total, 3);
+  assert.equal(round(points, [C, W, C], { isComplete: true }).total, 1);
+  assert.equal(round(points, [C, U, C], { isComplete: true }).total, 2);
+  const pool = system({ mode: 'pool', pool: [{ points: 10 }, { points: 30 }], perfectBonus: { isOn: true, points: 20 } });
+  assert.equal(round(pool, [{ outcome: C, stake: { pick: 1 } }, { outcome: C, stake: { pick: 0 } }], { isComplete: true }).total, 60);
+  assert.equal(round(system({ simple: { correct: 1 } }), [C, C], { isComplete: true }).total, 2);
+});
+
+test('a perfect round bonus saved inside all or nothing becomes the all correct bonus', () => {
+  const points = normalizePointSystem({ name: 'Old', allOrNothing: { isOn: true, perfectBonus: 7 } });
+  assert.deepEqual(points.perfectBonus, { isOn: true, points: 7 });
+  assert.equal('perfectBonus' in points.allOrNothing, false);
+  assert.equal(normalizePointSystem({ name: 'New' }).perfectBonus.isOn, false);
 });
 
 test('a risked answer uses the risk points, and an unanswered risk scores as unanswered', () => {

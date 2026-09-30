@@ -710,10 +710,10 @@ class PartyGame {
   }
 
   revealedPointsOf(player) {
-    if (this.index < this.firstPositionOf(player)) return { points: 0, streakBonus: 0, isRoundLost: false };
-    const { perQuestion, isBroken } = this.scoreOf(player, this.index + 1);
+    if (this.index < this.firstPositionOf(player)) return { points: 0, streakBonus: 0, perfectBonus: 0, isRoundLost: false };
+    const { perQuestion, isBroken, perfectBonus } = this.scoreOf(player, this.index + 1);
     const { points = 0, streakBonus = 0 } = perQuestion.at(-1) ?? {};
-    return { points, streakBonus, isRoundLost: isBroken };
+    return { points, streakBonus, perfectBonus, isRoundLost: isBroken };
   }
 
   changed() {

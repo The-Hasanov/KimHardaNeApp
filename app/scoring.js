@@ -11,7 +11,8 @@ const CLASSIC_POINT_SYSTEM = {
   simple: { correct: 1, wrong: 0, unanswered: 0 },
   pool: [{ points: 10, wrong: 0, unanswered: 0, uses: null }, { points: 20, wrong: -10, unanswered: 0, uses: null }, { points: 30, wrong: -20, unanswered: -10, uses: null }],
   streak: { isOn: false, from: 3, bonus: 1, isGrowing: false },
-  allOrNothing: { isOn: false, unansweredCountsAsWrong: true, perfectBonus: 0 },
+  allOrNothing: { isOn: false, unansweredCountsAsWrong: true },
+  perfectBonus: { isOn: false, points: 5 },
   risk: { isOn: false, correct: 2, wrong: -2, limit: null },
 };
 
@@ -49,7 +50,11 @@ function normalizePointSystem(input = {}) {
   const allOrNothing = {
     isOn: !!input.allOrNothing?.isOn,
     unansweredCountsAsWrong: input.allOrNothing?.unansweredCountsAsWrong !== false,
-    perfectBonus: countOf(input.allOrNothing?.perfectBonus, 0, POINT_LIMIT, 0),
+  };
+  const oldPerfectBonus = Number(input.allOrNothing?.perfectBonus) || 0;
+  const perfectBonus = {
+    isOn: typeof input.perfectBonus?.isOn === 'boolean' ? input.perfectBonus.isOn : oldPerfectBonus > 0,
+    points: countOf(input.perfectBonus?.points ?? (oldPerfectBonus || undefined), 1, POINT_LIMIT, base.perfectBonus.points),
   };
   const risk = {
     isOn: mode === 'simple' && !!input.risk?.isOn,
@@ -57,7 +62,7 @@ function normalizePointSystem(input = {}) {
     wrong: pointsOf(input.risk?.wrong, base.risk.wrong),
     limit: limitOf(input.risk?.limit, MAX_USES),
   };
-  return { name, mode, simple, pool: pool.length ? pool : base.pool, streak, allOrNothing, risk };
+  return { name, mode, simple, pool: pool.length ? pool : base.pool, streak, allOrNothing, perfectBonus, risk };
 }
 
 const signed = points => (points > 0 ? `+${points}` : points < 0 ? `−${-points}` : '0');
@@ -69,8 +74,9 @@ function summaryOf(system) {
   if (system.risk.isOn) lines.push(`Risk: correct ${signed(system.risk.correct)} · wrong ${signed(system.risk.wrong)}${system.risk.limit ? ` · ${system.risk.limit} per round` : ''}`);
   if (system.streak.isOn) lines.push(`Streak: ${signed(system.streak.bonus)}${system.streak.isGrowing ? ' more each time' : ''} from ${system.streak.from} correct in a row`);
   if (system.allOrNothing.isOn) {
-    lines.push(`All or nothing${system.allOrNothing.unansweredCountsAsWrong ? '' : ' (no answer is not a miss)'}${system.allOrNothing.perfectBonus ? ` · perfect round ${signed(system.allOrNothing.perfectBonus)}` : ''}`);
+    lines.push(`All or nothing${system.allOrNothing.unansweredCountsAsWrong ? '' : ' (no answer is not a miss)'}`);
   }
+  if (system.perfectBonus.isOn) lines.push(`All correct bonus: ${signed(system.perfectBonus.points)} for a round with every answer right`);
   return lines;
 }
 
@@ -114,6 +120,7 @@ function scoreRound(system, entries, { isComplete = false } = {}) {
   let inARow = 0;
   let isBroken = false;
   let hasCorrect = false;
+  let hasMiss = false;
   const perQuestion = entries.map(({ outcome, stake }) => {
     const points = basePoints(system, outcome, stake);
     let streakBonus = 0;
@@ -125,11 +132,13 @@ function scoreRound(system, entries, { isComplete = false } = {}) {
       }
     } else if (outcome !== 'pending') {
       inARow = 0;
-      if (system.allOrNothing.isOn && (outcome === 'wrong' || system.allOrNothing.unansweredCountsAsWrong)) isBroken = true;
+      const isMiss = outcome === 'wrong' || !system.allOrNothing.isOn || system.allOrNothing.unansweredCountsAsWrong;
+      if (isMiss) hasMiss = true;
+      if (system.allOrNothing.isOn && isMiss) isBroken = true;
     }
     return { points, streakBonus };
   });
-  const perfectBonus = system.allOrNothing.isOn && isComplete && !isBroken && hasCorrect ? system.allOrNothing.perfectBonus : 0;
+  const perfectBonus = system.perfectBonus.isOn && isComplete && !hasMiss && hasCorrect ? system.perfectBonus.points : 0;
   const earned = perQuestion.reduce((sum, { points, streakBonus }) => sum + points + streakBonus, 0);
   return { perQuestion, perfectBonus, isBroken, total: isBroken ? 0 : earned + perfectBonus };
 }
