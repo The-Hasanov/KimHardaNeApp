@@ -86,10 +86,18 @@ npm test         # offline tests for the scraper, data sources, search, ranking,
   leaderboard, and the host sees every answer and can overrule it. In Party mode the host plans the **rounds** before opening the party: each round has its own questions (random from the picked sources and games, with a count,
   or a list), timers, answer showing, autoplay and point system, and rounds can be added, duplicated, removed and changed
   until they are played (between rounds too). The party cannot open, and a round cannot start, while a planned round does
-  not fit its point system or its list is gone; the round shows why in red. *Save as template* keeps the plan as a **game
+  not fit its point system or its list is gone; the round shows why in red. **Show pages** turn the party into a show:
+  on *Game → Show pages* (`ShowPages.jsx`, `show_pages` table, `showPages.js` cleans them) the host makes pages with a
+  title, text blocks (normal or large) and pictures (copied to `images/own/` like other own media), and the seconds each
+  stays on screen, with a live preview of the TV. Each round's editor has *Show pages before this round*: add several,
+  reorder them or remove them (*Manage show pages* opens the tab, or a window during a party). When the round starts, its
+  pages play one after another on the TV and every phone (phase `show`), then the first question comes. The host sees
+  the page with a countdown and can skip to the next page (Space), pause and resume; players can skip together as with
+  a wait. Pictures reach the TV and phones through `/tv/show-image` and `/show-image` (phones need their token), only
+  while their page is showing. *Save as template* keeps the plan as a **game
   template** (`game_templates` table, carried through updates; saving with an existing name replaces it), and *Use a
-  template* or *Game → Templates → Use* loads one. Templates point to their point systems, so editing a point system changes
-  every template that uses it, and a point system a template uses cannot be deleted. Each round uses a **point system**,
+  template* or *Game → Templates → Use* loads one. Templates point to their point systems and show pages, so editing one changes
+  every template that uses it, and a point system or show page a template uses cannot be deleted. Each round uses a **point system**,
   picked in the round settings and kept under *Game → Point systems* (`point_systems` table, carried through updates;
   a *Classic* one, correct +1, is made on first use). A point system has either *fixed points* (correct, wrong and no
   answer, negative for a penalty) or a *point pool* (values such as 10, 20 and 30, each with its own wrong and no-answer

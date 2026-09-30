@@ -19,6 +19,9 @@ game from the app. Bring your own questions or install a question bank from *Dat
   themselves and reconnect without losing their place. Answer times break ties, the round ends with a podium, and
   an all-time leaderboard adds up every round. The host can send messages to all players and sees who leaves the
   game screen during a question.
+- **Your own quiz show**: name the party, plan its rounds, and put **show pages** (titles, text and pictures, each on
+  screen for its own seconds) before any round to greet the players or explain the rules. Save the whole show as a
+  template.
 - **Any TV**: a TV window on a second screen, Miracast, or the web browser of a Samsung Smart TV.
 - **Host controls**: points for right and wrong answers, pause, autoplay, answers shown after each question or
   all at the end of the round, several rounds with or without keeping the scores, and no question shown twice

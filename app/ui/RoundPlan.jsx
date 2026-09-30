@@ -177,7 +177,7 @@ export default function RoundPlan({ rounds, onRoundsChange, lists, pointSystems,
   const blockedCount = rounds.filter((round, index) => index >= playedCount && roundProblem(round, lists, pointSystems, sources)).length;
   const change = (index, round) => onRoundsChange(rounds.map((current, i) => (i === index ? round : current)));
   const add = () => {
-    onRoundsChange([...rounds, { ...(rounds.at(-1) ?? NEW_ROUND) }]);
+    onRoundsChange([...rounds, { ...(rounds.at(-1) ?? NEW_ROUND), showPageIds: [] }]);
     setOpenIndex(rounds.length);
   };
   const duplicate = index => {
