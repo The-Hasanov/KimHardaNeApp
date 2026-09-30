@@ -10,7 +10,7 @@ const MODELS = {
 };
 const MODEL = 'Xenova/bge-m3';
 const BATCH = 32;
-const DEFAULT_DB = process.env.QUIZ_DB || path.join(__dirname, '..', 'data', '3sual.sqlite');
+const DEFAULT_DB = process.env.QUIZ_DB || path.join(__dirname, '..', 'data', 'kimhardane.sqlite');
 
 const pipes = new Map();
 const where = { modelsDir: path.join(__dirname, 'models') };

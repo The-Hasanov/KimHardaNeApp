@@ -5,6 +5,7 @@ const crypto = require('node:crypto');
 const { parseArgs } = require('node:util');
 const { DatabaseSync } = require('node:sqlite');
 
+const SOURCE_ID = '3sual';
 const API = 'https://api.3sual.az/api/';
 const IMAGES = 'https://api.3sual.az/images/';
 const ALL_GAMES = '1,2,3,4,5,6,7';
@@ -323,7 +324,7 @@ CREATE TABLE IF NOT EXISTS themes (
   package_id INTEGER, theme_id INTEGER, phase_id INTEGER, position INTEGER, name TEXT, raund INTEGER,
   information TEXT, authors TEXT, sources TEXT, PRIMARY KEY (package_id, theme_id));
 CREATE TABLE IF NOT EXISTS questions (
-  package_id INTEGER NOT NULL, kind TEXT NOT NULL CHECK (kind IN ('question','theme')),
+  source_id TEXT NOT NULL, package_id INTEGER NOT NULL, kind TEXT NOT NULL CHECK (kind IN ('question','theme')),
   value_id INTEGER NOT NULL, uid TEXT NOT NULL UNIQUE, origin TEXT NOT NULL, ordinal INTEGER,
   package_name TEXT, package_played TEXT, tournament_id INTEGER, tournament_name TEXT,
   tournament_continuation TEXT, game_id INTEGER, game_name TEXT,
@@ -334,7 +335,7 @@ CREATE TABLE IF NOT EXISTS questions (
   rekvizit_text TEXT, rekvizit_url TEXT, source_media_url TEXT, sources TEXT, authors TEXT,
   is_translated INTEGER, is_rekvizit_for_all INTEGER, raw_value TEXT, raw_parent TEXT,
   edited_at TEXT,  -- set by the editor; edited rows survive --refresh
-  PRIMARY KEY (package_id, kind, value_id));
+  PRIMARY KEY (source_id, package_id, kind, value_id));
 CREATE INDEX IF NOT EXISTS questions_value ON questions (kind, value_id);
 CREATE TABLE IF NOT EXISTS authors (
   id INTEGER PRIMARY KEY, fullname TEXT, questions INTEGER, themes INTEGER, editors INTEGER,
@@ -347,7 +348,7 @@ CREATE TABLE IF NOT EXISTS errors (
   severity TEXT NOT NULL, path TEXT, message TEXT NOT NULL, raw TEXT, created_at TEXT);
 `;
 
-const QUESTION_COLUMNS = ['package_id', 'kind', 'value_id', 'uid', 'origin', 'ordinal', 'package_name', 'package_played',
+const QUESTION_COLUMNS = ['source_id', 'package_id', 'kind', 'value_id', 'uid', 'origin', 'ordinal', 'package_name', 'package_played',
   'tournament_id', 'tournament_name', 'tournament_continuation', 'game_id', 'game_name',
   'phase_id', 'phase_name', 'subphase_id', 'subphase_name', 'phase_path',
   'theme_id', 'theme_name', 'theme_round', 'theme_information',
@@ -362,14 +363,15 @@ const INSERT_QUESTION = `INSERT OR IGNORE INTO questions (${QUESTION_COLUMNS}) V
 function prepareDb(db) {
   db.exec('PRAGMA journal_mode=WAL');
   db.exec(SCHEMA);
-  if (!db.prepare('PRAGMA table_info(questions)').all().some(c => c.name === 'edited_at')) {
-    db.exec('ALTER TABLE questions ADD COLUMN edited_at TEXT');
-  }
+  const columns = db.prepare('PRAGMA table_info(questions)').all().map(c => c.name);
+  if (!columns.includes('edited_at')) db.exec('ALTER TABLE questions ADD COLUMN edited_at TEXT');
+  if (!columns.includes('source_id')) db.exec(`ALTER TABLE questions ADD COLUMN source_id TEXT NOT NULL DEFAULT '${SOURCE_ID}'`);
+  db.exec('CREATE INDEX IF NOT EXISTS questions_source ON questions (source_id, game_id)');
   return db;
 }
 
 const connect = file => prepareDb(new DatabaseSync(file));
-const questionRow = rec => QUESTION_COLUMNS.map(c => (JSON_COLUMNS.has(c) ? dumps(rec[c]) : rec[c]));
+const questionRow = rec => QUESTION_COLUMNS.map(c => (c === 'source_id' ? SOURCE_ID : JSON_COLUMNS.has(c) ? dumps(rec[c]) : rec[c]));
 
 function recordError(db, runId, stage, message, { packageId = null, path: p = null, raw = null, severity = 'error' } = {}) {
   run(db.prepare('INSERT INTO errors (run_id, package_id, stage, severity, path, message, raw, created_at) VALUES (?,?,?,?,?,?,?,?)'),
@@ -381,7 +383,7 @@ function storePackage(db, runId, pid, doc, ext) {
   const hard = ext.problems.filter(p => p.severity === 'error').length;
   const status = hard ? 'partial' : ext.records.length ? 'ok' : 'empty';
   tx(db, () => {
-    run(db.prepare("DELETE FROM questions WHERE package_id = ? AND origin = 'package' AND edited_at IS NULL"), pid);
+    run(db.prepare("DELETE FROM questions WHERE source_id = ? AND package_id = ? AND origin = 'package' AND edited_at IS NULL"), SOURCE_ID, pid);
     run(db.prepare('DELETE FROM themes WHERE package_id = ?'), pid);
     run(db.prepare('DELETE FROM phases WHERE package_id = ?'), pid);
     run(db.prepare("DELETE FROM errors WHERE package_id = ? AND stage IN ('fetch','parse')"), pid);
@@ -395,9 +397,9 @@ function storePackage(db, runId, pid, doc, ext) {
     for (const t of ext.themes) {
       run(theme, pid, t.theme_id, t.phase_id, t.position, t.name, t.raund, t.information, dumps(t.authors), dumps(t.sources));
     }
-    const del = db.prepare('DELETE FROM questions WHERE package_id = ? AND kind = ? AND value_id = ? AND edited_at IS NULL');
+    const del = db.prepare('DELETE FROM questions WHERE source_id = ? AND package_id = ? AND kind = ? AND value_id = ? AND edited_at IS NULL');
     const ins = db.prepare(INSERT_QUESTION);
-    for (const r of ext.records) run(del, pid, r.kind, r.value_id);
+    for (const r of ext.records) run(del, SOURCE_ID, pid, r.kind, r.value_id);
     for (const r of ext.records) run(ins, ...questionRow(r));
     for (const p of ext.problems) recordError(db, runId, 'parse', p.message, { packageId: pid, path: p.path, raw: p.raw, severity: p.severity });
     run(db.prepare(`INSERT INTO packages (id, status, error, name, game_id, game_name, game_with_theme,
@@ -651,8 +653,8 @@ class Crawler {
       this.audit.packages_discovered.push(pid);
       await this.fetchPackage(pid);
     }
-    const known = this.db.prepare('SELECT 1 FROM questions WHERE kind = ? AND value_id = ?');
-    const missing = records.filter(r => !known.get(r.kind, r.value_id));
+    const known = this.db.prepare('SELECT 1 FROM questions WHERE source_id = ? AND kind = ? AND value_id = ?');
+    const missing = records.filter(r => !known.get(SOURCE_ID, r.kind, r.value_id));
     if (missing.length) {
       this.log('warning', `audit: author ${aid} ${kind} listing reveals ${missing.length} values absent from packages`);
       tx(this.db, () => {
@@ -900,7 +902,7 @@ async function main(argv) {
   }
 }
 
-module.exports = { Client, FetchError, Interrupted, Extraction, media, mergeLists, normalizePackage, validateDocument,
+module.exports = { SOURCE_ID, Client, FetchError, Interrupted, Extraction, media, mergeLists, normalizePackage, validateDocument,
   SCHEMA, QUESTION_COLUMNS, connect, prepareDb, questionRow, storePackage, markFailed, Crawler, buildReport,
   exportJsonl, imagePath, downloadImages, openRun, crawl, main };
 

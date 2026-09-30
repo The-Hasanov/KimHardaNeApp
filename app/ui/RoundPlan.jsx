@@ -10,14 +10,14 @@ import { Label } from '@/components/ui/label';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
-import { MIN_SECONDS_TO_CHECK_ANSWERS, NumberField, QuestionSourceSelect, withoutIpcPrefix } from './gameShared';
+import { GamePicker, MIN_SECONDS_TO_CHECK_ANSWERS, NumberField, QuestionSourceSelect, gamesProblem, gamesSummary, withoutIpcPrefix } from './gameShared';
 import { PointSystemSelect, roundProblemOf } from './PointSystems';
 
 const { api } = window;
 const MAX_ROUNDS = 20;
 const DEFAULT_SECONDS_ON_ANSWER = 10;
 export const NEW_ROUND = {
-  listId: null, randomCount: 10, includeOwn: false, secondsPerQuestion: 60, secondsBetweenQuestions: 0, revealAtEnd: false, secondsOnAnswer: 0, pointSystemId: null,
+  listId: null, randomCount: 10, games: [], secondsPerQuestion: 60, secondsBetweenQuestions: 0, revealAtEnd: false, secondsOnAnswer: 0, pointSystemId: null,
 };
 
 export const pointSystemOf = (round, pointSystems) => pointSystems?.find(system => system.id === round.pointSystemId) ?? pointSystems?.[0] ?? null;
@@ -27,15 +27,18 @@ export function questionCountOf(round, lists) {
   return round.listId == null ? round.randomCount : listOf(round, lists)?.count ?? 0;
 }
 
-export function roundProblem(round, lists, pointSystems) {
+export function roundProblem(round, lists, pointSystems, sources) {
   if (round.listId != null && !listOf(round, lists)) return 'Its list was deleted. Choose other questions.';
+  if (round.listId == null && gamesProblem(round.games ?? [], sources)) return gamesProblem(round.games ?? [], sources);
   if (!questionCountOf(round, lists)) return 'Its list has no questions.';
   return roundProblemOf(pointSystemOf(round, pointSystems), questionCountOf(round, lists));
 }
 
-export function roundSummary(round, lists, pointSystems) {
+export function roundSummary(round, lists, pointSystems, sources) {
   const list = listOf(round, lists);
-  const questions = round.listId == null ? `${round.randomCount} random questions` : list ? `${list.name} (${list.count})` : 'a deleted list';
+  const from = gamesSummary(round.games ?? [], sources);
+  const questions = round.listId != null ? (list ? `${list.name} (${list.count})` : 'a deleted list')
+    : `${round.randomCount} random questions${from === 'All questions' ? '' : ` from ${from}`}`;
   return [
     questions,
     `${round.secondsPerQuestion} s each`,
@@ -45,18 +48,15 @@ export function roundSummary(round, lists, pointSystems) {
   ].filter(Boolean).join(' · ');
 }
 
-function RoundEditor({ index, round, lists, pointSystems, onChange }) {
+function RoundEditor({ index, round, lists, pointSystems, sources, onChange }) {
   const id = name => `round-${index}-${name}`;
   const set = changes => onChange({ ...round, ...changes });
   return (
     <div className="flex flex-wrap items-end gap-x-6 gap-y-4 border-t px-4 py-4">
       <QuestionSourceSelect id={id('questions')} lists={lists} listId={round.listId} onListIdChange={listId => set({ listId })} className="w-56" />
       {round.listId == null && <>
+        <GamePicker id={id('games')} sources={sources} games={round.games ?? []} onGamesChange={games => set({ games })} className="w-56" />
         <NumberField id={id('count')} label="How many" value={round.randomCount} min={1} max={50} onChange={randomCount => set({ randomCount })} />
-        <div className="flex h-8 items-center gap-2">
-          <Switch id={id('own')} checked={round.includeOwn} onCheckedChange={includeOwn => set({ includeOwn })} />
-          <Label htmlFor={id('own')} className="font-normal">Include my questions</Label>
-        </div>
       </>}
       <div className="grid basis-full gap-2">
         <Label>Show the answers</Label>
@@ -133,10 +133,10 @@ function SaveTemplateDialog({ isOpen, onOpenChange, rounds, templates, suggested
   );
 }
 
-export default function RoundPlan({ rounds, onRoundsChange, lists, pointSystems, templates, onTemplatesChange, templateName, onTemplateNameChange, playedCount = 0, action }) {
+export default function RoundPlan({ rounds, onRoundsChange, lists, pointSystems, sources, templates, onTemplatesChange, templateName, onTemplateNameChange, playedCount = 0, action }) {
   const [openIndex, setOpenIndex] = useState(null);
   const [isSaving, setIsSaving] = useState(false);
-  const blockedCount = rounds.filter((round, index) => index >= playedCount && roundProblem(round, lists, pointSystems)).length;
+  const blockedCount = rounds.filter((round, index) => index >= playedCount && roundProblem(round, lists, pointSystems, sources)).length;
   const change = (index, round) => onRoundsChange(rounds.map((current, i) => (i === index ? round : current)));
   const add = () => {
     onRoundsChange([...rounds, { ...(rounds.at(-1) ?? NEW_ROUND) }]);
@@ -185,7 +185,7 @@ export default function RoundPlan({ rounds, onRoundsChange, lists, pointSystems,
           const isPlayed = index < playedCount;
           const isNext = index === playedCount;
           const isOpen = openIndex === index && !isPlayed;
-          const problem = !isPlayed && roundProblem(round, lists, pointSystems);
+          const problem = !isPlayed && roundProblem(round, lists, pointSystems, sources);
           return (
             <li key={index} className={cn('rounded-lg border', isNext && 'border-primary/40', isPlayed && 'bg-muted/40')}>
               <div className="flex items-center gap-3 px-4 py-2.5">
@@ -202,7 +202,7 @@ export default function RoundPlan({ rounds, onRoundsChange, lists, pointSystems,
                     {problem && <TriangleAlertIcon className="size-4 text-destructive" aria-label="Cannot start" />}
                   </span>
                   <span className={cn('block truncate text-sm text-muted-foreground', problem && !isOpen && 'text-destructive')}>
-                    {problem && !isOpen ? problem : roundSummary(round, lists, pointSystems)}
+                    {problem && !isOpen ? problem : roundSummary(round, lists, pointSystems, sources)}
                   </span>
                 </button>
                 {!isPlayed && <>
@@ -215,7 +215,7 @@ export default function RoundPlan({ rounds, onRoundsChange, lists, pointSystems,
                   </Button>
                 </>}
               </div>
-              {isOpen && <RoundEditor index={index} round={round} lists={lists} pointSystems={pointSystems} onChange={next => change(index, next)} />}
+              {isOpen && <RoundEditor index={index} round={round} lists={lists} pointSystems={pointSystems} sources={sources} onChange={next => change(index, next)} />}
             </li>
           );
         })}

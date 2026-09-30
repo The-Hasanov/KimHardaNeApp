@@ -80,6 +80,23 @@ test('lan addresses list private IPv4 addresses of this computer', () => {
   for (const { address } of lanAddresses()) assert.match(address, /^\d+\.\d+\.\d+\.\d+$/);
 });
 
+test('the host names the party: phones, TV and page titles show it, escaped, with a default', async () => {
+  const { game, close } = await openParty({ judge: judgeByText, title: '  Friday   <b>quiz</b> ' }, { port: 0 });
+  const base = `http://127.0.0.1:${game.port}`;
+  try {
+    assert.equal(game.title, 'Friday <b>quiz</b>');
+    assert.match(await (await fetch(base)).text(), /<title>Friday &#60;b&#62;quiz&#60;\/b&#62;<\/title>/);
+    assert.match(await (await fetch(`${base}/tv`)).text(), /<title>Friday &#60;b&#62;quiz&#60;\/b&#62; · TV<\/title>/);
+    game.setTitle('   ');
+    assert.equal(game.tvView().title, 'Quiz night');
+    game.setTitle('Office cup');
+    assert.equal(game.playerView(game.join('Aysel')).title, 'Office cup');
+    assert.equal(game.hostView().title, 'Office cup');
+  } finally {
+    await close();
+  }
+});
+
 test('the party server serves the player page, joins, streams state and rejects bad requests', async () => {
   const { game, close } = await openParty({ judge: judgeByText }, { port: 0 });
   const base = `http://127.0.0.1:${game.port}`;

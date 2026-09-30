@@ -6,7 +6,7 @@ const ai = require('../ai');
 const { Store, fold } = require('../store');
 const { JUDGE_THRESHOLDS, answerCandidates, editDistance, judgeAnswer } = require('../judge');
 
-const DB = process.env.QUIZ_DB || path.join(__dirname, '..', '..', 'data', '3sual.sqlite');
+const DB = process.env.QUIZ_DB || path.join(__dirname, '..', '..', 'data', 'kimhardane.sqlite');
 const CACHE = path.join(__dirname, 'cache', 'judge-vectors.json');
 const N = +process.argv[2] || 300;
 

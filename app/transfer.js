@@ -3,7 +3,7 @@ const crypto = require('node:crypto');
 const fs = require('node:fs');
 const path = require('node:path');
 const { fileURLToPath } = require('node:url');
-const { OWN_PACKAGE_ID, MEDIA_TYPES, fold } = require('./store');
+const { OWN_SOURCE_ID, MEDIA_TYPES, fold } = require('./store');
 const { createZip, readZip, isZip } = require('./zip');
 
 const FORMAT = 'kimhardaneapp-questions';
@@ -38,9 +38,9 @@ function mediaFile(src) {
 function exportArchive(questions, { list = null } = {}) {
   const mediaEntries = new Map();
   const exported = questions.map(question => {
-    const isOwn = question.package_id === OWN_PACKAGE_ID;
+    const isOwn = question.source_id === OWN_SOURCE_ID;
     const entry = {
-      ...(!isOwn && { uid: question.uid, packageName: question.package_name, tournamentName: question.tournament_name }),
+      ...(!isOwn && { uid: question.uid, sourceId: question.source_id, packageName: question.package_name, tournamentName: question.tournament_name }),
       origin: isOwn ? 'own' : 'dataset',
       ...Object.fromEntries(TEXT_FIELDS.map(field => [field, question[field] ?? null])),
       sources: question.sources ?? [],
@@ -119,7 +119,7 @@ function readArchiveFile(file) {
 }
 
 function ownQuestionsByKey(store) {
-  return new Map(store.rows.filter(row => row.package_id === OWN_PACKAGE_ID).map(row => [questionKey(row), row.uid]));
+  return new Map(store.rows.filter(row => row.source_id === OWN_SOURCE_ID).map(row => [questionKey(row), row.uid]));
 }
 
 function addMedia(store, uid, question, mediaOf) {
@@ -155,7 +155,7 @@ function resolveQuestions(store, { data, mediaOf }, { useDataset }) {
       continue;
     }
     const datasetQuestion = question.origin === 'dataset' && typeof question.uid === 'string' ? store.get(question.uid) : null;
-    if (datasetQuestion && datasetQuestion.package_id !== OWN_PACKAGE_ID) {
+    if (datasetQuestion && datasetQuestion.source_id !== OWN_SOURCE_ID) {
       summary.fromDataset += 1;
       if (useDataset) uids.push(datasetQuestion.uid);
       continue;

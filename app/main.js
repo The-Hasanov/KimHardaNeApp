@@ -4,9 +4,9 @@ const { autoUpdater } = require('electron-updater');
 const { execFile } = require('node:child_process');
 const fs = require('node:fs');
 const path = require('node:path');
-const { Store, OWN_PACKAGE_ID } = require('./store');
-const { openLibraryFile, prepareLibrary } = require('./data');
-const { DATA_SOURCES, dataSourceById, describe } = require('./sources');
+const { Store, OWN_SOURCE_ID } = require('./store');
+const { prepareLibrary } = require('./data');
+const { DATA_SOURCES, dataSourceById, describe, removeDataSource } = require('./sources');
 const ai = require('./ai');
 const { judgeAnswer } = require('./judge');
 const { openParty } = require('./party');
@@ -16,7 +16,6 @@ const { normalizeTemplate } = require('./templates');
 const transfer = require('./transfer');
 const { findSamsungTvs, openInTvBrowser, isLocalNetworkAddress } = require('./samsungTv');
 
-const WHAT_WHERE_WHEN_GAME_ID = 1;
 const USER_DATA_BEFORE_RENAME = path.join(app.getPath('appData'), '3sual Editor');
 if (!app.commandLine.hasSwitch('user-data-dir') && fs.existsSync(USER_DATA_BEFORE_RENAME)) app.setPath('userData', USER_DATA_BEFORE_RENAME);
 let store;
@@ -28,17 +27,11 @@ let party = null;
 let partyDisplay = null;
 
 function openStore() {
-  if (!app.isPackaged) {
-    const file = process.env.QUIZ_DB || path.join(__dirname, '..', 'data', '3sual.sqlite');
-    fs.mkdirSync(path.dirname(path.resolve(file)), { recursive: true });
-    prepareLibrary(file);
-    imageRoots = [path.dirname(path.resolve(file))];
-    if (process.env.QUIZ_MODELS) ai.configure({ modelsDir: process.env.QUIZ_MODELS });
-    return new Store(file, { imagesRoot: imageRoots });
-  }
-  ai.configure({ modelsDir: path.join(app.getPath('userData'), 'models') });
-  const file = openLibraryFile(path.join(app.getPath('userData'), 'data'));
-  imageRoots = [path.dirname(file)];
+  const file = prepareLibrary(app.isPackaged ? path.join(app.getPath('userData'), 'data', 'kimhardane.sqlite')
+    : process.env.QUIZ_DB || path.join(__dirname, '..', 'data', 'kimhardane.sqlite'));
+  if (app.isPackaged) ai.configure({ modelsDir: path.join(app.getPath('userData'), 'models') });
+  else if (process.env.QUIZ_MODELS) ai.configure({ modelsDir: process.env.QUIZ_MODELS });
+  imageRoots = [path.dirname(path.resolve(file))];
   return new Store(file, { imagesRoot: imageRoots });
 }
 
@@ -151,6 +144,15 @@ function checkForUpdates(win) {
 }
 
 const dataSources = () => DATA_SOURCES.map(source => describe(source, store.db, imageRoots));
+const sourceNameOf = id => (id === OWN_SOURCE_ID ? 'My questions' : DATA_SOURCES.find(source => source.id === id)?.name ?? id);
+function questionSources() {
+  const bySource = new Map();
+  for (const { sourceId, key, name, n } of store.games()) {
+    if (!bySource.has(sourceId)) bySource.set(sourceId, { id: sourceId, name: sourceNameOf(sourceId), games: [] });
+    bySource.get(sourceId).games.push({ key, name, n });
+  }
+  return [...bySource.values()];
+}
 
 async function updateDataSource(win, source, mode, signal) {
   const progress = p => win.webContents.send('data-source-progress', { sourceId: source.id, ...p });
@@ -196,7 +198,7 @@ app.whenReady().then(() => {
   });
   const handle = (channel, fn) => ipcMain.handle(channel, async (_e, ...args) => { await ready; return fn(...args); });
 
-  handle('info', () => ({ version: app.getVersion(), rows: store.rows.length, ownCount: store.rows.filter(row => row.package_id === OWN_PACKAGE_ID).length, games: store.games() }));
+  handle('info', () => ({ version: app.getVersion(), rows: store.rows.length, ownCount: store.rows.filter(row => row.source_id === OWN_SOURCE_ID).length, questionSources: questionSources() }));
   handle('ai-status', () => aiStatus);
   handle('set-ai-search', async isOn => {
     writeSettings({ aiSearch: isOn });
@@ -208,7 +210,7 @@ app.whenReady().then(() => {
     return store.search(opts, useAi ? await ai.embedQuery(opts.q) : null);
   });
   handle('get', uid => store.get(uid));
-  handle('game-questions', (count, includeOwn) => store.randomPlayableQuestions(WHAT_WHERE_WHEN_GAME_ID, count, party ? [...party.game.shownUids] : [], { includeOwn }));
+  handle('game-questions', (games, count) => store.randomPlayableQuestions(games, count, party ? [...party.game.shownUids] : []));
   handle('lists', () => store.allLists());
   handle('create-list', name => store.createList(name));
   handle('rename-list', (listId, name) => store.renameList(listId, name));
@@ -241,9 +243,9 @@ app.whenReady().then(() => {
     return party.game.hostView();
   };
   const playerProfiles = new PlayerProfiles(store.partyProfileStorage);
-  handle('party-open', async () => {
+  handle('party-open', async title => {
     await closeParty();
-    party = await openParty({ judge: judgeNow, profiles: playerProfiles, onChange: sendPartyState, onReaction: reaction => win.webContents.send('party-reaction', reaction), onRoundFinished: results => {
+    party = await openParty({ judge: judgeNow, title, profiles: playerProfiles, onChange: sendPartyState, onReaction: reaction => win.webContents.send('party-reaction', reaction), onRoundFinished: results => {
       store.addPartyResults(results);
       win.webContents.send('party-results', store.partyResults());
     } });
@@ -313,6 +315,7 @@ app.whenReady().then(() => {
   handle('party-open-display', () => party && openPartyDisplay(win, party.game.port));
   handle('party-cast-miracast', () => shell.openExternal('ms-settings-connectabledevices:devicediscovery'));
   handle('party-extend-display', extendDesktopToWirelessDisplay);
+  handle('party-set-title', withParty((game, title) => game.setTitle(title)));
   handle('party-set-night-mode', withParty((game, isNightMode) => game.setNightMode(isNightMode)));
   handle('party-find-tvs', () => findSamsungTvs());
   handle('party-cast-samsung', async address => {
@@ -352,7 +355,7 @@ app.whenReady().then(() => {
     if (canceled) return null;
     return { archive: transfer.readArchiveFile(filePaths[0]), fileName: path.basename(filePaths[0], path.extname(filePaths[0])) };
   };
-  const ownQuestions = () => store.rows.filter(row => row.package_id === OWN_PACKAGE_ID).map(row => store.get(row.uid));
+  const ownQuestions = () => store.rows.filter(row => row.source_id === OWN_SOURCE_ID).map(row => store.get(row.uid));
   handle('export-own-questions', () => saveQuestionsFile('My questions', ownQuestions()));
   handle('import-own-questions', async () => {
     const opened = await openQuestionsFile();
@@ -400,7 +403,7 @@ app.whenReady().then(() => {
   ipcMain.handle('stop-data-source', () => dataSourceJob?.abort());
   handle('delete-data-source', id => {
     if (dataSourceJob) throw new Error('Wait until the download stops');
-    dataSourceById(id).remove(store.db, imageRoots);
+    removeDataSource(dataSourceById(id), store.db, imageRoots);
     store.reload();
     return dataSources();
   });

@@ -2,21 +2,14 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const scraper = require('./scraper');
+const { OWN_SOURCE_ID } = require('./store');
 
-const LIBRARY = 'kimhardane.sqlite';
-const BEFORE_DATA_SOURCES = '3sual.sqlite';
-
-function openLibraryFile(dir) {
-  const file = path.join(dir, LIBRARY);
-  const old = path.join(dir, BEFORE_DATA_SOURCES);
-  fs.mkdirSync(dir, { recursive: true });
-  if (!fs.existsSync(file) && fs.existsSync(old)) {
-    for (const ext of ['', '-wal', '-shm']) if (fs.existsSync(old + ext)) fs.renameSync(old + ext, file + ext);
-  }
-  prepareLibrary(file);
+function prepareLibrary(file) {
+  fs.mkdirSync(path.dirname(path.resolve(file)), { recursive: true });
+  const db = scraper.connect(file);
+  db.prepare("UPDATE questions SET source_id = ? WHERE origin = 'own' AND source_id <> ?").run(OWN_SOURCE_ID, OWN_SOURCE_ID);
+  db.close();
   return file;
 }
 
-const prepareLibrary = file => scraper.connect(file).close();
-
-module.exports = { openLibraryFile, prepareLibrary };
+module.exports = { prepareLibrary };

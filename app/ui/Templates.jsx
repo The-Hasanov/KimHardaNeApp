@@ -12,7 +12,7 @@ import { roundProblem, roundSummary } from './RoundPlan';
 
 const { api } = window;
 
-export default function Templates({ templates, onTemplatesChange, lists, pointSystems, onUse, onPlanNew }) {
+export default function Templates({ templates, onTemplatesChange, lists, pointSystems, sources, onUse, onPlanNew }) {
   const [templateToDelete, setTemplateToDelete] = useState(null);
   const remove = async template => {
     try {
@@ -38,7 +38,7 @@ export default function Templates({ templates, onTemplatesChange, lists, pointSy
       {templates.length ? (
         <ul className="space-y-3">
           {templates.map(template => {
-            const problems = template.rounds.map(round => roundProblem(round, lists, pointSystems));
+            const problems = template.rounds.map(round => roundProblem(round, lists, pointSystems, sources));
             return (
               <li key={template.id} className="space-y-3 rounded-lg border p-4">
                 <div className="flex flex-wrap items-center gap-2">
@@ -53,7 +53,7 @@ export default function Templates({ templates, onTemplatesChange, lists, pointSy
                     <li key={index} className="flex gap-3">
                       <span className="w-16 shrink-0 text-muted-foreground">Round {index + 1}</span>
                       <span className="min-w-0 flex-1">
-                        {roundSummary(round, lists, pointSystems)}
+                        {roundSummary(round, lists, pointSystems, sources)}
                         {problems[index] && <span className="mt-0.5 flex items-center gap-1.5 text-destructive"><TriangleAlertIcon className="size-3.5" />{problems[index]}</span>}
                       </span>
                     </li>

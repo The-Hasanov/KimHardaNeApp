@@ -9,6 +9,7 @@ test('template rounds are cleaned to safe values', () => {
   assert.deepEqual(normalizeRound({}), DEFAULT_ROUND);
   assert.deepEqual(normalizeRound({ listId: 4, randomCount: 500, secondsPerQuestion: 2, secondsBetweenQuestions: 'x', revealAtEnd: 1, secondsOnAnswer: -5, pointSystemId: 2.5 }),
     { ...DEFAULT_ROUND, listId: 4, randomCount: 50, secondsPerQuestion: 10, revealAtEnd: true, secondsOnAnswer: 0 });
+  assert.deepEqual(normalizeRound({ games: ['3sual:1', '3sual:1', 'own:0', 42, 'bad key', ''] }).games, ['3sual:1', 'own:0']);
   const template = normalizeTemplate({ name: '  Friday   night ', rounds: Array.from({ length: 30 }, () => ({})) });
   assert.equal(template.name, 'Friday night');
   assert.equal(template.rounds.length, MAX_ROUNDS);

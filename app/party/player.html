@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="color-scheme" content="light dark">
-<title>Nə? Harada? Nə zaman?</title>
+<title>{{title}}</title>
 <style>
 :root {
   --bg: #ffffff; --fg: #0a0a0a; --muted: #737373; --card: #f5f5f5; --border: #e5e5e5;
@@ -364,7 +364,7 @@ function showJoin(errorText = '', { previousName = session?.name ?? '', note = '
     }
   };
   show(el('div', { class: 'center' },
-    el('h1', {}, 'Nə? Harada? Nə zaman?'),
+    el('h1', {}, document.title),
     el('p', { class: 'muted' }, note),
     el('form', { onsubmit: join, style: 'width:100%' }, name, button, error)));
   name.focus();
@@ -1065,6 +1065,7 @@ function render(next) {
 
 function renderScreen(next) {
   state = next;
+  if (next.title) document.title = next.title;
   if ('isNightMode' in next) document.documentElement.dataset.theme = next.isNightMode ? 'dark' : 'light';
   deadline = next.remainingMs == null || next.isPaused ? null : Date.now() + next.remainingMs;
   if (next.phase === 'moved') {

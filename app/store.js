@@ -6,7 +6,7 @@ const path = require('node:path');
 const { pathToFileURL } = require('node:url');
 const MiniSearch = require('minisearch');
 
-const LIST_COLS = ['uid', 'package_id', 'package_name', 'tournament_name', 'game_id', 'game_name',
+const LIST_COLS = ['uid', 'source_id', 'package_id', 'package_name', 'tournament_name', 'game_id', 'game_name',
   'theme_name', 'text', 'answer', 'comment', 'accepted_answers', 'note_before', 'rekvizit_url', 'edited_at'];
 const EDITABLE = ['text', 'answer', 'comment', 'accepted_answers', 'note_before', 'rekvizit_text', 'sources'];
 const SEARCH_FIELDS = ['text', 'answer', 'comment', 'accepted_answers', 'theme_name'];
@@ -41,6 +41,7 @@ const GAME_TEMPLATES_SCHEMA = `
 CREATE TABLE IF NOT EXISTS game_templates (
   id INTEGER PRIMARY KEY, name TEXT NOT NULL UNIQUE COLLATE NOCASE, rounds TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL);`;
 const POOL = 500;
+const OWN_SOURCE_ID = 'own';
 const OWN_PACKAGE_ID = 0;
 const OWN_GAME_ID = 0;
 const OWN_NAME = 'My questions';
@@ -62,6 +63,7 @@ const TUNING = { combineWith: 'AND', prefix: true, fuzzy: 0.2, boost: { answer: 
 const fold = s => s.toLowerCase().normalize('NFD').replace(/\p{M}/gu, '').replace(/ə/g, 'e').replace(/ı/g, 'i');
 const passage = r => `${r.text ?? ''}\n${r.answer ?? ''}`;
 const embeddable = r => /[\p{L}\p{N}]/u.test(passage(r));
+const gameKeyOf = row => `${row.source_id}:${row.game_id}`;
 const hashOf = (model, r) => crypto.createHash('sha1').update(`${model}\0${passage(r)}`).digest('hex');
 
 class Store {
@@ -70,7 +72,7 @@ class Store {
     this.db = new DatabaseSync(file);
     this.db.exec('PRAGMA journal_mode=WAL');
     const cols = this.db.prepare('PRAGMA table_info(questions)').all().map(c => c.name);
-    if (!cols.length) throw new Error(`${file}: no questions table`);
+    if (!cols.includes('source_id')) throw new Error(`${file}: no questions table with a source_id`);
     if (!cols.includes('edited_at')) this.db.exec('ALTER TABLE questions ADD COLUMN edited_at TEXT');
     this.db.exec(EMBEDDINGS_SCHEMA);
     this.db.exec(LISTS_SCHEMA);
@@ -163,10 +165,11 @@ class Store {
     return s;
   }
 
-  search({ q = '', mode = 'hybrid', game = null, edited = false, withImage = false, author = null, limit = 100 } = {}, qvec = null) {
+  search({ q = '', mode = 'hybrid', games = [], edited = false, withImage = false, author = null, limit = 100 } = {}, qvec = null) {
     const t0 = performance.now();
     const byAuthor = author == null ? null : this.authorRows(+author);
-    const keep = i => (!game || this.rows[i].game_id === +game) && (!edited || this.rows[i].edited_at)
+    const inGames = games.length ? new Set(games) : null;
+    const keep = i => (!inGames || inGames.has(gameKeyOf(this.rows[i]))) && (!edited || this.rows[i].edited_at)
       && (!withImage || this.rows[i].rekvizit_url) && (!byAuthor || byAuthor.has(i));
     let ranked;
     if (!q.trim()) {
@@ -206,7 +209,7 @@ class Store {
   result(ranked, limit, { matches, ai = false, t0, qvec = null }) {
     const hits = ranked.slice(0, limit).map(h => {
       const r = this.rows[h.i];
-      return { uid: r.uid, game_name: r.game_name, package_name: r.package_name, theme_name: r.theme_name,
+      return { uid: r.uid, source_id: r.source_id, game_name: r.game_name, package_name: r.package_name, theme_name: r.theme_name,
         text: r.text, answer: r.answer, edited_at: r.edited_at,
         kw: h.kw ?? null, ai: h.ai ?? this.cosine(h.i, qvec), score: h.score ?? null, terms: h.terms ?? [] };
     });
@@ -267,10 +270,10 @@ class Store {
 
   createQuestion(fields) {
     if (!String(fields.text ?? '').trim() || !String(fields.answer ?? '').trim()) throw new Error('A question needs its text and answer');
-    const valueId = this.db.prepare('SELECT max(COALESCE(MAX(value_id) + 1, 0), ?) AS id FROM questions WHERE package_id = ?').get(Date.now(), OWN_PACKAGE_ID).id;
-    const uid = `${OWN_PACKAGE_ID}:question:${valueId}`;
-    this.db.prepare(`INSERT INTO questions (package_id, kind, value_id, uid, origin, ordinal, game_id, game_name)
-      VALUES (?, 'question', ?, ?, 'own', ?, ?, ?)`).run(OWN_PACKAGE_ID, valueId, uid, valueId, OWN_GAME_ID, OWN_NAME);
+    const valueId = this.db.prepare('SELECT max(COALESCE(MAX(value_id) + 1, 0), ?) AS id FROM questions WHERE source_id = ?').get(Date.now(), OWN_SOURCE_ID).id;
+    const uid = `${OWN_SOURCE_ID}:question:${valueId}`;
+    this.db.prepare(`INSERT INTO questions (source_id, package_id, kind, value_id, uid, origin, ordinal, game_id, game_name)
+      VALUES (?, ?, 'question', ?, ?, 'own', ?, ?, ?)`).run(OWN_SOURCE_ID, OWN_PACKAGE_ID, valueId, uid, valueId, OWN_GAME_ID, OWN_NAME);
     const i = this.rows.push(this.db.prepare(`SELECT ${LIST_COLS} FROM questions WHERE uid = ?`).get(uid)) - 1;
     this.pos.set(uid, i);
     this.index?.add(this.rows[i]);
@@ -286,7 +289,7 @@ class Store {
 
   deleteQuestion(uid) {
     const i = this.pos.get(uid);
-    if (i === undefined || this.rows[i].package_id !== OWN_PACKAGE_ID) throw new Error('Only your own questions can be deleted');
+    if (i === undefined || this.rows[i].source_id !== OWN_SOURCE_ID) throw new Error('Only your own questions can be deleted');
     this.db.exec('BEGIN');
     for (const table of ['questions', 'embeddings', 'list_questions']) this.db.prepare(`DELETE FROM ${table} WHERE uid = ?`).run(uid);
     this.db.exec('COMMIT');
@@ -311,7 +314,7 @@ class Store {
 
   setOwnImageBytes(uid, column, picture) {
     const i = this.pos.get(uid);
-    if (i === undefined || this.rows[i].package_id !== OWN_PACKAGE_ID) throw new Error('Pictures can be added to your own questions only');
+    if (i === undefined || this.rows[i].source_id !== OWN_SOURCE_ID) throw new Error('Pictures can be added to your own questions only');
     if (!IMAGE_COLUMNS.includes(column)) throw new Error(`unknown picture ${column}`);
     let url = null;
     if (picture?.remoteUrl) {
@@ -333,12 +336,12 @@ class Store {
     return this.get(uid);
   }
 
-  randomPlayableQuestions(gameId, count, excludedUids = [], { includeOwn = false } = {}) {
-    return this.db.prepare(`SELECT uid FROM (SELECT uid FROM questions
-      WHERE (game_id = ? OR (? AND package_id = ?)) AND kind = 'question' AND COALESCE(group_size, 1) <= 1
-      AND (package_id = ? OR length(text) > 20) AND trim(COALESCE(answer, '')) NOT IN ('', '-') AND uid NOT IN (SELECT value FROM json_each(?))
-      ORDER BY package_id = ? DESC, random() LIMIT ?) ORDER BY random()`)
-      .all(gameId, includeOwn ? 1 : 0, OWN_PACKAGE_ID, OWN_PACKAGE_ID, JSON.stringify(excludedUids), OWN_PACKAGE_ID, count).map(r => this.get(r.uid));
+  randomPlayableQuestions(games, count, excludedUids = []) {
+    return this.db.prepare(`SELECT uid FROM questions
+      WHERE (? OR source_id || ':' || game_id IN (SELECT value FROM json_each(?))) AND kind = 'question' AND COALESCE(group_size, 1) <= 1
+      AND (source_id = ? OR length(text) > 20) AND trim(COALESCE(answer, '')) NOT IN ('', '-') AND uid NOT IN (SELECT value FROM json_each(?))
+      ORDER BY random() LIMIT ?`)
+      .all(games.length ? 0 : 1, JSON.stringify(games), OWN_SOURCE_ID, JSON.stringify(excludedUids), count).map(r => this.get(r.uid));
   }
 
   allLists() {
@@ -537,8 +540,9 @@ class Store {
   }
 
   games() {
-    return this.db.prepare('SELECT game_id AS id, game_name AS name, COUNT(*) AS n FROM questions GROUP BY game_id ORDER BY game_id').all();
+    return this.db.prepare(`SELECT source_id AS sourceId, source_id || ':' || game_id AS key, game_name AS name, COUNT(*) AS n
+      FROM questions GROUP BY source_id, game_id ORDER BY source_id = ?, source_id, game_id`).all(OWN_SOURCE_ID);
   }
 }
 
-module.exports = { Store, OWN_PACKAGE_ID, OWN_IMAGE_PREFIX, MEDIA_TYPES, IMAGE_COLUMNS, mediaKind, TUNING, LISTS_SCHEMA, PLAY_SCHEMA, PARTY_RESULTS_SCHEMA, PARTY_PROFILES_SCHEMA, POINT_SYSTEMS_SCHEMA, GAME_TEMPLATES_SCHEMA, EMBEDDINGS_SCHEMA, fold, passage, embeddable, hashOf, DIM };
+module.exports = { Store, OWN_SOURCE_ID, OWN_IMAGE_PREFIX, MEDIA_TYPES, IMAGE_COLUMNS, mediaKind, TUNING, LISTS_SCHEMA, PLAY_SCHEMA, PARTY_RESULTS_SCHEMA, PARTY_PROFILES_SCHEMA, POINT_SYSTEMS_SCHEMA, GAME_TEMPLATES_SCHEMA, EMBEDDINGS_SCHEMA, fold, passage, embeddable, hashOf, DIM };

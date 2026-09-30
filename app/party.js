@@ -38,6 +38,10 @@ class PartyError extends Error {
   }
 }
 
+const DEFAULT_PARTY_TITLE = 'Quiz night';
+const MAX_TITLE_LENGTH = 40;
+const cleanTitle = title => String(title ?? '').replace(/\s+/g, ' ').trim().slice(0, MAX_TITLE_LENGTH) || DEFAULT_PARTY_TITLE;
+const escapeHtml = text => text.replace(/[&<>"']/g, c => `&#${c.charCodeAt(0)};`);
 const cleanName = name => String(name ?? '').replace(/\s+/g, ' ').trim().slice(0, PARTY_LIMITS.nameLength);
 const isBlank = given => !String(given ?? '').trim();
 
@@ -52,7 +56,7 @@ function lanAddresses() {
 }
 
 class PartyGame {
-  constructor({ judge, onChange = () => {}, onRoundFinished = () => {}, onReaction = () => {}, profiles = new PlayerProfiles() }) {
+  constructor({ judge, title, onChange = () => {}, onRoundFinished = () => {}, onReaction = () => {}, profiles = new PlayerProfiles() }) {
     this.id = crypto.randomBytes(6).toString('hex');
     this.profiles = profiles;
     this.judge = judge;
@@ -85,6 +89,7 @@ class PartyGame {
     this.pausedRemainingMs = null;
     this.screen = 'game';
     this.isNightMode = true;
+    this.title = cleanTitle(title);
     this.shownUids = new Set();
     this.streams = new Set();
     this.urls = [];
@@ -491,6 +496,11 @@ class PartyGame {
     this.skipIfEveryoneAgrees();
   }
 
+  setTitle(title) {
+    this.title = cleanTitle(title);
+    this.changed();
+  }
+
   setNightMode(isNightMode) {
     this.isNightMode = !!isNightMode;
     this.changed();
@@ -642,7 +652,7 @@ class PartyGame {
     }));
     const checkedIndex = this.rules.revealAtEnd && this.phase === 'waiting' ? this.index - 1 : -1;
     return {
-      id: this.id, phase: this.phase, round: this.round, index: this.index, total: this.questions.length,
+      id: this.id, title: this.title, phase: this.phase, round: this.round, index: this.index, total: this.questions.length,
       remainingMs: this.remainingMs(), isPaused: this.pausedRemainingMs != null, screen: this.screen,
       rules: this.rules, urls: this.urls, port: this.port, question: this.questions[this.index] ?? null,
       players: [...this.players.values()].map(p => ({ id: p.id, name: p.name, hasPin: !!p.hasPin, hasAnswered: !!current?.has(p.id), isOnline: this.isOnline(p.id), timesAway: this.absencesOf(p.id) })),
@@ -683,7 +693,7 @@ class PartyGame {
     const me = leaderboard.find(entry => entry.id === player.id);
     const showsLeaderboard = ['reveal', 'finished'].includes(this.phase) || (this.phase === 'lobby' && this.round > 0);
     return {
-      partyId: this.id, phase: this.phase, round: this.round, index: this.index, total: this.questions.length,
+      partyId: this.id, title: this.title, phase: this.phase, round: this.round, index: this.index, total: this.questions.length,
       remainingMs: this.remainingMs(), isPaused: this.pausedRemainingMs != null, playerCount: this.players.size, isNightMode: this.isNightMode,
       rules: {
         pointSystem: this.rules.pointSystem, pointsSummary: this.rules.pointsSummary ?? summaryOf(this.rules.pointSystem), secondsPerQuestion: this.rules.secondsPerQuestion,
@@ -801,17 +811,17 @@ function openEventStream(game, req, res, { playerId = null, view }) {
   else stream.send(view());
 }
 
-function sendPage(res, file) {
+function sendPage(res, file, title) {
   res.writeHead(200, {
     'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff',
     'Content-Security-Policy': "default-src 'self'; img-src 'self' https: data:; media-src 'self' https:; style-src 'unsafe-inline'; script-src 'unsafe-inline'; object-src 'none'; base-uri 'none'; form-action 'none'",
     'Referrer-Policy': 'no-referrer',
   });
-  res.end(fs.readFileSync(file));
+  res.end(fs.readFileSync(file, 'utf8').replaceAll('{{title}}', escapeHtml(title)));
 }
 
 function routeTv(game, req, res, url) {
-  if (url.pathname === '/tv' || url.pathname === '/tv/') return sendPage(res, TV_PAGE);
+  if (url.pathname === '/tv' || url.pathname === '/tv/') return sendPage(res, TV_PAGE, game.title);
   if (url.pathname === '/tv/join-qr.svg') {
     res.writeHead(200, { 'Content-Type': 'image/svg+xml', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' });
     return res.end(game.joinQrSvg);
@@ -831,7 +841,7 @@ function routeTv(game, req, res, url) {
 async function route(game, req, res) {
   const url = new URL(req.url, 'http://party');
   const token = url.searchParams.get('token');
-  if (req.method === 'GET' && url.pathname === '/') return sendPage(res, PLAYER_PAGE);
+  if (req.method === 'GET' && url.pathname === '/') return sendPage(res, PLAYER_PAGE, game.title);
   if (req.method === 'POST' && url.pathname === '/join') {
     const body = await readJson(req);
     const player = game.join(body.name, body.pin);
@@ -933,4 +943,4 @@ async function openParty(settings, { port = PREFERRED_PORT } = {}) {
   };
 }
 
-module.exports = { PARTY_LIMITS, DEFAULT_RULES, REACTIONS, PartyGame, PartyError, lanAddresses, openParty };
+module.exports = { DEFAULT_PARTY_TITLE, PARTY_LIMITS, DEFAULT_RULES, REACTIONS, PartyGame, PartyError, lanAddresses, openParty };

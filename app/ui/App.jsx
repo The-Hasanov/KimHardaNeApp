@@ -35,7 +35,7 @@ import Lists, { ListNameDialog } from './Lists';
 import SettingsDialog, { describeAiWork } from './Settings';
 import { useDataSources } from './DataSources';
 import { setNightMode, useNightMode } from './theme';
-import { Media, withoutIpcPrefix } from './gameShared';
+import { GamePicker, Media, withoutIpcPrefix } from './gameShared';
 import { exportedMessage, importDetails, questionCountLabel, runTransfer } from './transferMessages';
 
 const { api } = window;
@@ -50,9 +50,9 @@ const MODES = [
 ];
 const PAGE = 100;
 const VIEWS = [['search', SearchIcon, 'Search'], ['mine', NotebookPenIcon, 'Custom'], ['lists', ListIcon, 'Lists'], ['game', TimerIcon, 'Game']];
-const OWN_PACKAGE_ID = 0;
-const OWN_GAME_ID = 0;
-const NEW_QUESTION = { uid: null, package_id: OWN_PACKAGE_ID, game_name: 'My questions' };
+const OWN_SOURCE_ID = 'own';
+const OWN_GAMES = ['own:0'];
+const NEW_QUESTION = { uid: null, source_id: OWN_SOURCE_ID, game_name: 'My questions' };
 const PICTURES = [
   ['rekvizit_url', 'rekvizit_src', 'rekvizit_kind', 'Handout', 'shown with the question'],
   ['source_media_url', 'source_media_src', 'source_media_kind', 'Answer media', 'shown with the answer'],
@@ -168,8 +168,8 @@ function OwnPictures({ q, concealed, onReveal, onZoom, onPick, onRemove }) {
   );
 }
 
-function Editor({ q, draft, setDraft, dirtyKeys, saving, savedAt, concealed, onReveal, onAuthor, onSave, onDiscard, onDelete, onZoom, onPickPicture, onRemovePicture, listControl }) {
-  const isOwn = q.package_id === OWN_PACKAGE_ID;
+function Editor({ q, draft, setDraft, dirtyKeys, saving, savedAt, concealed, onReveal, onAuthor, onSave, onDiscard, onDelete, onZoom, onPickPicture, onRemovePicture, listControl, sourceName }) {
+  const isOwn = q.source_id === OWN_SOURCE_ID;
   const isNew = !q.uid;
   const canCreate = !!(draft.text.trim() && draft.answer.trim());
   const path = (q.phase_path ?? []).map(p => p.name).filter(Boolean).join(' › ');
@@ -196,7 +196,7 @@ function Editor({ q, draft, setDraft, dirtyKeys, saving, savedAt, concealed, onR
         <div className="mx-auto max-w-3xl space-y-6 px-6 py-5">
           <div className="space-y-3">
             <div className="flex items-center gap-2">
-              <Badge variant="secondary">{q.game_name}</Badge>
+              <Badge variant="secondary">{[!isOwn && sourceName, q.game_name].filter(Boolean).join(' · ')}</Badge>
               {q.edited_at && <Badge variant="outline" className={EDITED}><PencilIcon />edited</Badge>}
               {!isNew && listControl}
             </div>
@@ -293,7 +293,7 @@ export default function App() {
   const [aiStatus, setAiStatus] = useState({ state: 'off' });
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [settingsTab, setSettingsTab] = useState('general');
-  const [game, setGame] = useState('all');
+  const [games, setGames] = useState([]);
   const [edited, setEdited] = useState(false);
   const [withImage, setWithImage] = useState(false);
   const [author, setAuthor] = useState(null);
@@ -365,8 +365,8 @@ export default function App() {
     if (!info) return;
     const my = ++searchSeq.current;
     setSearching(true);
-    const request = isMine ? { q: '', mode: 'keyword', game: String(OWN_GAME_ID), limit }
-      : { q: query, mode: searchMode, game: game === 'all' ? null : game, edited, withImage, author: author?.id, limit };
+    const request = isMine ? { q: '', mode: 'keyword', games: OWN_GAMES, limit }
+      : { q: query, mode: searchMode, games, edited, withImage, author: author?.id, limit };
     api.search(request).then(res => {
       if (my !== searchSeq.current) return;
       setResults(res);
@@ -376,7 +376,7 @@ export default function App() {
       setSearching(false);
       toast.error('Search failed', { description: e.message });
     });
-  }, [info, isMine, query, searchMode, game, edited, withImage, author, limit]);
+  }, [info, isMine, query, searchMode, games, edited, withImage, author, limit]);
 
   const refreshLists = () => api.lists().then(setLists);
   useEffect(() => { refreshLists(); }, []);
@@ -556,7 +556,7 @@ export default function App() {
   const resetSearch = () => {
     setQ('');
     setQuery('');
-    setGame('all');
+    setGames([]);
     setEdited(false);
     setWithImage(false);
     setAuthor(null);
@@ -596,7 +596,7 @@ export default function App() {
         <InputGroup className="min-w-40 flex-1 basis-40">
           <InputGroupAddon><SearchIcon /></InputGroupAddon>
           <InputGroupInput ref={searchBox} value={q} onChange={e => setQ(e.target.value)} autoFocus spellCheck={false}
-            placeholder="Search questions, answers, comments…  (e.g. Nizami, futbol klubu)"
+            placeholder="Search questions, answers, comments…"
             onKeyDown={e => {
               if (e.key === 'Enter') { setQuery(q); setLimit(PAGE); }
               if (e.key === 'Escape') setQ('');
@@ -620,15 +620,7 @@ export default function App() {
             ))}
           </SelectContent>
         </Select>
-        <Select value={game} onValueChange={filter(setGame)}>
-          <SelectTrigger className="w-48" aria-label="Game"><SelectValue /></SelectTrigger>
-          <SelectContent position="popper">
-            <SelectItem value="all">All games</SelectItem>
-            {info.games.map(g => (
-              <SelectItem key={g.id} value={String(g.id)}>{g.name}<span className="text-muted-foreground tabular-nums">{fmt(g.n)}</span></SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <GamePicker id="search-games" label={null} sources={info.questionSources} games={games} onGamesChange={filter(setGames)} className="w-52" />
         <div className="flex items-center gap-2 px-1">
           <Switch id="edited" checked={edited} onCheckedChange={filter(setEdited)} />
           <Label htmlFor="edited" className="font-normal">Edited only</Label>
@@ -706,7 +698,7 @@ export default function App() {
                         : edited ? 'Only edited questions are shown. Turn off "Edited only" to search everything.'
                         : withImage ? 'Only questions with a handout image are shown. Turn off "With image" to search everything.'
                         : searchMode === 'keyword' ? `Try fewer words, or ${isAiReady ? 'switch to' : 'turn on'} AI search to match by meaning.`
-                          : 'Try different words, or pick another game.'}
+                          : 'Try different words, or pick other questions.'}
                     </EmptyDescription>
                   </EmptyHeader>
                   <EmptyContent><Button variant="outline" size="sm" onClick={resetSearch}>Clear search and filters</Button></EmptyContent>
@@ -723,7 +715,7 @@ export default function App() {
         <ResizableHandle withHandle />
         <ResizablePanel id="editor" minSize={380}>
           {current ? (
-            <Editor q={current} draft={draft} setDraft={setDraft} dirtyKeys={dirtyKeys} saving={saving} savedAt={savedAt}
+            <Editor q={current} sourceName={info.questionSources.find(source => source.id === current.source_id)?.name} draft={draft} setDraft={setDraft} dirtyKeys={dirtyKeys} saving={saving} savedAt={savedAt}
               concealed={hideAnswers && !revealed} onReveal={() => setRevealed(true)} onAuthor={filter(setAuthor)}
               onSave={save} onDiscard={() => setDraft(draftOf(current))} onDelete={deleteCurrent} onZoom={setZoom}
               onPickPicture={column => changePicture(column, false)} onRemovePicture={column => changePicture(column, true)}
@@ -747,7 +739,7 @@ export default function App() {
           onOpenQuestion={openInQuestionsTab} onStartGame={startGameWithList} />
       </div>
       <div className={cn('min-h-0 flex-1', view !== 'game' && 'hidden')}>
-        <Game key={gameSession} isVisible={view === 'game'} lists={lists} listId={gameListId} onListIdChange={setGameListId}
+        <Game key={gameSession} isVisible={view === 'game'} lists={lists} sources={info.questionSources} listId={gameListId} onListIdChange={setGameListId}
           isAiReady={isAiReady} onOpenSettings={() => openSettings('general')} />
       </div>
       <SettingsDialog open={isSettingsOpen} onOpenChange={setIsSettingsOpen} tab={settingsTab} onTabChange={setSettingsTab}

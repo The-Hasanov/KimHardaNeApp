@@ -14,15 +14,14 @@ import { Button } from '@/components/ui/button';
 import { Kbd } from '@/components/ui/kbd';
 import { Label } from '@/components/ui/label';
 import { Progress } from '@/components/ui/progress';
-import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Spinner } from '@/components/ui/spinner';
 import { Switch } from '@/components/ui/switch';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
-  KEY_HINT_ON_PRIMARY_BUTTON, MIN_SECONDS_TO_CHECK_ANSWERS, Media, NextQuestionNumber, NumberField, QuestionSourceSelect, QuestionOnScreen, WARNING_AT_SECONDS_LEFT, formatClock, playTenSecondsLeftTone,
+  GamePicker, KEY_HINT_ON_PRIMARY_BUTTON, MIN_SECONDS_TO_CHECK_ANSWERS, Media, NextQuestionNumber, NumberField, QuestionSourceSelect, QuestionOnScreen, WARNING_AT_SECONDS_LEFT, formatClock, playTenSecondsLeftTone,
   playTimeUpTone, withLineBreaks, withoutIpcPrefix,
 } from './gameShared';
-import PartyScreen, { AllTimeLeaderboard } from './Party';
+import PartyScreen, { AllTimeLeaderboard, PARTY_TITLE_KEY } from './Party';
 import Profiles from './Profiles';
 import PointSystems, { usePointSystems } from './PointSystems';
 import RoundPlan, { NEW_ROUND, pointSystemOf, roundProblem } from './RoundPlan';
@@ -34,7 +33,7 @@ const DEFAULT_RANDOM_COUNT = 10;
 const MAX_RANDOM_COUNT = 50;
 const DEFAULT_SECONDS_PER_QUESTION = 60;
 const MAX_SECONDS_BETWEEN_QUESTIONS = 120;
-const RANDOM_GAME_TITLE = 'Random · Nə? Harada? Nə zaman?';
+const RANDOM_GAME_TITLE = 'Random questions';
 
 const MODE_DESCRIPTIONS = {
   host: summary => `Host mode: ${summary} and a timer. Answers stay hidden until you end the game.`,
@@ -46,32 +45,20 @@ const TIMING_HELP = {
   play: "Between questions the next question's number fills the screen; Space skips the wait. Each question's timer starts as soon as it appears.",
 };
 
-function RoundSettings({ mode, questions, lists, listId, onListIdChange, onNewSet, settings, onSettingsChange, action }) {
+function RoundSettings({ mode, questions, lists, sources, listId, onListIdChange, onNewSet, settings, onSettingsChange, action }) {
   const chosenList = lists.find(list => list.id === listId);
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-end gap-3">
         <QuestionSourceSelect id="question-source" lists={lists} listId={listId} onListIdChange={onListIdChange} />
         {!chosenList && <>
+          <GamePicker id="random-games" sources={sources} games={settings.games} onGamesChange={games => onSettingsChange({ games })} />
           <NumberField id="random-question-count" label="How many" value={settings.randomCount} min={1} max={MAX_RANDOM_COUNT}
             onChange={randomCount => onSettingsChange({ randomCount })} />
           <Button variant="outline" onClick={onNewSet} disabled={!questions}><ShuffleIcon />New set</Button>
         </>}
         <div className="ml-auto">{action}</div>
       </div>
-      {!chosenList && (
-        <RadioGroup value={settings.includeOwn ? 'with-own' : 'bank'} onValueChange={value => onSettingsChange({ includeOwn: value === 'with-own' })}
-          className="flex flex-wrap gap-x-6 gap-y-2">
-          <div className="flex items-center gap-2">
-            <RadioGroupItem id="random-from-bank" value="bank" />
-            <Label htmlFor="random-from-bank" className="font-normal">Only Nə? Harada? Nə zaman?</Label>
-          </div>
-          <div className="flex items-center gap-2">
-            <RadioGroupItem id="random-with-own" value="with-own" />
-            <Label htmlFor="random-with-own" className="font-normal">Include my questions (picked first)</Label>
-          </div>
-        </RadioGroup>
-      )}
       <div className="flex flex-wrap items-end gap-x-6 gap-y-4 rounded-lg border p-4">
         <NumberField id="seconds-per-question" label="Seconds per question" value={settings.secondsPerQuestion} min={10} max={600} step={5}
           onChange={secondsPerQuestion => onSettingsChange({ secondsPerQuestion })} />
@@ -99,7 +86,7 @@ function GameSetup({ mode, onModeChange, isAiReady, onOpenSettings, onStart, rou
     <div className="mx-auto max-w-3xl space-y-6 px-6 py-8">
       <div className="flex flex-wrap items-start gap-4">
         <div className="min-w-0 flex-1 space-y-1">
-          <h1 className="text-2xl font-semibold">{chosenList && mode !== 'party' ? chosenList.name : 'Nə? Harada? Nə zaman?'}</h1>
+          <h1 className="text-2xl font-semibold">{mode === 'party' ? 'Party' : chosenList ? chosenList.name : RANDOM_GAME_TITLE}</h1>
           <p className="text-muted-foreground">{MODE_DESCRIPTIONS[mode](questionsSummary)}</p>
         </div>
         <Tabs value={mode} onValueChange={onModeChange}>
@@ -180,7 +167,7 @@ function AnswerCard({ question, number, isRevealed, onReveal }) {
   );
 }
 
-export default function Game({ isVisible, lists, listId, onListIdChange, isAiReady, onOpenSettings }) {
+export default function Game({ isVisible, lists, sources, listId, onListIdChange, isAiReady, onOpenSettings }) {
   const [mode, setMode] = useState(() => localStorage.getItem('gameMode') ?? 'host');
   const [playGameId, setPlayGameId] = useState(null);
   const [phase, setPhase] = useState('setup');
@@ -200,7 +187,14 @@ export default function Game({ isVisible, lists, listId, onListIdChange, isAiRea
   const [templateName, setTemplateName] = useState(() => localStorage.getItem('partyPlanTemplate'));
   const [templates, setTemplates] = useState(null);
   const [randomCount, setRandomCount] = useState(() => Number(localStorage.getItem('randomQuestionCount')) || DEFAULT_RANDOM_COUNT);
-  const [includeOwn, setIncludeOwn] = useState(() => localStorage.getItem('includeOwnQuestions') === '1');
+  const [games, setGames] = useState(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem('randomGames'));
+      return Array.isArray(saved) ? saved : [];
+    } catch {
+      return [];
+    }
+  });
   const [partyState, setPartyState] = useState(null);
   const [waitEndsAt, setWaitEndsAt] = useState(null);
   const [waitSecondsLeft, setWaitSecondsLeft] = useState(0);
@@ -214,16 +208,17 @@ export default function Game({ isVisible, lists, listId, onListIdChange, isAiRea
   const handleKeyDown = useRef(null);
   const listIdOfQuestions = useRef(null);
 
-  const pickQuestions = ({ count = randomCount, withOwn = includeOwn } = {}) => {
+  const pickQuestions = ({ count = randomCount, fromGames = games } = {}) => {
     setQuestions(null);
     listIdOfQuestions.current = listId;
-    const loading = listId == null ? api.gameQuestions(count, withOwn) : api.listQuestions(listId);
+    const loading = listId == null ? api.gameQuestions(fromGames, count) : api.listQuestions(listId);
     loading.then(setQuestions, e => toast.error('Could not load questions', { description: e.message }));
   };
+  const questionTotal = sources.reduce((sum, source) => sum + source.games.reduce((count, game) => count + game.n, 0), 0);
   useEffect(() => {
     if (!isVisible || phase !== 'setup' || mode === 'party') return;
-    if (listId != null || !questions || listIdOfQuestions.current !== listId) pickQuestions();
-  }, [isVisible, listId, mode]);
+    if (listId != null || !questions?.length || listIdOfQuestions.current !== listId) pickQuestions();
+  }, [isVisible, listId, mode, questionTotal]);
 
   const resetTimer = () => {
     setTimerEndsAt(null);
@@ -275,14 +270,14 @@ export default function Game({ isVisible, lists, listId, onListIdChange, isAiRea
     if (name) localStorage.setItem('partyPlanTemplate', name);
     else localStorage.removeItem('partyPlanTemplate');
   };
-  const planProblems = plan.map(round => roundProblem(round, lists, pointSystems));
+  const planProblems = plan.map(round => roundProblem(round, lists, pointSystems, sources));
   const planSummary = `${plan.length} ${plan.length === 1 ? 'round' : 'rounds'}`;
   const roundPlan = (playedCount, action) => (
-    <RoundPlan rounds={plan} onRoundsChange={changePlan} lists={lists} pointSystems={pointSystems} templates={templates} onTemplatesChange={setTemplates}
+    <RoundPlan rounds={plan} onRoundsChange={changePlan} lists={lists} pointSystems={pointSystems} sources={sources} templates={templates} onTemplatesChange={setTemplates}
       templateName={templateName} onTemplateNameChange={changeTemplateName} playedCount={playedCount} action={action} />
   );
   const roundSettingsValues = {
-    secondsPerQuestion, secondsBetweenQuestions, shouldAutoStartTimer, randomCount, includeOwn,
+    secondsPerQuestion, secondsBetweenQuestions, shouldAutoStartTimer, randomCount, games,
   };
   const changeRoundSettings = changes => {
     if ('secondsPerQuestion' in changes) {
@@ -296,14 +291,14 @@ export default function Game({ isVisible, lists, listId, onListIdChange, isAiRea
       localStorage.setItem('randomQuestionCount', String(changes.randomCount));
       pickQuestions({ count: changes.randomCount });
     }
-    if ('includeOwn' in changes) {
-      setIncludeOwn(changes.includeOwn);
-      localStorage.setItem('includeOwnQuestions', changes.includeOwn ? '1' : '0');
-      pickQuestions({ withOwn: changes.includeOwn });
+    if ('games' in changes) {
+      setGames(changes.games);
+      localStorage.setItem('randomGames', JSON.stringify(changes.games));
+      pickQuestions({ fromGames: changes.games });
     }
   };
   const roundSettingsProps = {
-    questions, lists, listId, onListIdChange, onNewSet: () => pickQuestions(), settings: roundSettingsValues, onSettingsChange: changeRoundSettings,
+    questions, lists, sources, listId, onListIdChange, onNewSet: () => pickQuestions(), settings: roundSettingsValues, onSettingsChange: changeRoundSettings,
   };
   useEffect(() => {
     api.pointSystems().then(setPointSystems);
@@ -312,7 +307,11 @@ export default function Game({ isVisible, lists, listId, onListIdChange, isAiRea
   useEffect(() => { api.onParty(setPartyState); }, []);
   const openParty = async () => {
     try {
-      setPartyState(await api.partyOpen());
+      let title = null;
+      try {
+        title = localStorage.getItem(PARTY_TITLE_KEY);
+      } catch {}
+      setPartyState(await api.partyOpen(title));
       setPhase('party');
     } catch (e) {
       toast.error('Could not open the party', { description: e.message });
@@ -324,7 +323,7 @@ export default function Game({ isVisible, lists, listId, onListIdChange, isAiRea
     if (!round) return;
     setIsStartingRound(true);
     try {
-      const roundQuestions = await (round.listId == null ? api.gameQuestions(round.randomCount, round.includeOwn) : api.listQuestions(round.listId));
+      const roundQuestions = await (round.listId == null ? api.gameQuestions(round.games ?? [], round.randomCount) : api.listQuestions(round.listId));
       await api.partyStartRound({
         uids: roundQuestions.map(question => question.uid), secondsPerQuestion: round.secondsPerQuestion, pointSystemId: pointSystemOf(round, pointSystems)?.id,
         secondsBetweenQuestions: round.revealAtEnd ? Math.max(round.secondsBetweenQuestions, MIN_SECONDS_TO_CHECK_ANSWERS) : round.secondsBetweenQuestions,
@@ -424,7 +423,7 @@ export default function Game({ isVisible, lists, listId, onListIdChange, isAiRea
     return (
       <GameSections section={section} onSectionChange={setSection}>
         {section === 'templates' ? (
-          <Templates templates={templates} onTemplatesChange={setTemplates} lists={lists} pointSystems={pointSystems} onUse={applyTemplate}
+          <Templates templates={templates} onTemplatesChange={setTemplates} lists={lists} pointSystems={pointSystems} sources={sources} onUse={applyTemplate}
             onPlanNew={() => { changeMode('party'); changeTemplateName(null); setSection('play'); }} />
         ) : section === 'points' ? <PointSystems /> : section === 'profiles' ? <Profiles /> : section === 'leaderboard' ? (
           <div className="mx-auto max-w-3xl px-6 py-8"><AllTimeLeaderboard /></div>

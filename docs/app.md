@@ -1,16 +1,15 @@
 # KimHardaNeApp: how the app works
 
-An Electron app for hosting quiz games and keeping a question bank. It ships without questions: the bank is
+An Electron app for hosting any kind of quiz and keeping a question bank. It ships without questions: the bank is
 your own questions plus the data sources you install in *Settings → Data sources* (for now 3sual.az, built by
-the scraper). In development the database is `data/3sual.sqlite`, created empty when missing. It needs Node 22+
+the scraper). In development the database is `data/kimhardane.sqlite`, created empty when missing. It needs Node 22+
 and works offline once the model and images are downloaded.
 
 ```bash
 cd app
-node scraper.js images --db ../data/3sual.sqlite   # optional: handout images for offline use (~35 min)
 npm install
 npm run embed    # optional: downloads bge-m3 (~570 MB) to app/models and embeds all questions (~30 min on CPU)
-npm start        # builds the UI and opens the app (Electron fetches its binary on first start)
+npm start        # builds the UI and opens the app (Electron fetches its binary on first start); install a data source in Settings
                  # QUIZ_DB=path overrides the database, QUIZ_MODELS=dir the model folder
 npm test         # offline tests for the scraper, data sources, search, ranking, edits and local images
 ```
@@ -24,8 +23,14 @@ npm test         # offline tests for the scraper, data sources, search, ranking,
   field). Clicking an author's name in the editor filters the results to that author's questions. *With image*
   lists only questions that have a handout image.
   New shadcn components: `npx shadcn add <name>` (see `components.json`).
-- **Game** tab: a helper for the host of *Nə? Harada? Nə zaman?* (What? Where? When?). It picks 10 random
-  standalone questions of that game (New set picks again) and runs a timer per question, 60 seconds by
+- **Questions from data sources**: every question carries `source_id` (the data source that brought it, `own` for
+  your own questions) and belongs to one of that source's games (`game_id`, `game_name`). The picker used in Search,
+  the Game tab and each party round lists every installed source with its games as checkboxes, plus *My questions*;
+  a whole source is checked at once, or single games inside it. With everything checked the pick is *All
+  questions*, which also takes in sources installed later. A round saved in a template keeps its picks
+  (`source:game` keys); when none of its sources is installed any more, the round is marked and cannot start.
+- **Game** tab: a helper for any quiz host. It picks 10 random
+  standalone questions from the chosen sources and games (New set picks again) and runs a timer per question, 60 seconds by
   default, with a tone at 10 seconds left and at the end. When time is up it moves to the next question.
   The host can end the game at any time; the answers of the questions whose timer was started are then
   revealed one by one. Keys: Space starts/pauses the timer (or reveals the next answer), → next question.
@@ -48,7 +53,8 @@ npm test         # offline tests for the scraper, data sources, search, ranking,
   them). *Open party* starts a small web server
   (`party.js`, Node's `http`, port 8765 or a free one) on this computer's local network address, which the app
   finds itself (private IPv4, real adapters before virtual ones such as Hyper-V or VPNs; a picker appears when
-  there are several). The lobby shows a QR code of that address; players scan it, type a name and join in the
+  there are several). The lobby shows a QR code of that address and the **party name** (default *Quiz night*,
+  remembered for the next party), which the TV, every phone and their page titles show; players scan it, type a name and join in the
   browser (`party/player.html`, no app needed, same Wi-Fi). The players' TV screen is one page,
   `party/tv.html` at `http://<address>:<port>/tv`, plain ES5 and CSS so that the 2017 Samsung TV browser
   (Chrome 47) runs it, fed by `/tv/events`, which never carries the answer before the reveal (the TV only ever
@@ -77,7 +83,7 @@ npm test         # offline tests for the scraper, data sources, search, ranking,
   status and a small *Done* chip (the Skip vote, held for a second) under it. When the time is up (or *Close answers now*),
   AI search checks every answer as in Play mode (with AI search off the host marks each one, and phones show
   *The host is checking* until then); phones then show their verdict, the answer and the
-  leaderboard, and the host sees every answer and can overrule it. In Party mode the host plans the **rounds** before opening the party: each round has its own questions (random, with a count,
+  leaderboard, and the host sees every answer and can overrule it. In Party mode the host plans the **rounds** before opening the party: each round has its own questions (random from the picked sources and games, with a count,
   or a list), timers, answer showing, autoplay and point system, and rounds can be added, duplicated, removed and changed
   until they are played (between rounds too). The party cannot open, and a round cannot start, while a planned round does
   not fit its point system or its list is gone; the round shows why in red. *Save as template* keeps the plan as a **game
@@ -149,7 +155,7 @@ the party header turns them off and on for everyone. Windows
 - **Lists**: *Add to list* in the editor puts the open question into one or more of your lists, or creates a
   new list with it. The **Lists** tab shows each list in order: move questions up or down, open one in the
   editor, remove it, rename or delete the list. *Start game* plays the list in the Game tab, in list order;
-  the Game tab's *Questions* picker switches between a list and 10 random questions. Lists live in the
+  the Game tab's *Questions* picker switches between a list and random questions. Lists live in the
   `lists` and `list_questions` tables of your database and survive version updates.
 - **Keyword search** uses [MiniSearch](https://github.com/lucaong/minisearch) with BM25 over the question,
   answer, comment, accepted answers and theme name. By default every query word must match, as a prefix,
@@ -174,8 +180,8 @@ the party header turns them off and on for everyone. Windows
   picture (PNG, JPEG, GIF, WebP), a video (MP4, WebM) or an audio file (MP3, M4A, WAV, OGG), up to 300 MB, copied to
   `images/own/` next to the database and kept through updates. Videos and audio play with controls in the editor, in the
   Game and Play tabs, on the host's party screen, on the TV (they start by themselves) and on phones (tap to play); the
-  party server streams them in byte ranges so phones and iPhones can seek. They are stored in the same `questions` table (`package_id` 0, `origin` `own`), so search, lists,
-  games and parties treat them like any other question, and *My questions* in the game filter finds them in search too.
+  party server streams them in byte ranges so phones and iPhones can seek. They are stored in the same `questions` table (`source_id` `own`), so search, lists,
+  games and parties treat them like any other question, and *My questions* in the source picker finds them in search too.
   Like edits, they survive refreshes and version updates, and `npm run dist` leaves them out of the installer.
   Only your own questions can be deleted.
 - **Import and export**: *Export* on the *Custom* tab saves all your own questions, and *Export* on a list saves that list
@@ -194,11 +200,15 @@ the party header turns them off and on for everyone. Windows
   question bank this computer lacks, is added to your own questions first. A message sums up what was added.
 - **Images** are shown from `data/images/` when `scraper.js images` has fetched them, otherwise from the site.
 - **Data sources** (in Settings, the gear icon top right, on the *Data sources* tab) lists the question banks the
-  app can download from. `app/sources.js` keeps them in `DATA_SOURCES`; each source has a name, website,
-  description and install time, and three functions: `status` (state, question count, your edits, pictures saved
-  on this computer, when it was last checked), `download` (install or refresh) and `remove`. A new scraper is added
-  as one more entry there; the page, the progress bar and the IPC calls (`data-sources`, `update-data-source`,
-  `stop-data-source`, `delete-data-source`) work for every source. One source downloads at a time.
+  app can download from. `app/sources.js` keeps them in `DATA_SOURCES`. Each source has an `id` (its questions'
+  `source_id`), a name, website, description and install time, a `kind` (`scraper` for a site crawled on this
+  computer; later `download` for a ready dataset file) and a `price` (`null` for free; paid datasets from the store
+  set it), its own `tables`, and two functions: `progress` (whether a download started or finished, when it was last
+  checked) and `download` (install or refresh). Counting questions, edits and saved pictures and deleting a source
+  work the same for every source, by `source_id`: deleting keeps pictures other sources still use. A new scraper or
+  a sold dataset is added as one more entry; the page, the progress bar and the IPC calls (`data-sources`,
+  `update-data-source`, `stop-data-source`, `delete-data-source`) work for every source. A source's `uid`s start
+  with its own prefix so they never clash. One source downloads at a time.
   Each source shows as a card: *Not installed* with **Install**, *Not finished* (a stopped install) with
   **Continue install**, or *Installed* with **Refresh** (Quick or Full) and **Delete**. While it downloads, the
   card and the status line show the stage and progress, with **Stop download**; the app stays usable. A search
@@ -252,11 +262,8 @@ To keep the installer small, all of it lossless:
 **What users see:**
 1. At start, an installed app with a feed downloads the new version in the background. It then offers
    *Restart to update*. Quitting the app also installs the update.
-2. Updates never touch the questions: the database and pictures live in the user data folder. Versions before
-   data sources kept a bundled copy of 3sual.az in `3sual.sqlite`; the first start renames it to
-   `kimhardane.sqlite`, so 3sual.az shows as installed with everything the user had. Its pictures lived in the
-   install folder, so they are shown from the site until the next refresh saves them. The AI model stays in the
-   user data folder.
+2. Updates never touch the questions: the database (`kimhardane.sqlite`), the pictures and the AI model live in the
+   user data folder. Data from versions before data sources is not carried over; install the data sources again.
 3. The installer is unsigned, so Windows SmartScreen warns on first install. A code-signing certificate
    (`CSC_LINK`, `CSC_KEY_PASSWORD`) removes the warning.
 

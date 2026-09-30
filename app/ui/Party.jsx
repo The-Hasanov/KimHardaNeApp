@@ -15,7 +15,9 @@ import {
   Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import { Input } from '@/components/ui/input';
 import { Kbd } from '@/components/ui/kbd';
+import { Label } from '@/components/ui/label';
 import { Progress } from '@/components/ui/progress';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Spinner } from '@/components/ui/spinner';
@@ -603,6 +605,30 @@ function AnnouncementStrip({ announcement, onOpen }) {
   );
 }
 
+export const PARTY_TITLE_KEY = 'partyTitle';
+
+function PartyNameField({ title }) {
+  const [draft, setDraft] = useState(title);
+  useEffect(() => setDraft(title), [title]);
+  const save = () => {
+    const clean = draft.replace(/\s+/g, ' ').trim();
+    try {
+      if (clean) localStorage.setItem(PARTY_TITLE_KEY, clean);
+      else localStorage.removeItem(PARTY_TITLE_KEY);
+    } catch {}
+    if (clean !== title) api.partySetTitle(clean);
+    else setDraft(title);
+  };
+  return (
+    <div className="grid gap-2">
+      <Label htmlFor="party-name">Party name</Label>
+      <Input id="party-name" value={draft} maxLength={40} className="max-w-sm" onChange={e => setDraft(e.target.value)} onBlur={save}
+        onKeyDown={e => e.key === 'Enter' && e.currentTarget.blur()} />
+      <p className="text-xs text-muted-foreground">Shown on the TV and on every phone.</p>
+    </div>
+  );
+}
+
 function PlayersInLobby({ players, onKick }) {
   return (
     <div className="space-y-3">
@@ -688,7 +714,7 @@ export default function PartyScreen({ party, isVisible, lobbySettings, onBackToL
     <RecentReactions.Provider value={recentReactions}>
       <div className="flex h-full flex-col">
         <div className="flex shrink-0 flex-wrap items-center gap-x-4 gap-y-2 border-b px-6 py-3">
-          <span className="flex items-center gap-2 text-sm font-medium"><UsersIcon className="size-4" />Party</span>
+          <span className="flex min-w-0 items-center gap-2 text-sm font-medium"><UsersIcon className="size-4 shrink-0" /><span className="truncate">{party.title}</span></span>
           {isInRound && <span className="text-sm">Round {party.round} · Question {party.index + 1} of {party.total}</span>}
           <span className="text-sm text-muted-foreground">{party.players.length} {party.players.length === 1 ? 'player' : 'players'}</span>
           {party.urls[0] && isInRound && <span className="font-mono text-sm text-muted-foreground">Join: {hostOf(party.urls[0].url)}</span>}
@@ -719,6 +745,7 @@ export default function PartyScreen({ party, isVisible, lobbySettings, onBackToL
               <div className="grid gap-6 md:grid-cols-[auto_1fr]">
                 <JoinCard urls={party.urls} />
                 <div className="space-y-6">
+                  <PartyNameField title={party.title} />
                   <PlayersInLobby players={party.players} onKick={kick} />
                   {party.round > 0 && (
                     <div className="space-y-2">

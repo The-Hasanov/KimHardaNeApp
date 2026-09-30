@@ -2,7 +2,7 @@
 
 # KimHardaNeApp
 
-A Windows app for hosting quiz nights in the style of *Nə? Harada? Nə zaman?* (What? Where? When?). Players
+A Windows app for hosting any kind of quiz night. Players
 answer in the web browser of any phone, tablet or computer, the TV shows the questions, a countdown and the leaderboard, and the host runs the
 game from the app. Bring your own questions or install a question bank from *Data sources* in Settings.
 
@@ -86,8 +86,8 @@ with the scraper (about 20 minutes, one request per second).
 ```bash
 cd app
 npm install
-node scraper.js crawl --db ../data/3sual.sqlite
-node scraper.js images --db ../data/3sual.sqlite   # optional, for offline images (~35 min)
+node scraper.js crawl --db ../data/kimhardane.sqlite
+node scraper.js images --db ../data/kimhardane.sqlite   # optional, for offline images (~35 min)
 npm start
 ```
 
