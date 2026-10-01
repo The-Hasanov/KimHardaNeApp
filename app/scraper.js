@@ -6,8 +6,8 @@ const { parseArgs } = require('node:util');
 const { DatabaseSync } = require('node:sqlite');
 
 const SOURCE_ID = '3sual';
-const API = 'https://api.3sual.az/api/';
-const IMAGES = 'https://api.3sual.az/images/';
+const API = 'https://api-v2.3sual.az/api/';
+const IMAGES = 'https://api-v2.3sual.az/images/';
 const ALL_GAMES = '1,2,3,4,5,6,7';
 const USER_AGENT = '3sual-dataset-scraper/2.0 (sequential, rate-limited; node)';
 const MAX_DEPTH = 16;

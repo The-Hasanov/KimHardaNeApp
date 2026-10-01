@@ -76,7 +76,7 @@ test('save writes only changes, marks edited, reindexes and invalidates the vect
 
 test('images: a downloaded copy is served from disk, otherwise the remote URL', () => {
   const file = tempDb();
-  const remote = n => `https://api.3sual.az/images/rekvizit/${n}.png`;
+  const remote = n => `https://api-v2.3sual.az/images/rekvizit/${n}.png`;
   const db = new DatabaseSync(file);
   db.exec(`UPDATE questions SET rekvizit_url = '${remote('a')}' WHERE uid = '1:question:1'`);
   db.exec(`UPDATE questions SET rekvizit_url = '${remote('b')}' WHERE uid = '1:question:2'`);
@@ -149,7 +149,7 @@ test('dropping vectors turns AI ranking off, deletes them and ignores late ones'
 test('the image filter keeps only questions with a handout image', () => {
   const file = tempDb();
   const db = new DatabaseSync(file);
-  db.exec("UPDATE questions SET rekvizit_url = 'https://api.3sual.az/images/rekvizit/1.png' WHERE value_id = 3");
+  db.exec("UPDATE questions SET rekvizit_url = 'https://api-v2.3sual.az/images/rekvizit/1.png' WHERE value_id = 3");
   db.close();
   const s = new Store(file);
   s.buildIndex();

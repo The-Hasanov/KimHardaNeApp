@@ -58,7 +58,7 @@ test('multi-value group, media and accepted answers (OSİP)', needsFixtures, () 
   assert.deepEqual([...new Set(blits.map(r => r.group_size))], [3]);
   assert.equal(new Set(blits.map(r => r.comment)).size, 1);
   assert.equal(blits[0].sources.length, 2);
-  assert.equal(recs[898].rekvizit_url, 'https://api.3sual.az/images/rekvizit/1582455607337.95121-2.jpg');
+  assert.equal(recs[898].rekvizit_url, 'https://api-v2.3sual.az/images/rekvizit/1582455607337.95121-2.jpg');
   assert.equal(recs[898].rekvizit_text, null);
   assert.equal(recs[920].rekvizit_text, '... bizə ... deyil');
   assert.equal(recs[920].rekvizit_url, null);
@@ -80,7 +80,7 @@ test('arbitrarily nested subs', () => {
   assert.deepEqual(by[1].phase_path, [{ id: 10, name: 'P' }]);
   assert.deepEqual(by[2].phase_path.map(p => p.id), [10, 11, 12]);
   assert.deepEqual([by[2].phase_id, by[2].subphase_id, by[2].subphase_name], [10, 12, 'SS']);
-  assert.equal(by[4].rekvizit_url, 'https://api.3sual.az/images/rekvizit/a%20b.png');
+  assert.equal(by[4].rekvizit_url, 'https://api-v2.3sual.az/images/rekvizit/a%20b.png');
   assert.deepEqual(ext.phases.map(p => p.depth), [0, 1, 2]);
 });
 
@@ -166,7 +166,7 @@ class FakeFetch {
 test('image download resumes, retries failures and exports paths', needsFixtures, async () => {
   const db = memdb(), doc = fixture('package_osip_questions.json');
   t.storePackage(db, 1, 20, doc, t.normalizePackage(doc));
-  const extra = 'https://api.3sual.az/images/theme/a b.jpeg';
+  const extra = 'https://api-v2.3sual.az/images/theme/a b.jpeg';
   db.prepare('UPDATE questions SET source_media_url=? WHERE value_id=933').run(extra);
   const rekvizit = one(db, 'SELECT rekvizit_url FROM questions WHERE rekvizit_url IS NOT NULL');
   const root = tmp(), opts = { log: quiet };
@@ -343,22 +343,22 @@ test('client: 204 is null, bad JSON raises, abort stops', async () => {
 test('downloads use https only, stay under size limits and refuse redirects away from https', async () => {
   const quietClient = fetch => new t.Client({ delay: 0, retries: 0, log: quiet, fetch, sleep: async () => {} });
   const ok = async () => new Response('{"ok":1}');
-  await assert.rejects(quietClient(ok).fetch('http://api.3sual.az/api/x'), /only https/);
+  await assert.rejects(quietClient(ok).fetch('http://api-v2.3sual.az/api/x'), /only https/);
   await assert.rejects(quietClient(ok).fetch('file:///etc/passwd'), /only https/);
   const declared = async () => new Response('x', { headers: { 'Content-Length': String(100 * 1024 * 1024) } });
-  await assert.rejects(quietClient(declared).fetch('https://api.3sual.az/images/a.png', 'image/*', { maxBytes: 1024 }), /larger than/);
+  await assert.rejects(quietClient(declared).fetch('https://api-v2.3sual.az/images/a.png', 'image/*', { maxBytes: 1024 }), /larger than/);
   const streamed = async () => new Response(new ReadableStream({ pull(controller) { controller.enqueue(new Uint8Array(4096)); } }));
-  await assert.rejects(quietClient(streamed).fetch('https://api.3sual.az/images/a.png', 'image/*', { maxBytes: 64 * 1024 }), /larger than/);
+  await assert.rejects(quietClient(streamed).fetch('https://api-v2.3sual.az/images/a.png', 'image/*', { maxBytes: 64 * 1024 }), /larger than/);
   const redirected = async () => ({ status: 200, url: 'http://evil.example/a.png', headers: new Headers(), body: null, arrayBuffer: async () => new ArrayBuffer(1) });
-  await assert.rejects(quietClient(redirected).fetch('https://api.3sual.az/images/a.png'), /redirected away from https/);
+  await assert.rejects(quietClient(redirected).fetch('https://api-v2.3sual.az/images/a.png'), /redirected away from https/);
 });
 
 test('image download fetches only question bank pictures and keeps only real images', async () => {
   const db = memdb();
   const add = db.prepare("INSERT INTO questions (source_id, package_id, kind, value_id, uid, origin, ordinal, rekvizit_url) VALUES ('3sual', 1, 'question', ?, ?, 'package', ?, ?)");
-  const site = 'https://api.3sual.az/images/good.png';
-  const fake = 'https://api.3sual.az/images/fake.png';
-  [site, fake, 'http://192.168.1.1/admin', 'https://tracker.example/pixel.png', 'own-image:abc.png', 'https://api.3sual.az/api/secret']
+  const site = 'https://api-v2.3sual.az/images/good.png';
+  const fake = 'https://api-v2.3sual.az/images/fake.png';
+  [site, fake, 'http://192.168.1.1/admin', 'https://tracker.example/pixel.png', 'own-image:abc.png', 'https://api-v2.3sual.az/api/secret']
     .forEach((url, i) => add.run(i + 1, `1:question:${i + 1}`, i + 1, url));
   const calls = [];
   const client = new t.Client({ delay: 0, retries: 0, log: quiet, sleep: async () => {}, fetch: async url => {

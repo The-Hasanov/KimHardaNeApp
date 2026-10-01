@@ -34,6 +34,9 @@ const threeSual = {
     } catch (e) {
       if (!(e instanceof scraper.Interrupted)) error = e.message;
     }
+    if (!error && crawled?.status === 'finished' && !crawled.report?.listing?.unique_packages_listed) {
+      error = `3sual.az listed no packages${crawled.report?.failures?.[0] ? `: ${crawled.report.failures[0].message}` : ''}`;
+    }
     return { error, complete: !!crawled?.report?.complete && !!images?.complete,
       images: images?.fetched_this_run ?? 0, failures: (crawled?.report?.errors ?? 0) + (images?.failed ?? 0) };
   },
@@ -61,7 +64,7 @@ function questionStats(db, roots, sourceId) {
 function describe(source, db, roots) {
   const stats = questionStats(db, roots, source.id);
   const { hasStarted, isComplete, checkedAt } = source.progress(db);
-  const state = isComplete ? 'installed' : stats.questions || hasStarted ? 'unfinished' : 'available';
+  const state = isComplete && stats.questions ? 'installed' : stats.questions || hasStarted ? 'unfinished' : 'available';
   const { progress, download, tables, ...info } = source;
   return { ...info, state, checkedAt, ...stats };
 }

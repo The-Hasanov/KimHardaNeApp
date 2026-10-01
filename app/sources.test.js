@@ -40,10 +40,10 @@ test('an empty library has every data source available and no questions', () => 
 
 test('3sual status counts questions, edits and saved pictures, and is unfinished until a run finishes', () => {
   const { dir, db } = library();
-  addSiteQuestion(db, 1, { picture: 'https://api.3sual.az/images/a.png' });
-  addSiteQuestion(db, 2, { picture: 'https://api.3sual.az/images/b.png', isEdited: true });
-  savePicture(db, dir, 'https://api.3sual.az/images/a.png', 'images/aa/a.png');
-  db.prepare("INSERT INTO images (url, status, path) VALUES ('https://api.3sual.az/images/b.png', 'ok', 'images/bb/gone.png')").run();
+  addSiteQuestion(db, 1, { picture: 'https://api-v2.3sual.az/images/a.png' });
+  addSiteQuestion(db, 2, { picture: 'https://api-v2.3sual.az/images/b.png', isEdited: true });
+  savePicture(db, dir, 'https://api-v2.3sual.az/images/a.png', 'images/aa/a.png');
+  db.prepare("INSERT INTO images (url, status, path) VALUES ('https://api-v2.3sual.az/images/b.png', 'ok', 'images/bb/gone.png')").run();
   db.prepare("INSERT INTO runs (started_at, status) VALUES ('2026-09-01T10:00:00+00:00', 'interrupted')").run();
   addSiteQuestion(db, 3, { sourceId: 'other' });
   let status = describe(threeSual, db, [dir]);
@@ -54,13 +54,28 @@ test('3sual status counts questions, edits and saved pictures, and is unfinished
   assert.equal(status.checkedAt, '2026-09-02T10:30:00+00:00');
 });
 
+test('an install that brought no questions is unfinished and reports why, not installed', async () => {
+  const { dir, db } = library();
+  db.prepare("INSERT INTO runs (started_at, finished_at, status) VALUES ('2026-10-01T10:00:00+00:00', '2026-10-01T10:00:04+00:00', 'finished')").run();
+  assert.equal(describe(threeSual, db, [dir]).state, 'unfinished');
+  const scraper = require('./scraper');
+  const { crawl } = scraper;
+  scraper.crawl = async () => ({ status: 'finished', report: { complete: false, listing: { unique_packages_listed: 0 }, failures: [{ message: 'page 1: HTTP 404' }] } });
+  try {
+    const result = await threeSual.download(db, { mode: 'quick', signal: new AbortController().signal, roots: [dir], progress: () => {} });
+    assert.equal(result.error, '3sual.az listed no packages: page 1: HTTP 404');
+  } finally {
+    scraper.crawl = crawl;
+  }
+});
+
 test('deleting 3sual keeps own questions, other sources, their pictures, lists and games, and frees the site pictures', () => {
   const { dir, store, db } = library();
-  addSiteQuestion(db, 1, { picture: 'https://api.3sual.az/images/a.png' });
-  addSiteQuestion(db, 2, { picture: 'https://api.3sual.az/images/shared.png' });
-  addSiteQuestion(db, 2, { picture: 'https://api.3sual.az/images/shared.png', sourceId: 'other' });
-  savePicture(db, dir, 'https://api.3sual.az/images/a.png', 'images/aa/a.png');
-  savePicture(db, dir, 'https://api.3sual.az/images/shared.png', 'images/sh/shared.png');
+  addSiteQuestion(db, 1, { picture: 'https://api-v2.3sual.az/images/a.png' });
+  addSiteQuestion(db, 2, { picture: 'https://api-v2.3sual.az/images/shared.png' });
+  addSiteQuestion(db, 2, { picture: 'https://api-v2.3sual.az/images/shared.png', sourceId: 'other' });
+  savePicture(db, dir, 'https://api-v2.3sual.az/images/a.png', 'images/aa/a.png');
+  savePicture(db, dir, 'https://api-v2.3sual.az/images/shared.png', 'images/sh/shared.png');
   savePicture(db, dir, `${OWN_IMAGE_PREFIX}mine.png`, 'images/own/mine.png');
   db.prepare("INSERT INTO runs (started_at, status) VALUES ('2026-09-02T10:00:00+00:00', 'finished')").run();
   db.prepare("INSERT INTO packages (id, status) VALUES (7, 'ok')").run();
@@ -80,7 +95,7 @@ test('deleting 3sual keeps own questions, other sources, their pictures, lists a
   assert.equal(fs.existsSync(path.join(dir, 'images/aa/a.png')), false);
   assert.equal(fs.existsSync(path.join(dir, 'images/own/mine.png')), true);
   assert.equal(fs.existsSync(path.join(dir, 'images/sh/shared.png')), true);
-  assert.deepEqual(db.prepare('SELECT url FROM images ORDER BY url').all().map(row => row.url), ['https://api.3sual.az/images/shared.png', `${OWN_IMAGE_PREFIX}mine.png`]);
+  assert.deepEqual(db.prepare('SELECT url FROM images ORDER BY url').all().map(row => row.url), ['https://api-v2.3sual.az/images/shared.png', `${OWN_IMAGE_PREFIX}mine.png`]);
   assert.equal(db.prepare('SELECT COUNT(*) AS n FROM list_questions WHERE list_id = ?').get(listId).n, 2);
   assert.deepEqual(store.listQuestions(listId).map(question => question.uid), [own.uid]);
 });

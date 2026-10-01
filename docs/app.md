@@ -246,7 +246,7 @@ the party header turns them off and on for everyone. Windows
   leaderboard stay. Lists keep their places for deleted questions and show them again after a reinstall.
   Every download goes over `https` only (redirects away from it are refused) and has a size limit (64 MB of data per API
   answer, 25 MB per picture). Pictures are fetched only from the question bank's own image address
-  (`https://api.3sual.az/images/`): links that your own or imported questions carry are shown as links, never downloaded
+  (`https://api-v2.3sual.az/images/`): links that your own or imported questions carry are shown as links, never downloaded
   in the background. A downloaded picture is kept only when its bytes really are a JPEG, PNG, GIF, WebP, BMP or SVG
   image, and it is stored under a hashed name with an extension from that list. Pictures not saved yet are shown
   from the site; the card counts them. The installed app keeps the database and pictures in

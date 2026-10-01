@@ -65,7 +65,7 @@ interrupted. Progress is logged to stderr. The final report goes to stdout and i
 
 ## Endpoints used
 
-All requests are `GET https://api.3sual.az/api/…` with no authentication.
+All requests are `GET https://api-v2.3sual.az/api/…` with no authentication.
 
 | Endpoint | Used for | Observed shape |
 |---|---|---|
@@ -77,7 +77,7 @@ All requests are `GET https://api.3sual.az/api/…` with no authentication.
 | `authors/themes?id=A&page=N&perpage=100` | Audit: an author's themes | Same shape with `themes[]` |
 
 Game IDs: 1 Nə? Harada? Nə zaman?, 2 Xəmsə, 3 Fərdi Oyun, 4 Breyn Rinq, 5 Erudit-kvartet,
-6 OSİP, 7 Quiz. Media paths resolve under `https://api.3sual.az/images/`.
+6 OSİP, 7 Quiz. Media paths resolve under `https://api-v2.3sual.az/images/`.
 
 Not used: `questions/search` (a keyword search that needs `limit` and `keywords`, so it can't
 enumerate), `packages/forcont?id=` (tournament series view), and the logged-in `editor/*`,
