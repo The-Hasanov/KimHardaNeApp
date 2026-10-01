@@ -42,7 +42,8 @@ CREATE TABLE IF NOT EXISTS game_templates (
   id INTEGER PRIMARY KEY, name TEXT NOT NULL UNIQUE COLLATE NOCASE, rounds TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL);`;
 const SHOW_PAGES_SCHEMA = `
 CREATE TABLE IF NOT EXISTS show_pages (
-  id INTEGER PRIMARY KEY, title TEXT NOT NULL, blocks TEXT NOT NULL, seconds INTEGER NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL);`;
+  id INTEGER PRIMARY KEY, title TEXT NOT NULL, blocks TEXT NOT NULL, seconds INTEGER NOT NULL, can_players_skip INTEGER NOT NULL DEFAULT 1,
+  created_at TEXT NOT NULL, updated_at TEXT NOT NULL);`;
 const POOL = 500;
 const OWN_SOURCE_ID = 'own';
 const OWN_PACKAGE_ID = 0;
@@ -85,6 +86,7 @@ class Store {
     this.db.exec(POINT_SYSTEMS_SCHEMA);
     this.db.exec(GAME_TEMPLATES_SCHEMA);
     this.db.exec(SHOW_PAGES_SCHEMA);
+    if (!this.db.prepare('PRAGMA table_info(show_pages)').all().some(c => c.name === 'can_players_skip')) this.db.exec('ALTER TABLE show_pages ADD COLUMN can_players_skip INTEGER NOT NULL DEFAULT 1');
     const resultColumns = this.db.prepare('PRAGMA table_info(party_results)').all().map(c => c.name);
     if (!resultColumns.includes('correct_ms')) this.db.exec('ALTER TABLE party_results ADD COLUMN correct_ms INTEGER NOT NULL DEFAULT 0');
     if (!resultColumns.includes('points')) this.db.exec('ALTER TABLE party_results ADD COLUMN points INTEGER NOT NULL DEFAULT 0; UPDATE party_results SET points = correct');
@@ -345,17 +347,18 @@ class Store {
   }
 
   showPages() {
-    return this.db.prepare('SELECT id, title, blocks, seconds, updated_at FROM show_pages ORDER BY id').all()
-      .map(row => ({ ...row, blocks: JSON.parse(row.blocks).map(block => (block.type === 'image' ? { ...block, src: this.imageSrc(block.image) } : block)) }));
+    return this.db.prepare('SELECT id, title, blocks, seconds, can_players_skip, updated_at FROM show_pages ORDER BY id').all()
+      .map(({ can_players_skip: canPlayersSkip, ...row }) => ({ ...row, canPlayersSkip: !!canPlayersSkip, blocks: JSON.parse(row.blocks).map(block => (block.type === 'image' ? { ...block, src: this.imageSrc(block.image) } : block)) }));
   }
 
-  saveShowPage({ id = null, title, blocks, seconds }) {
+  saveShowPage({ id = null, title, blocks, seconds, canPlayersSkip = true }) {
     const json = JSON.stringify(blocks.map(({ src, ...block }) => block));
     if (id == null) {
-      return Number(this.db.prepare("INSERT INTO show_pages (title, blocks, seconds, created_at, updated_at) VALUES (?, ?, ?, datetime('now'), datetime('now'))")
-        .run(title, json, seconds).lastInsertRowid);
+      return Number(this.db.prepare("INSERT INTO show_pages (title, blocks, seconds, can_players_skip, created_at, updated_at) VALUES (?, ?, ?, ?, datetime('now'), datetime('now'))")
+        .run(title, json, seconds, canPlayersSkip ? 1 : 0).lastInsertRowid);
     }
-    this.db.prepare("UPDATE show_pages SET title = ?, blocks = ?, seconds = ?, updated_at = datetime('now') WHERE id = ?").run(title, json, seconds, id);
+    this.db.prepare("UPDATE show_pages SET title = ?, blocks = ?, seconds = ?, can_players_skip = ?, updated_at = datetime('now') WHERE id = ?")
+      .run(title, json, seconds, canPlayersSkip ? 1 : 0, id);
     return id;
   }
 

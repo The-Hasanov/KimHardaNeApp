@@ -92,8 +92,9 @@ npm test         # offline tests for the scraper, data sources, search, ranking,
   stays on screen, with a live preview of the TV. Each round's editor has *Show pages before this round*: add several,
   reorder them or remove them (*Manage show pages* opens the tab, or a window during a party). When the round starts, its
   pages play one after another on the TV and every phone (phase `show`), then the first question comes. The host sees
-  the page with a countdown and can skip to the next page (Space), pause and resume; players can skip together as with
-  a wait. Pictures reach the TV and phones through `/tv/show-image` and `/show-image` (phones need their token), only
+  the page with a countdown and can skip to the next page (Space), pause and resume. Each page has *Players can skip
+  this page* (on by default): when on, players can skip together as with a wait; when off, phones show no Next button and
+  only the host can move on early. Pictures reach the TV and phones through `/tv/show-image` and `/show-image` (phones need their token), only
   while their page is showing. *Save as template* keeps the plan as a **game
   template** (`game_templates` table, carried through updates; saving with an existing name replaces it), and *Use a
   template* or *Game → Templates → Use* loads one. Templates point to their point systems and show pages, so editing one changes

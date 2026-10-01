@@ -392,6 +392,7 @@ class PartyGame {
   }
 
   canSkip() {
+    if (this.phase === 'show' && this.showPages[this.showIndex].canPlayersSkip === false) return false;
     return SKIPPABLE_PHASES.includes(this.phase) && !this.isHostChecking();
   }
 
@@ -464,7 +465,7 @@ class PartyGame {
   showPageView(imageUrl) {
     const page = this.phase === 'show' ? this.showPages[this.showIndex] : null;
     return page && {
-      index: this.showIndex, total: this.showPages.length, title: page.title, seconds: page.seconds,
+      index: this.showIndex, total: this.showPages.length, title: page.title, seconds: page.seconds, canPlayersSkip: page.canPlayersSkip !== false,
       blocks: page.blocks.map((block, position) => (block.type === 'image' ? { type: 'image', src: imageUrl(block, position) } : block)),
     };
   }

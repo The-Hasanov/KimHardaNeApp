@@ -771,3 +771,17 @@ test('show pages play before the round, each for its seconds, can be skipped or 
     await close();
   }
 });
+
+test('the host decides per show page whether players may skip it; the host always can', () => {
+  const game = newGame();
+  const aysel = game.join('Aysel');
+  game.startRound({ ...ROUND, showPages: [
+    { title: 'Rules', seconds: 30, canPlayersSkip: false, blocks: [] },
+    { title: 'Ready?', seconds: 10, blocks: [] },
+  ] });
+  assert.deepEqual([game.tvView().showPage.canPlayersSkip, game.playerView(aysel).skip.isAvailable], [false, false]);
+  assert.throws(() => game.toggleSkip(aysel.token), /Nothing to skip/);
+  game.skipWait();
+  assert.deepEqual([game.showIndex, game.playerView(aysel).skip.isAvailable, game.hostView().showPage.canPlayersSkip], [1, true, true]);
+  game.stopTimer();
+});

@@ -390,7 +390,10 @@ function ShowForHost({ party }) {
     <div className="mx-auto max-w-4xl space-y-4 px-8 py-8">
       <p className="text-sm font-medium text-muted-foreground">On the TV and phones · show page {page.index + 1} of {page.total}</p>
       <div className="@container"><ShowPageSlide page={page} /></div>
-      <p className="text-sm text-muted-foreground">{isLast ? `Then question 1 of ${party.total}.` : 'Then the next show page.'}</p>
+      <p className="text-sm text-muted-foreground">
+        {isLast ? `Then question 1 of ${party.total}.` : 'Then the next show page.'}{' '}
+        {page.canPlayersSkip ? 'Players can skip it together.' : 'Players cannot skip it; only you can.'}
+      </p>
     </div>
   );
 }

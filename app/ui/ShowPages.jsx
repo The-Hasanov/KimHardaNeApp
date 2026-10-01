@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { cn } from 'cn';
 import {
-  ArrowDownIcon, ArrowUpIcon, CopyIcon, ImagePlusIcon, LayoutTemplateIcon, PencilIcon, PlusIcon, ClapperboardIcon, TimerIcon, Trash2Icon, TypeIcon, XIcon,
+  ArrowDownIcon, ArrowUpIcon, CopyIcon, FastForwardIcon, LockIcon, ImagePlusIcon, LayoutTemplateIcon, PencilIcon, PlusIcon, ClapperboardIcon, TimerIcon, Trash2Icon, TypeIcon, XIcon,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import {
@@ -18,7 +18,7 @@ import { NumberField, withoutIpcPrefix } from './gameShared';
 
 const { api } = window;
 const MAX_BLOCKS = 12;
-const NEW_SHOW_PAGE = { title: '', seconds: 10, blocks: [{ type: 'text', text: '', isLarge: false }] };
+const NEW_SHOW_PAGE = { title: '', seconds: 10, canPlayersSkip: true, blocks: [{ type: 'text', text: '', isLarge: false }] };
 
 export function useShowPages() {
   const [showPages, setShowPages] = useState(null);
@@ -118,6 +118,15 @@ function ShowPageEditor({ page, onOpenChange, onSaved }) {
               <NumberField id="show-page-seconds" label="Seconds on screen" value={draft.seconds} min={3} max={600} step={5}
                 onChange={seconds => setDraft({ ...draft, seconds })} />
             </div>
+            <div className="flex items-start gap-3 rounded-lg border px-3 py-2.5">
+              <Switch id="show-page-skippable" checked={draft.canPlayersSkip !== false} onCheckedChange={canPlayersSkip => setDraft({ ...draft, canPlayersSkip })} className="mt-0.5" />
+              <div className="grid gap-0.5">
+                <Label htmlFor="show-page-skippable" className="font-normal">Players can skip this page</Label>
+                <p className="text-xs text-muted-foreground">
+                  {draft.canPlayersSkip !== false ? 'Phones show a Next button; the page moves on when every player skips.' : 'Phones show no Next button. It stays for its seconds, unless you skip it.'}
+                </p>
+              </div>
+            </div>
             <ul className="space-y-2">
               {draft.blocks.map((block, index) => (
                 <BlockEditor key={index} block={block} index={index} count={draft.blocks.length} onChange={next => changeBlock(index, next)}
@@ -179,7 +188,12 @@ export default function ShowPages({ showPages, onShowPagesChange }) {
               <div className="flex items-center gap-2">
                 <div className="min-w-0 flex-1">
                   <h2 className="truncate font-medium">{page.title || 'Untitled'}</h2>
-                  <p className="flex items-center gap-1 text-xs text-muted-foreground"><TimerIcon className="size-3.5" />{page.seconds} s on screen</p>
+                  <p className="flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
+                    <span className="flex items-center gap-1 whitespace-nowrap"><TimerIcon className="size-3.5" />{page.seconds} s on screen</span>
+                    <span className="flex items-center gap-1 whitespace-nowrap">
+                      {page.canPlayersSkip ? <><FastForwardIcon className="size-3.5" />Players can skip</> : <><LockIcon className="size-3.5" />Players can't skip</>}
+                    </span>
+                  </p>
                 </div>
                 <Button size="icon-sm" variant="ghost" className="text-muted-foreground" aria-label={`Edit ${page.title}`} title="Edit" onClick={() => setEditing(editable(page))}><PencilIcon /></Button>
                 <Button size="icon-sm" variant="ghost" className="text-muted-foreground" aria-label={`Duplicate ${page.title}`} title="Duplicate"

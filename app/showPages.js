@@ -17,11 +17,11 @@ function normalizeBlock(block) {
   return text ? { type: 'text', text, isLarge: !!block.isLarge } : null;
 }
 
-function normalizeShowPage({ id = null, title, blocks, seconds } = {}) {
+function normalizeShowPage({ id = null, title, blocks, seconds, canPlayersSkip = true } = {}) {
   const cleanTitle = String(title ?? '').replace(/\s+/g, ' ').trim().slice(0, MAX_TITLE_LENGTH);
   const cleanBlocks = (Array.isArray(blocks) ? blocks : []).map(normalizeBlock).filter(Boolean).slice(0, MAX_BLOCKS);
   if (!cleanTitle && !cleanBlocks.length) throw new Error('Give the show page a title, a text or a picture');
-  return { id: Number.isInteger(id) && id > 0 ? id : null, title: cleanTitle, blocks: cleanBlocks, seconds: whole(seconds, 3, 600, DEFAULT_SECONDS) };
+  return { id: Number.isInteger(id) && id > 0 ? id : null, title: cleanTitle, blocks: cleanBlocks, seconds: whole(seconds, 3, 600, DEFAULT_SECONDS), canPlayersSkip: canPlayersSkip !== false };
 }
 
 module.exports = { MAX_BLOCKS, DEFAULT_SECONDS, normalizeShowPage };
