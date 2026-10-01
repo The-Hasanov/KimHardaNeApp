@@ -128,6 +128,8 @@ html.light, html.light body { background: #ffffff; color: #0a0a0a; }
 .light .progress.low div { background: #d97706; }
 .light .lobby .qr img { border: 1px solid #e5e5e5; }
 .light .hint { color: #a3a3a3; }
+body { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+img { -webkit-user-drag: none; }
 </style>
 </head>
 <body>
@@ -184,6 +186,10 @@ function append(node, child) {
   if (Object.prototype.toString.call(child) === '[object Array]') return child.forEach(function (item) { append(node, item); });
   node.appendChild(typeof child === 'object' ? child : document.createTextNode(String(child)));
 }
+
+['copy', 'cut', 'contextmenu', 'selectstart', 'dragstart'].forEach(function (blocked) {
+  document.addEventListener(blocked, function (event) { event.preventDefault(); });
+});
 
 function el(tag, className) {
   var node = document.createElement(tag);

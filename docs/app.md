@@ -95,7 +95,10 @@ npm test         # offline tests for the scraper, data sources, search, ranking,
   the page with a countdown and can skip to the next page (Space), pause and resume. Each page has *Players can skip
   this page* (on by default): when on, players can skip together as with a wait; when off, phones show no Next button and
   only the host can move on early. Pictures reach the TV and phones through `/tv/show-image` and `/show-image` (phones need their token), only
-  while their page is showing. *Save as template* keeps the plan as a **game
+  while their page is showing.
+- **Questions cannot be copied from phones or the TV page.** Both pages turn off text selection, the long-press menu,
+  dragging and saving pictures, and the copy, cut and right-click events; only the answer box on the phone takes a
+  selection. A screenshot or a photo of the screen cannot be stopped by a web page. *Save as template* keeps the plan as a **game
   template** (`game_templates` table, carried through updates; saving with an existing name replaces it), and *Use a
   template* or *Game → Templates → Use* loads one. Templates point to their point systems and show pages, so editing one changes
   every template that uses it, and a point system or show page a template uses cannot be deleted. Each round uses a **point system**,

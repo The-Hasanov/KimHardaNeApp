@@ -785,3 +785,12 @@ test('the host decides per show page whether players may skip it; the host alway
   assert.deepEqual([game.showIndex, game.playerView(aysel).skip.isAvailable, game.hostView().showPage.canPlayersSkip], [1, true, true]);
   game.stopTimer();
 });
+
+test('phones and the TV page block selecting, copying and saving questions; only the answer box takes a selection', () => {
+  for (const page of ['player.html', 'tv.html']) {
+    const html = fs.readFileSync(path.join(__dirname, 'party', page), 'utf8');
+    assert.match(html, /body \{[^}]*user-select: none/, page);
+    assert.match(html, /\['copy', 'cut', 'contextmenu', 'selectstart', 'dragstart'\]/, page);
+  }
+  assert.match(fs.readFileSync(path.join(__dirname, 'party', 'player.html'), 'utf8'), /input, textarea \{ user-select: text/);
+});
