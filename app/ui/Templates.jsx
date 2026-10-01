@@ -8,7 +8,7 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { withoutIpcPrefix } from './gameShared';
-import { roundProblem, roundSummary, showPagesOf } from './RoundPlan';
+import { pageTitles, roundProblem, roundSummary, showPagesOf } from './RoundPlan';
 
 const { api } = window;
 
@@ -55,10 +55,15 @@ export default function Templates({ templates, onTemplatesChange, lists, pointSy
                       <span className="min-w-0 flex-1">
                         {showPagesOf(round, showPages).length > 0 && (
                           <span className="flex items-center gap-1.5 text-muted-foreground">
-                            <ClapperboardIcon className="size-3.5" />{showPagesOf(round, showPages).map(page => page.title || 'Untitled').join(' → ')}
+                            <ClapperboardIcon className="size-3.5" />{pageTitles(showPagesOf(round, showPages))}
                           </span>
                         )}
                         {roundSummary(round, lists, pointSystems, sources)}
+                        {showPagesOf(round, showPages, 'showPageIdsAfter').length > 0 && (
+                          <span className="flex items-center gap-1.5 text-muted-foreground">
+                            <ClapperboardIcon className="size-3.5" />After the results: {pageTitles(showPagesOf(round, showPages, 'showPageIdsAfter'))}
+                          </span>
+                        )}
                         {problems[index] && <span className="mt-0.5 flex items-center gap-1.5 text-destructive"><TriangleAlertIcon className="size-3.5" />{problems[index]}</span>}
                       </span>
                     </li>

@@ -89,9 +89,11 @@ npm test         # offline tests for the scraper, data sources, search, ranking,
   not fit its point system or its list is gone; the round shows why in red. **Show pages** turn the party into a show:
   on *Game → Show pages* (`ShowPages.jsx`, `show_pages` table, `showPages.js` cleans them) the host makes pages with a
   title, text blocks (normal or large) and pictures (copied to `images/own/` like other own media), and the seconds each
-  stays on screen, with a live preview of the TV. Each round's editor has *Show pages before this round*: add several,
-  reorder them or remove them (*Manage show pages* opens the tab, or a window during a party). When the round starts, its
-  pages play one after another on the TV and every phone (phase `show`), then the first question comes. The host sees
+  stays on screen, with a live preview of the TV. Each round's editor has *Show pages before this round* and *Show pages
+  after this round*: add several, reorder them or remove them (*Manage show pages* opens the tab, or a window during a
+  party). When the round starts, its pages before play one after another on the TV and every phone (phase `show`), then the
+  first question comes. Its pages after play once the host leaves the round results (*Next round* or *New game*), and then
+  the lobby opens; *End round* during them goes straight to the lobby. The host sees
   the page with a countdown and can skip to the next page (Space), pause and resume. Each page has *Players can skip
   this page* (on by default): when on, players can skip together as with a wait; when off, phones show no Next button and
   only the host can move on early. Pictures reach the TV and phones through `/tv/show-image` and `/show-image` (phones need their token), only
@@ -150,7 +152,11 @@ updates; it ranks by total points, then by the faster average time, and *Reset* 
 points were kept count one point per correct answer). Each answer keeps its time: seconds from the question's start to the last change of the
 answer, pauses left out (sending the same answer again keeps the first time). The host sees it next to every answer,
 phones see their own after the reveal, and every leaderboard (host, TV, phones, all-time) shows each player's average
-time of correct answers; players with the same score are ranked by it, the faster first. When a round ends, the TV and the host show
+time of correct answers; players with the same score are ranked by it, the faster first. When a round before the last one of the plan ends,
+the TV, the host and every phone show the leaderboard with each player's points this round and in total. Each round has
+*Show the leaderboard after this round* (on by default): when off, the TV and phones only say the round is over, also in
+the lobby until the next round, and the host can still put the leaderboard on the TV with the trophy button. When the
+last round of the plan ends, the TV and the host show
 a podium of the top three with *Congratulations, <winner>!* (shared first places name everyone), confetti and, on the TV,
 a short fanfare; each phone congratulates its player by place: a trophy and confetti for first, silver and bronze
 medals for second and third, and the place and winner for everyone else. Confetti is left out when the device asks

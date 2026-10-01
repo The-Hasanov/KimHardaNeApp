@@ -74,6 +74,11 @@ class PartyGame {
     this.round = 0;
     this.questions = [];
     this.showPages = [];
+    this.showPagesAfter = [];
+    this.isShowingAfterRound = false;
+    this.keepsScoresAfterShow = false;
+    this.isLastRound = true;
+    this.isLeaderboardHidden = false;
     this.showIndex = -1;
     this.answers = [];
     this.stakes = [];
@@ -381,7 +386,7 @@ class PartyGame {
   }
 
   skipKey() {
-    return `${this.round}:${this.phase}:${this.phase === 'show' ? `page${this.showIndex}` : this.index}`;
+    return `${this.round}:${this.phase}:${this.phase === 'show' ? `page${this.showIndex}${this.isShowingAfterRound ? 'after' : ''}` : this.index}`;
   }
 
   isHostChecking() {
@@ -423,7 +428,7 @@ class PartyGame {
     ({ show: () => this.nextShowPage(), waiting: () => this.openAnswers(), question: () => this.closeAnswers(), reveal: () => this.next() })[this.phase]();
   }
 
-  startRound({ questions, showPages = [], secondsPerQuestion, secondsBetweenQuestions, secondsOnAnswer = 0, pointSystem, pointsForCorrect = 1, pointsForWrong = 0, revealAtEnd = false }) {
+  startRound({ questions, showPages = [], showPagesAfter = [], isLastRound = true, showsLeaderboard = true, secondsPerQuestion, secondsBetweenQuestions, secondsOnAnswer = 0, pointSystem, pointsForCorrect = 1, pointsForWrong = 0, revealAtEnd = false }) {
     if (this.phase !== 'lobby' || !questions.length) return;
     const system = normalizePointSystem(pointSystem ?? { name: 'Classic', simple: { correct: pointsForCorrect, wrong: pointsForWrong, unanswered: 0 } });
     const problem = roundProblem(system, questions.length);
@@ -437,6 +442,9 @@ class PartyGame {
     this.revealedCount = 0;
     this.round += 1;
     this.showPages = showPages;
+    this.showPagesAfter = showPagesAfter;
+    this.isLastRound = !!isLastRound;
+    this.isLeaderboardHidden = !isLastRound && !showsLeaderboard;
     if (!showPages.length) return this.goTo(0);
     this.showPage(0);
   }
@@ -452,6 +460,7 @@ class PartyGame {
   nextShowPage() {
     if (this.phase !== 'show') return;
     if (this.showIndex + 1 < this.showPages.length) return this.showPage(this.showIndex + 1);
+    if (this.isShowingAfterRound) return this.enterLobby(this.keepsScoresAfterShow);
     this.goTo(0);
   }
 
@@ -465,13 +474,22 @@ class PartyGame {
   showPageView(imageUrl) {
     const page = this.phase === 'show' ? this.showPages[this.showIndex] : null;
     return page && {
-      index: this.showIndex, total: this.showPages.length, title: page.title, seconds: page.seconds, canPlayersSkip: page.canPlayersSkip !== false,
+      index: this.showIndex, total: this.showPages.length, isAfterRound: this.isShowingAfterRound, title: page.title, seconds: page.seconds, canPlayersSkip: page.canPlayersSkip !== false,
       blocks: page.blocks.map((block, position) => (block.type === 'image' ? { type: 'image', src: imageUrl(block, position) } : block)),
     };
   }
 
   backToLobby({ keepScores }) {
     if (this.phase !== 'finished') return;
+    if (!this.showPagesAfter.length) return this.enterLobby(keepScores);
+    this.keepsScoresAfterShow = keepScores;
+    this.isShowingAfterRound = true;
+    this.showPages = this.showPagesAfter;
+    this.showPage(0);
+  }
+
+  enterLobby(keepScores) {
+    this.stopTimer();
     if (keepScores) {
       for (const entry of this.leaderboard()) {
         this.bankedScores.set(entry.id, entry.score);
@@ -488,6 +506,8 @@ class PartyGame {
     this.stakes = [];
     this.rulings = [];
     this.showPages = [];
+    this.showPagesAfter = [];
+    this.isShowingAfterRound = false;
     this.index = -1;
     this.phase = 'lobby';
     this.screen = 'game';
@@ -632,6 +652,7 @@ class PartyGame {
   }
 
   finish() {
+    if (this.isShowingAfterRound) return this.enterLobby(this.keepsScoresAfterShow);
     if (this.phase === 'lobby' || this.phase === 'finished') return;
     this.stopTimer();
     this.phase = 'finished';
@@ -695,6 +716,9 @@ class PartyGame {
       skips: this.skipStatus(),
       announcement: this.announcement,
       areReactionsOn: this.areReactionsOn,
+      showPagesAfterCount: this.phase === 'finished' ? this.showPagesAfter.length : 0,
+      isLastRound: this.isLastRound,
+      isLeaderboardHidden: this.isLeaderboardHidden,
       answers: answerRows(this.index),
       previous: checkedIndex >= 0 ? { index: checkedIndex, question: this.questions[checkedIndex], answers: answerRows(checkedIndex) } : null,
       leaderboard: this.leaderboard(),
@@ -729,10 +753,13 @@ class PartyGame {
     const myAnswer = this.answers[this.index]?.get(player.id);
     const leaderboard = this.leaderboard();
     const me = leaderboard.find(entry => entry.id === player.id);
-    const showsLeaderboard = ['reveal', 'finished'].includes(this.phase) || (this.phase === 'lobby' && this.round > 0);
+    const isBetweenRounds = this.phase === 'finished' || (this.phase === 'lobby' && this.round > 0);
+    const showsLeaderboard = this.phase === 'reveal' || (isBetweenRounds && !this.isLeaderboardHidden);
     return {
       partyId: this.id, title: this.title, phase: this.phase, round: this.round, index: this.index, total: this.questions.length,
       remainingMs: this.remainingMs(), isPaused: this.pausedRemainingMs != null, playerCount: this.players.size, isNightMode: this.isNightMode,
+      isLastRound: this.isLastRound,
+      isLeaderboardHidden: isBetweenRounds && this.isLeaderboardHidden,
       rules: {
         pointSystem: this.rules.pointSystem, pointsSummary: this.rules.pointsSummary ?? summaryOf(this.rules.pointSystem), secondsPerQuestion: this.rules.secondsPerQuestion,
         secondsBetweenQuestions: this.rules.secondsBetweenQuestions, secondsOnAnswer: this.rules.secondsOnAnswer,

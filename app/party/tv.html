@@ -266,7 +266,7 @@ function leaderboard(entries, showsRoundScore) {
 
 function lobbyScreen() {
   var joinUrl = state.urls[0] && state.urls[0].url;
-  var showsScores = state.phase === 'lobby' && state.round > 0;
+  var showsScores = state.phase === 'lobby' && state.round > 0 && !state.isLeaderboardHidden;
   return el('div', 'lobby',
     el('div', 'qr', joinUrl ? [image('', '/tv/join-qr.svg', 'Join code'), el('div', 'address', hostOf(joinUrl))] : el('p', '', 'No network connection')),
     el('div', 'side stack',
@@ -379,6 +379,13 @@ function podiumStep(entry) {
     el('div', 'block', el('div', 'medal numbers', entry.rank)));
 }
 
+function betweenRoundsScreen() {
+  if (state.isLeaderboardHidden) return el('div', 'center', el('h1', 'title', 'Round ' + state.round + ' is over'), el('p', 'muted', 'The next round starts soon.'));
+  return el('div', 'standings',
+    el('h1', 'title', 'Leaderboard ', el('span', 'muted', '· after round ' + state.round)),
+    leaderboard(state.leaderboard.slice(0, 12), true));
+}
+
 function roundResultsScreen() {
   var board = state.leaderboard;
   if (!board.length) return el('div', 'standings', el('h1', 'title', 'Round ' + state.round + ' results'), leaderboard([], true));
@@ -389,7 +396,7 @@ function roundResultsScreen() {
     celebratedRound = state.round + ':' + state.id;
     celebrate();
   }
-  var kicker = el('div', 'kicker', 'Round ' + state.round + (winners.length > 1 ? ' · shared first place' : ' · winner'));
+  var kicker = el('div', 'kicker', 'Final results' + (winners.length > 1 ? ' · shared first place' : ' · winner'));
   kicker.lang = 'en';
   return el('div', 'celebration',
     kicker,
@@ -440,7 +447,7 @@ function render(next) {
   else if (screen === 'waiting') show(waitingScreen());
   else if (screen === 'question') show(questionScreen());
   else if (screen === 'reveal') show(revealScreen());
-  else if (screen === 'finished') show(roundResultsScreen());
+  else if (screen === 'finished') show(state.isLastRound ? roundResultsScreen() : betweenRoundsScreen());
   updateLiveParts();
 }
 

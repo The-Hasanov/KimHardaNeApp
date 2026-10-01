@@ -253,11 +253,12 @@ app.whenReady().then(() => {
     openPartyDisplay(win, party.game.port);
     return party.game.hostView();
   });
-  handle('party-start-round', withParty((game, { uids, pointSystemId, showPageIds = [], ...rules }) => {
+  handle('party-start-round', withParty((game, { uids, pointSystemId, showPageIds = [], showPageIdsAfter = [], ...rules }) => {
     const showPages = store.showPages();
+    const pagesOf = ids => ids.map(id => showPages.find(page => page.id === id)).filter(Boolean);
     game.startRound({
       questions: uids.map(uid => store.get(uid)).filter(Boolean), ...rules, pointSystem: store.pointSystems().find(system => system.id === pointSystemId),
-      showPages: showPageIds.map(id => showPages.find(page => page.id === id)).filter(Boolean),
+      showPages: pagesOf(showPageIds), showPagesAfter: pagesOf(showPageIdsAfter),
     });
   }));
   handle('party-skip-wait', withParty(game => game.skipWait()));

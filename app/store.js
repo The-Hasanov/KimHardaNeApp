@@ -366,7 +366,7 @@ class Store {
   }
 
   templatesUsingShowPage(showPageId) {
-    return this.gameTemplates().filter(template => template.rounds.some(round => round.showPageIds?.includes(showPageId))).map(template => template.name);
+    return this.gameTemplates().filter(template => template.rounds.some(round => [...(round.showPageIds ?? []), ...(round.showPageIdsAfter ?? [])].includes(showPageId))).map(template => template.name);
   }
 
   randomPlayableQuestions(games, count, excludedUids = []) {

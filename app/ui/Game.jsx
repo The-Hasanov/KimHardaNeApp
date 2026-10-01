@@ -329,6 +329,7 @@ export default function Game({ isVisible, lists, sources, listId, onListIdChange
         uids: roundQuestions.map(question => question.uid), secondsPerQuestion: round.secondsPerQuestion, pointSystemId: pointSystemOf(round, pointSystems)?.id,
         secondsBetweenQuestions: round.revealAtEnd ? Math.max(round.secondsBetweenQuestions, MIN_SECONDS_TO_CHECK_ANSWERS) : round.secondsBetweenQuestions,
         secondsOnAnswer: round.secondsOnAnswer, revealAtEnd: round.revealAtEnd, showPageIds: round.showPageIds ?? [],
+        showPageIdsAfter: round.showPageIdsAfter ?? [], isLastRound: partyState.round + 1 >= plan.length, showsLeaderboard: round.showsLeaderboard !== false,
       });
     } catch (e) {
       toast.error('Could not start the round', { description: withoutIpcPrefix(e) });

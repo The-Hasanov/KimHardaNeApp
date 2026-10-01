@@ -786,6 +786,61 @@ test('the host decides per show page whether players may skip it; the host alway
   game.stopTimer();
 });
 
+test('show pages after a round play once the host leaves the results, then the lobby opens', () => {
+  const game = newGame();
+  const aysel = game.join('Aysel');
+  const before = { title: 'Rules', seconds: 30, blocks: [] };
+  game.startRound({ ...ROUND, showPages: [before], showPagesAfter: [{ title: 'Break', seconds: 30, blocks: [] }, { title: 'Thanks', seconds: 30, blocks: [] }] });
+  game.toggleSkip(aysel.token);
+  game.finish();
+  game.finish();
+  assert.deepEqual([game.phase, game.hostView().showPagesAfterCount], ['finished', 2]);
+  game.backToLobby({ keepScores: true });
+  assert.deepEqual([game.phase, game.hostView().showPage.title, game.hostView().showPage.isAfterRound], ['show', 'Break', true]);
+  assert.equal(game.playerView(aysel).skip.count, 0);
+  game.skipWait();
+  assert.equal(game.tvView().showPage.title, 'Thanks');
+  game.skipWait();
+  assert.deepEqual([game.phase, game.round, game.remainingMs()], ['lobby', 1, null]);
+  game.startRound({ ...ROUND, showPagesAfter: [{ title: 'Bye', seconds: 30, blocks: [] }] });
+  game.finish();
+  game.backToLobby({ keepScores: false });
+  game.finish();
+  assert.deepEqual([game.phase, game.round, game.remainingMs()], ['lobby', 0, null]);
+  game.startRound(ROUND);
+  game.finish();
+  game.backToLobby({ keepScores: true });
+  assert.equal(game.phase, 'lobby');
+});
+
+test('only the last round of the plan ends with the winners; rounds before it end with the leaderboard', () => {
+  const game = newGame();
+  const aysel = game.join('Aysel');
+  game.startRound({ ...ROUND, isLastRound: false });
+  game.finish();
+  assert.deepEqual([game.hostView().isLastRound, game.tvView().isLastRound, game.playerView(aysel).isLastRound], [false, false, false]);
+  game.backToLobby({ keepScores: true });
+  game.startRound({ ...ROUND, isLastRound: true });
+  game.finish();
+  assert.deepEqual([game.tvView().isLastRound, game.playerView(aysel).isLastRound], [true, true]);
+});
+
+test('a round can hide the leaderboard from players until the next round; the TV still gets it for the host', () => {
+  const game = newGame();
+  const aysel = game.join('Aysel');
+  game.startRound({ ...ROUND, isLastRound: false, showsLeaderboard: false });
+  game.closeAnswers();
+  assert.equal(game.playerView(aysel).leaderboard.length, 1);
+  game.finish();
+  assert.deepEqual([game.playerView(aysel).isLeaderboardHidden, game.playerView(aysel).leaderboard, game.tvView().isLeaderboardHidden], [true, null, true]);
+  assert.equal(game.tvView().leaderboard.length, 1);
+  game.backToLobby({ keepScores: true });
+  assert.deepEqual([game.playerView(aysel).isLeaderboardHidden, game.playerView(aysel).leaderboard], [true, null]);
+  game.startRound({ ...ROUND, showsLeaderboard: false });
+  game.finish();
+  assert.deepEqual([game.playerView(aysel).isLeaderboardHidden, game.playerView(aysel).leaderboard.length], [false, 1]);
+});
+
 test('phones and the TV page block selecting, copying and saving questions; only the answer box takes a selection', () => {
   for (const page of ['player.html', 'tv.html']) {
     const html = fs.readFileSync(path.join(__dirname, 'party', page), 'utf8');

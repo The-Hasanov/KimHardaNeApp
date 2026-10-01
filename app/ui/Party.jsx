@@ -165,7 +165,7 @@ function Podium({ party }) {
       <Confetti key={`${party.id}:${party.round}`} />
       <div className="space-y-1">
         <p lang="en" className="text-sm font-semibold tracking-widest text-amber-600 uppercase dark:text-amber-400">
-          Round {party.round} · {winners.length > 1 ? 'shared first place' : 'winner'}
+          Final results · {winners.length > 1 ? 'shared first place' : 'winner'}
         </p>
         <h1 className="text-4xl font-bold">Congratulations, {namesOf(winners)}!</h1>
         <p className="text-muted-foreground">{party.rules.pointSystem?.name}: {party.rules.pointsSummary?.join(' · ')} · ties go to the faster average</p>
@@ -391,7 +391,7 @@ function ShowForHost({ party }) {
       <p className="text-sm font-medium text-muted-foreground">On the TV and phones · show page {page.index + 1} of {page.total}</p>
       <div className="@container"><ShowPageSlide page={page} /></div>
       <p className="text-sm text-muted-foreground">
-        {isLast ? `Then question 1 of ${party.total}.` : 'Then the next show page.'}{' '}
+        {!isLast ? 'Then the next show page.' : page.isAfterRound ? 'Then the lobby.' : `Then question 1 of ${party.total}.`}{' '}
         {page.canPlayersSkip ? 'Players can skip it together.' : 'Players cannot skip it; only you can.'}
       </p>
     </div>
@@ -791,12 +791,25 @@ export default function PartyScreen({ party, isVisible, lobbySettings, onBackToL
           )}
           {party.phase === 'finished' && (
             <div className="mx-auto max-w-2xl space-y-6 px-6 py-10">
-              <Podium party={party} />
+              {party.isLastRound ? <Podium party={party} /> : (
+                <div className="space-y-1 text-center">
+                  <h1 className="text-3xl font-semibold">Leaderboard after round {party.round}</h1>
+                  <p className="text-muted-foreground">
+                    {party.isLeaderboardHidden ? 'Players do not see it: the TV and phones show only that the round is over. The trophy button puts it on the TV.'
+                      : `${party.rules.pointSystem?.name}: ${party.rules.pointsSummary?.join(' · ')} · ties go to the faster average`}
+                  </p>
+                </div>
+              )}
               <Leaderboard entries={party.leaderboard} players={party.players} onKick={kick} showsRoundScore />
               <div className="flex flex-wrap gap-2">
                 <Button size="lg" onClick={() => onBackToLobby(true)}><ArrowRightIcon />Next round (keep scores)</Button>
                 <Button size="lg" variant="outline" onClick={() => onBackToLobby(false)}><RotateCcwIcon />New game (reset scores)</Button>
               </div>
+              {party.showPagesAfterCount > 0 && (
+                <p className="text-sm text-muted-foreground">
+                  First {party.showPagesAfterCount === 1 ? 'its show page plays' : `its ${party.showPagesAfterCount} show pages play`} on the TV and phones, then the lobby opens.
+                </p>
+              )}
             </div>
           )}
         </div>
@@ -810,7 +823,7 @@ export default function PartyScreen({ party, isVisible, lobbySettings, onBackToL
             {party.phase === 'reveal' && hasRunningClock && <span className="text-lg text-muted-foreground">until {isLastQuestion ? 'the round results' : party.rules.revealAtEnd ? 'the next answer' : 'the next question'} (autoplay)</span>}
             {party.phase === 'show' && (
               <Button size="lg" onClick={() => api.partySkipWait()}>
-                <SkipForwardIcon />{party.showPage.index + 1 === party.showPage.total ? 'Start the questions' : 'Next show page'}<Kbd className={KEY_HINT_ON_PRIMARY_BUTTON}>Space</Kbd>
+                <SkipForwardIcon />{party.showPage.index + 1 < party.showPage.total ? 'Next show page' : party.showPage.isAfterRound ? 'Go to the lobby' : 'Start the questions'}<Kbd className={KEY_HINT_ON_PRIMARY_BUTTON}>Space</Kbd>
               </Button>
             )}
             {party.phase === 'waiting' && (

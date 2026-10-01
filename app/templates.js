@@ -3,7 +3,7 @@
 const MAX_ROUNDS = 20;
 const MAX_NAME_LENGTH = 60;
 const DEFAULT_ROUND = {
-  showPageIds: [], listId: null, randomCount: 10, games: [], secondsPerQuestion: 60, secondsBetweenQuestions: 0, revealAtEnd: false, secondsOnAnswer: 0, pointSystemId: null,
+  showPageIds: [], showPageIdsAfter: [], listId: null, randomCount: 10, games: [], secondsPerQuestion: 60, secondsBetweenQuestions: 0, revealAtEnd: false, secondsOnAnswer: 0, pointSystemId: null, showsLeaderboard: true,
 };
 
 const whole = (value, min, max, fallback) => {
@@ -13,9 +13,12 @@ const whole = (value, min, max, fallback) => {
 const gamesOf = games => [...new Set((Array.isArray(games) ? games : []).filter(key => typeof key === 'string' && /^[\w.-]{1,40}:[\w.-]{1,40}$/.test(key)))].slice(0, 200);
 const idOf = value => (Number.isInteger(value) && value > 0 ? value : null);
 
+const showPageIdsOf = ids => [...new Set((Array.isArray(ids) ? ids : []).map(idOf).filter(Boolean))].slice(0, 10);
+
 function normalizeRound(round = {}) {
   return {
-    showPageIds: [...new Set((Array.isArray(round.showPageIds) ? round.showPageIds : []).map(idOf).filter(Boolean))].slice(0, 10),
+    showPageIds: showPageIdsOf(round.showPageIds),
+    showPageIdsAfter: showPageIdsOf(round.showPageIdsAfter),
     listId: idOf(round.listId),
     randomCount: whole(round.randomCount, 1, 50, DEFAULT_ROUND.randomCount),
     games: gamesOf(round.games),
@@ -24,6 +27,7 @@ function normalizeRound(round = {}) {
     revealAtEnd: !!round.revealAtEnd,
     secondsOnAnswer: whole(round.secondsOnAnswer, 0, 120, DEFAULT_ROUND.secondsOnAnswer),
     pointSystemId: idOf(round.pointSystemId),
+    showsLeaderboard: round.showsLeaderboard !== false,
   };
 }
 

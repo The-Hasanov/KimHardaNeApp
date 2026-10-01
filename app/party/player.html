@@ -314,7 +314,7 @@ const ORDINALS = { 1: '1st', 2: '2nd', 3: '3rd' };
 const ordinal = place => ORDINALS[place] ?? `${place}th`;
 const MEDALS = { 1: '🥇', 2: '🥈', 3: '🥉' };
 const CONGRATULATIONS = {
-  1: { badge: '🏆', title: 'Congratulations, champion!', text: 'You won the round. Take a bow!' },
+  1: { badge: '🏆', title: 'Congratulations, champion!', text: 'You won the game. Take a bow!' },
   2: { badge: '🥈', title: 'Great game!', text: 'So close to the top. Silver is yours.' },
   3: { badge: '🥉', title: 'Well done!', text: 'You made the podium with bronze.' },
   4: { badge: '👏', title: 'Round over', text: '' },
@@ -935,6 +935,11 @@ function updateSkip() {
   document.getElementById('skip-segments').replaceChildren(...Array.from({ length: segmentCount }, (_, i) => el('i', { class: i < filled ? 'on' : '' })));
 }
 
+const roundFacts = me => el('div', { class: 'congrats-facts' },
+  el('span', { class: 'pill' }, el('span', { class: 'label' }, 'Round'), pointsLabel(me.roundScore)),
+  el('span', { class: 'pill' }, el('span', { class: 'label' }, 'Total'), me.score),
+  me.avgSeconds != null && el('span', { class: 'pill' }, el('span', { class: 'label' }, 'Avg'), secondsLabel(me.avgSeconds)));
+
 function leaderboard(entries) {
   return el('ol', { class: 'board' }, entries.map(entry => el('li', { class: entry.name === state.me.name ? 'me' : '' },
     el('span', { class: 'rank' }, MEDALS[entry.rank] ? el('span', { class: 'emoji' }, MEDALS[entry.rank]) : `${entry.rank}.`), el('span', { class: 'name' }, entry.name),
@@ -1119,7 +1124,13 @@ function renderScreen(next) {
     updateSkip();
     return rendered;
   };
-  if (next.phase === 'lobby' && next.round > 0) {
+  if ((next.phase === 'lobby' && next.round > 0) || (next.phase === 'finished' && next.isLeaderboardHidden)) {
+    if (next.isLeaderboardHidden) {
+      return show(el('div', { class: 'center', style: 'flex:0;padding-top:24px' },
+        el('h1', {}, `Round ${next.round} is over`),
+        el('p', { class: 'muted' }, 'Waiting for the next round…'),
+        el('div', { style: 'margin-top:8px' }, settingsButton())), el('div', { class: 'reactions-slot' }));
+    }
     return show(el('div', { class: 'center', style: 'flex:0;padding-top:24px' },
       el('h1', {}, `Round ${next.round} is over`),
       el('p', { class: 'muted' }, `Your score: ${next.me.score} · place ${next.me.rank} of ${next.playerCount}. Waiting for the next round…`),
@@ -1177,6 +1188,15 @@ function renderScreen(next) {
       el('p', { class: 'muted', style: 'margin:0' }, `Your score: ${next.me.score} · place ${next.me.rank} of ${next.playerCount}`),
       leaderboard(next.leaderboard), skipDock()));
   }
+  if (next.phase === 'finished' && !next.isLastRound) {
+    return show(el('div', { class: 'congrats place-4' },
+      el('div', { class: 'congrats-kicker', lang: 'en' }, `Round ${next.round} results`),
+      el('h1', { class: 'congrats-title' }, `You're ${ordinal(next.me.rank)} of ${next.playerCount}`),
+      roundFacts(next.me)),
+      leaderboard(next.leaderboard),
+      el('div', { class: 'reactions-slot' }),
+      el('p', { class: 'muted', style: 'text-align:center' }, 'Waiting for the next round…'));
+  }
   if (next.phase === 'finished') {
     const place = next.me.rank;
     const winners = next.leaderboard.filter(entry => entry.rank === 1).map(entry => entry.name);
@@ -1190,13 +1210,10 @@ function renderScreen(next) {
     }
     return show(el('div', { class: `congrats place-${Math.min(place, 4)}` },
       el('div', { class: 'congrats-badge' }, congratulation.badge),
-      el('div', { class: 'congrats-kicker', lang: 'en' }, place <= 3 ? `${ORDINALS[place]} place · round ${next.round}` : `Round ${next.round} results`),
+      el('div', { class: 'congrats-kicker', lang: 'en' }, place <= 3 ? `${ORDINALS[place]} place · final results` : 'Final results'),
       el('h1', { class: 'congrats-title' }, place > 3 ? `You finished ${ordinal(place)} of ${next.playerCount}` : title),
-      el('p', { class: 'congrats-text' }, place === 1 ? congratulation.text : place <= 3 ? congratulation.text : `Thanks for playing! 🏆 ${winners.join(', ')} won this round.`),
-      el('div', { class: 'congrats-facts' },
-        el('span', { class: 'pill' }, el('span', { class: 'label' }, 'Round'), pointsLabel(next.me.roundScore)),
-        el('span', { class: 'pill' }, el('span', { class: 'label' }, 'Total'), next.me.score),
-        next.me.avgSeconds != null && el('span', { class: 'pill' }, el('span', { class: 'label' }, 'Avg'), secondsLabel(next.me.avgSeconds)))),
+      el('p', { class: 'congrats-text' }, place === 1 ? congratulation.text : place <= 3 ? congratulation.text : `Thanks for playing! 🏆 ${winners.join(', ')} won the game.`),
+      roundFacts(next.me)),
       leaderboard(next.leaderboard),
       el('div', { class: 'reactions-slot' }),
       el('p', { class: 'muted', style: 'text-align:center' }, 'Waiting for the host…'));

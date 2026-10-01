@@ -16,12 +16,13 @@ game from the app. Bring your own questions or install a question bank from *Dat
   leaderboard. Typed answers are checked by a local AI model, or marked by the host when AI search is off,
   and the host can overrule any verdict, or mark answers while the question is still running. Players answer
   in a chat-style bar, send reactions that show on the TV and on everyone's screen, skip a wait together, rename
-  themselves and reconnect without losing their place. Answer times break ties, the round ends with a podium, and
+  themselves and reconnect without losing their place. Answer times break ties, the leaderboard (or, if you choose, nothing) shows between rounds, the last round
+  ends with a podium for the winners, and
   an all-time leaderboard ranks everyone by total points. The host can send messages to all players and sees who
   leaves the game screen during a question. Questions cannot be selected or copied on the phones or the TV page.
 - **Your own quiz show**: name the party and plan its rounds, each with its own questions, timers and point
-  system. Put **show pages** (titles, text and pictures, each on screen for its own seconds) before any round to
-  greet the players or explain the rules. Save the whole show as a template and play it again.
+  system. Put **show pages** (titles, text and pictures, each on screen for its own seconds) before or after any
+  round to greet the players, explain the rules or announce a break. Save the whole show as a template and play it again.
 - **Point systems**: fixed points for right, wrong and blank answers, or a point pool where players pick 10, 20 or
   30 for each question. Add a streak bonus, all or nothing, a bonus for an all-correct round, or let players
   *Risk it* for more points.
@@ -44,9 +45,11 @@ game from the app. Bring your own questions or install a question bank from *Dat
 
 | Host (the app) | TV | Player (any browser) |
 |---|---|---|
+| ![Host showing a show page](docs/screenshots/party-show-page.png) | ![TV show page](docs/screenshots/tv-show-page.png) | ![Phone show page](docs/screenshots/phone-show-page.png) |
 | ![Host console](docs/screenshots/party-host.png) | ![TV question](docs/screenshots/tv-question.png) | ![Phone question](docs/screenshots/phone-question.png) |
 | ![Host reveal](docs/screenshots/party-reveal.png) | ![TV reveal](docs/screenshots/tv-reveal.png) | ![Phone reveal](docs/screenshots/phone-reveal.png) |
-| ![Host round results](docs/screenshots/party-results.png) | ![TV round results](docs/screenshots/tv-results.png) | ![Phone round results](docs/screenshots/phone-results.png) |
+| ![Host leaderboard between rounds](docs/screenshots/party-between-rounds.png) | ![TV leaderboard between rounds](docs/screenshots/tv-between-rounds.png) | ![Phone leaderboard between rounds](docs/screenshots/phone-between-rounds.png) |
+| ![Host final results](docs/screenshots/party-results.png) | ![TV final results](docs/screenshots/tv-results.png) | ![Phone final results](docs/screenshots/phone-results.png) |
 
 1. Optional: open **Settings** and turn on AI search to check the answers automatically. Without it, you mark
    each answer.
@@ -54,10 +57,19 @@ game from the app. Bring your own questions or install a question bank from *Dat
 3. Put the TV window on the TV: drag it there and press F11, or use **TV → Show on Samsung TV…** or
    **TV → Cast with Miracast…**.
 4. Players scan the QR code, or type the address into any browser, on the same Wi-Fi and type a name.
-5. Pick the questions and start the round. Turn on **Autoplay** to move on by itself.
+5. Plan the rounds, or pick a template, and start the first round. Turn on **Autoplay** to move on by itself.
 
 The app window stays the host's console: only the host sees the answer before the reveal, and phones and
 the TV never receive it early.
+
+## Your own quiz show
+
+| | |
+|---|---|
+| ![Round plan with show pages before and after a round](docs/screenshots/round-plan.png) | ![Show page editor with a live TV preview](docs/screenshots/show-pages.png) |
+| ![Point pool editor](docs/screenshots/point-systems.png) | ![Host sees each player's pick](docs/screenshots/party-point-pool.png) |
+| ![Phone picks 10, 20 or 30 points](docs/screenshots/phone-point-pool.png) | ![Phone with Risk it on](docs/screenshots/phone-risk.png) |
+| ![TV when the leaderboard is off for a round](docs/screenshots/tv-round-over.png) | ![Phone when the leaderboard is off for a round](docs/screenshots/phone-round-over.png) |
 
 ## More screenshots
 
@@ -65,8 +77,10 @@ the TV never receive it early.
 |---|---|
 | ![Search](docs/screenshots/search.png) | ![Custom questions](docs/screenshots/custom.png) |
 | ![Lists](docs/screenshots/lists.png) | ![Game setup](docs/screenshots/game-setup.png) |
-| ![Party lobby with the all-time leaderboard](docs/screenshots/party-lobby.png) | ![TV lobby](docs/screenshots/tv-lobby.png) |
-| ![Settings](docs/screenshots/settings.png) | ![Night mode](docs/screenshots/search-dark.png) |
+| ![Party lobby with the party name and round plan](docs/screenshots/party-lobby.png) | ![TV lobby](docs/screenshots/tv-lobby.png) |
+| ![Player profiles](docs/screenshots/profiles.png) | ![All-time leaderboard](docs/screenshots/leaderboard.png) |
+| ![Data sources](docs/screenshots/data-sources.png) | ![Settings](docs/screenshots/settings.png) |
+| ![Night mode](docs/screenshots/search-dark.png) | |
 
 ## Install
 

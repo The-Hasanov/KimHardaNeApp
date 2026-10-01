@@ -17,7 +17,7 @@ const { api } = window;
 const MAX_ROUNDS = 20;
 const DEFAULT_SECONDS_ON_ANSWER = 10;
 export const NEW_ROUND = {
-  showPageIds: [], listId: null, randomCount: 10, games: [], secondsPerQuestion: 60, secondsBetweenQuestions: 0, revealAtEnd: false, secondsOnAnswer: 0, pointSystemId: null,
+  showPageIds: [], showPageIdsAfter: [], listId: null, randomCount: 10, games: [], secondsPerQuestion: 60, secondsBetweenQuestions: 0, revealAtEnd: false, secondsOnAnswer: 0, pointSystemId: null, showsLeaderboard: true,
 };
 
 export const pointSystemOf = (round, pointSystems) => pointSystems?.find(system => system.id === round.pointSystemId) ?? pointSystems?.[0] ?? null;
@@ -45,18 +45,19 @@ export function roundSummary(round, lists, pointSystems, sources) {
     round.revealAtEnd && 'answers at the end',
     round.secondsOnAnswer > 0 && 'autoplay',
     pointSystemOf(round, pointSystems)?.name,
+    round.showsLeaderboard === false && 'no leaderboard after',
   ].filter(Boolean).join(' · ');
 }
 
-export const showPagesOf = (round, showPages) => (round.showPageIds ?? []).map(id => showPages?.find(page => page.id === id)).filter(Boolean);
+export const showPagesOf = (round, showPages, key = 'showPageIds') => (round[key] ?? []).map(id => showPages?.find(page => page.id === id)).filter(Boolean);
+export const pageTitles = pages => pages.map(page => page.title || 'Untitled').join(' → ');
 
-function ShowPagesBefore({ id, round, showPages, onChange, onManage }) {
-  const chosen = showPagesOf(round, showPages);
+function ShowPagesField({ id, label, chosen, showPages, onChange, onManage }) {
   const ids = chosen.map(page => page.id);
   const move = index => onChange([...ids.slice(0, index - 1), ids[index], ids[index - 1], ...ids.slice(index + 1)]);
   return (
     <div className="grid basis-full gap-2">
-      <Label htmlFor={id}>Show pages before this round</Label>
+      <Label htmlFor={id}>{label}</Label>
       <div className="flex flex-wrap items-center gap-2">
         {chosen.map((page, index) => (
           <span key={page.id} className="inline-flex h-8 items-center gap-1 rounded-md border bg-muted/40 pr-1 pl-2.5 text-sm">
@@ -79,7 +80,7 @@ function ShowPagesBefore({ id, round, showPages, onChange, onManage }) {
             ))}
           </SelectContent>
         </Select>
-        <Button size="sm" variant="ghost" className="text-muted-foreground" onClick={onManage}><Settings2Icon />Manage show pages</Button>
+        {onManage && <Button size="sm" variant="ghost" className="text-muted-foreground" onClick={onManage}><Settings2Icon />Manage show pages</Button>}
       </div>
     </div>
   );
@@ -90,7 +91,8 @@ function RoundEditor({ index, round, lists, pointSystems, sources, showPages, on
   const set = changes => onChange({ ...round, ...changes });
   return (
     <div className="flex flex-wrap items-end gap-x-6 gap-y-4 border-t px-4 py-4">
-      <ShowPagesBefore id={id('show-pages')} round={round} showPages={showPages} onChange={showPageIds => set({ showPageIds })} onManage={onManageShowPages} />
+      <ShowPagesField id={id('show-pages')} label="Show pages before this round" chosen={showPagesOf(round, showPages)} showPages={showPages}
+        onChange={showPageIds => set({ showPageIds })} onManage={onManageShowPages} />
       <QuestionSourceSelect id={id('questions')} lists={lists} listId={round.listId} onListIdChange={listId => set({ listId })} className="w-56" />
       {round.listId == null && <>
         <GamePicker id={id('games')} sources={sources} games={round.games ?? []} onGamesChange={games => set({ games })} className="w-56" />
@@ -124,6 +126,15 @@ function RoundEditor({ index, round, lists, pointSystems, sources, showPages, on
       )}
       <PointSystemSelect id={id('points')} pointSystems={pointSystems} value={pointSystemOf(round, pointSystems)?.id}
         questionCount={questionCountOf(round, lists)} onChange={pointSystemId => set({ pointSystemId })} />
+      <div className="flex basis-full items-start gap-2">
+        <Switch id={id('leaderboard')} checked={round.showsLeaderboard !== false} onCheckedChange={showsLeaderboard => set({ showsLeaderboard })} />
+        <div className="grid gap-0.5">
+          <Label htmlFor={id('leaderboard')} className="font-normal">Show the leaderboard after this round</Label>
+          <p className="text-xs text-muted-foreground">When off, the TV and phones show only that the round is over; you can still put the leaderboard on the TV. The last round always ends with the winners.</p>
+        </div>
+      </div>
+      <ShowPagesField id={id('show-pages-after')} label="Show pages after this round" chosen={showPagesOf(round, showPages, 'showPageIdsAfter')} showPages={showPages}
+        onChange={showPageIdsAfter => set({ showPageIdsAfter })} />
     </div>
   );
 }
@@ -177,7 +188,7 @@ export default function RoundPlan({ rounds, onRoundsChange, lists, pointSystems,
   const blockedCount = rounds.filter((round, index) => index >= playedCount && roundProblem(round, lists, pointSystems, sources)).length;
   const change = (index, round) => onRoundsChange(rounds.map((current, i) => (i === index ? round : current)));
   const add = () => {
-    onRoundsChange([...rounds, { ...(rounds.at(-1) ?? NEW_ROUND), showPageIds: [] }]);
+    onRoundsChange([...rounds, { ...(rounds.at(-1) ?? NEW_ROUND), showPageIds: [], showPageIdsAfter: [] }]);
     setOpenIndex(rounds.length);
   };
   const duplicate = index => {
@@ -225,6 +236,7 @@ export default function RoundPlan({ rounds, onRoundsChange, lists, pointSystems,
           const isOpen = openIndex === index && !isPlayed;
           const problem = !isPlayed && roundProblem(round, lists, pointSystems, sources);
           const shownFirst = showPagesOf(round, showPages);
+          const shownAfter = showPagesOf(round, showPages, 'showPageIdsAfter');
           return (
             <li key={index} className={cn('rounded-lg border', isNext && 'border-primary/40', isPlayed && 'bg-muted/40')}>
               <div className="flex items-center gap-3 px-4 py-2.5">
@@ -245,7 +257,12 @@ export default function RoundPlan({ rounds, onRoundsChange, lists, pointSystems,
                   </span>
                   {shownFirst.length > 0 && (
                     <span className="flex items-center gap-1.5 truncate text-xs text-muted-foreground">
-                      <ClapperboardIcon className="size-3.5 shrink-0" />First shows {shownFirst.map(page => page.title || 'Untitled').join(' → ')}
+                      <ClapperboardIcon className="size-3.5 shrink-0" />First shows {pageTitles(shownFirst)}
+                    </span>
+                  )}
+                  {shownAfter.length > 0 && (
+                    <span className="flex items-center gap-1.5 truncate text-xs text-muted-foreground">
+                      <ClapperboardIcon className="size-3.5 shrink-0" />After the results shows {pageTitles(shownAfter)}
                     </span>
                   )}
                 </button>
