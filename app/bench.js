@@ -5,7 +5,7 @@ const crypto = require('node:crypto');
 const ai = require('./ai');
 const { Store, TUNING, fold, passage, embeddable } = require('./store');
 
-const DB = process.env.QUIZ_DB || path.join(__dirname, '..', 'data', '3sual.sqlite');
+const DB = process.env.QUIZ_DB || path.join(__dirname, '..', 'data', 'kimhardane.sqlite');
 const CACHE = path.join(__dirname, 'bench', 'cache');
 const slug = model => model.replace(/[^\w.-]+/g, '_');
 const uidsHash = store => crypto.createHash('sha1').update(store.rows.map(r => r.uid).join('\n')).digest('hex');

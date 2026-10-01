@@ -80,6 +80,23 @@ test('lan addresses list private IPv4 addresses of this computer', () => {
   for (const { address } of lanAddresses()) assert.match(address, /^\d+\.\d+\.\d+\.\d+$/);
 });
 
+test('the host names the party: phones, TV and page titles show it, escaped, with a default', async () => {
+  const { game, close } = await openParty({ judge: judgeByText, title: '  Friday   <b>quiz</b> ' }, { port: 0 });
+  const base = `http://127.0.0.1:${game.port}`;
+  try {
+    assert.equal(game.title, 'Friday <b>quiz</b>');
+    assert.match(await (await fetch(base)).text(), /<title>Friday &#60;b&#62;quiz&#60;\/b&#62;<\/title>/);
+    assert.match(await (await fetch(`${base}/tv`)).text(), /<title>Friday &#60;b&#62;quiz&#60;\/b&#62; · TV<\/title>/);
+    game.setTitle('   ');
+    assert.equal(game.tvView().title, 'Quiz night');
+    game.setTitle('Office cup');
+    assert.equal(game.playerView(game.join('Aysel')).title, 'Office cup');
+    assert.equal(game.hostView().title, 'Office cup');
+  } finally {
+    await close();
+  }
+});
+
 test('the party server serves the player page, joins, streams state and rejects bad requests', async () => {
   const { game, close } = await openParty({ judge: judgeByText }, { port: 0 });
   const base = `http://127.0.0.1:${game.port}`;
@@ -195,6 +212,13 @@ test('the TV page script stays ES5, for the Chrome 47 web engine of 2017 Samsung
   const script = fs.readFileSync(path.join(__dirname, 'party', 'tv.html'), 'utf8').split('<script>')[1].split('</script>')[0];
   const newerSyntax = [/=>/, /\b(let|const|class|async|await)\s/, /`/, /\?\./, /\?\?/, /\.\.\.\w/, /\.(replaceAll|replaceChildren|padStart|append)\(|\.isConnected\b/];
   for (const pattern of newerSyntax) assert.doesNotMatch(script, pattern);
+});
+
+test('the player and TV page scripts parse', () => {
+  for (const page of ['player.html', 'tv.html']) {
+    const script = fs.readFileSync(path.join(__dirname, 'party', page), 'utf8').split('<script>').at(-1).split('</script>')[0];
+    assert.doesNotThrow(() => new Function(script), page);
+  }
 });
 
 test('autoplay moves on after the answer has been shown, can be paused, and ends the round by itself', async () => {
@@ -351,12 +375,12 @@ test('players can rename to a free name, and a removed player can join again', (
   assert.equal(game.join('Aysel Q').name, 'Aysel Q');
 });
 
-test('a finished round reports correct, wrong and unanswered questions per player, from the question they joined at', async () => {
+test('a finished round reports points, correct, wrong and unanswered questions per player, from the question they joined at', async () => {
   const reports = [];
   const game = new PartyGame({ judge: judgeByText, onRoundFinished: results => reports.push(results) });
   const aysel = game.join('Aysel');
   const nicat = game.join('Nicat');
-  game.startRound(ROUND);
+  game.startRound({ ...ROUND, pointsForCorrect: 3, pointsForWrong: -1 });
   game.submitAnswer(aysel.token, 'Bakı');
   game.submitAnswer(nicat.token, 'Gəncə');
   await game.closeAnswers();
@@ -368,9 +392,9 @@ test('a finished round reports correct, wrong and unanswered questions per playe
   game.next();
   assert.ok(reports[0].every(result => result.correctMs >= 0));
   assert.deepEqual(reports.map(results => results.map(({ correctMs, ...result }) => result)), [[
-    { name: 'Aysel', correct: 1, wrong: 0, unanswered: 1 },
-    { name: 'Nicat', correct: 0, wrong: 1, unanswered: 1 },
-    { name: 'Leyla', correct: 1, wrong: 0, unanswered: 0 },
+    { name: 'Aysel', points: 3, correct: 1, wrong: 0, unanswered: 1 },
+    { name: 'Nicat', points: -1, correct: 0, wrong: 1, unanswered: 1 },
+    { name: 'Leyla', points: 3, correct: 1, wrong: 0, unanswered: 0 },
   ]]);
 });
 
@@ -626,4 +650,147 @@ test('videos and audio stream to the TV and phones in ranges, so they can seek a
     game.finish();
     await close();
   }
+});
+
+const THREE_QUESTIONS = [...QUESTIONS, { uid: 'q3', text: 'Longest river?', answer: 'Kür', accepted_answers: null, comment: null, rekvizit_src: null }];
+
+async function playQuestion(game, answers) {
+  for (const [player, given] of answers) game.submitAnswer(player.token, given);
+  await game.closeAnswers();
+}
+
+test('a round with a point pool refuses to start when there are more questions than picks', () => {
+  const game = newGame();
+  game.join('Aysel');
+  const pointSystem = { name: 'Tight', mode: 'pool', pool: [{ points: 10, uses: 1 }, { points: 30, uses: 1 }] };
+  assert.throws(() => game.startRound({ ...ROUND, questions: THREE_QUESTIONS, pointSystem }), /3 questions.*only 2 picks/);
+  assert.equal(game.phase, 'lobby');
+  game.startRound({ ...ROUND, pointSystem });
+  assert.equal(game.phase, 'question');
+});
+
+test('players pick pool values within their uses, and an unpicked question takes the lowest free value', async () => {
+  const game = newGame();
+  const aysel = game.join('Aysel');
+  const nicat = game.join('Nicat');
+  const pointSystem = { name: 'Pool', mode: 'pool', pool: [{ points: 10, uses: 2 }, { points: 20, wrong: -10, uses: 1 }, { points: 30, wrong: -20, unanswered: -10, uses: 1 }] };
+  game.startRound({ ...ROUND, questions: THREE_QUESTIONS, pointSystem });
+  assert.deepEqual(game.playerView(aysel).stake, { pick: 0, isPicked: false, isRisked: false, usesLeft: [2, 1, 1], risksLeft: 0 });
+  game.setStake(aysel.token, { pick: 2 });
+  assert.throws(() => game.setStake(aysel.token, { pick: 5 }), /Pick/);
+  assert.throws(() => game.setStake(aysel.token, { isRisked: true }), /no risk/);
+  await playQuestion(game, [[aysel, 'Bakı'], [nicat, 'Gəncə']]);
+  assert.equal(game.playerView(aysel).reveal.points, 30);
+  assert.equal(game.playerView(nicat).reveal.points, 0);
+  game.next();
+  assert.deepEqual(game.playerView(aysel).stake.usesLeft, [2, 1, 0]);
+  assert.throws(() => game.setStake(aysel.token, { pick: 2 }), /No 30s left/);
+  game.setStake(aysel.token, { pick: 1 });
+  game.setStake(nicat.token, { pick: 2 });
+  await playQuestion(game, [[aysel, 'Səməd Vurğun']]);
+  assert.equal(game.playerView(aysel).reveal.points, -10);
+  assert.equal(game.playerView(nicat).reveal.points, -10);
+  assert.deepEqual(game.leaderboard().map(entry => [entry.name, entry.score]), [['Aysel', 20], ['Nicat', -10]]);
+  assert.equal(game.hostView().answers[0].stake.pick, 1);
+});
+
+test('risk uses the risk points and runs out at the limit, and an unanswered risk is not used up', async () => {
+  const game = newGame();
+  const aysel = game.join('Aysel');
+  const pointSystem = { name: 'Risky', simple: { correct: 3, wrong: -1, unanswered: 0 }, risk: { isOn: true, correct: 6, wrong: -6, limit: 1 } };
+  game.startRound({ ...ROUND, questions: THREE_QUESTIONS, pointSystem });
+  game.setStake(aysel.token, { isRisked: true });
+  await playQuestion(game, []);
+  assert.equal(game.playerView(aysel).reveal.points, 0);
+  game.next();
+  assert.equal(game.playerView(aysel).stake.risksLeft, 1);
+  game.setStake(aysel.token, { isRisked: true });
+  game.setStake(aysel.token, { isRisked: false });
+  game.setStake(aysel.token, { isRisked: true });
+  await playQuestion(game, [[aysel, 'Nizami Gəncəvi']]);
+  assert.equal(game.playerView(aysel).reveal.points, 6);
+  game.next();
+  assert.equal(game.playerView(aysel).stake.risksLeft, 0);
+  assert.throws(() => game.setStake(aysel.token, { isRisked: true }), /No risks left/);
+});
+
+test('streak bonuses and all or nothing count through a whole round and reach the all-time results', async () => {
+  const reports = [];
+  const game = new PartyGame({ judge: judgeByText, onRoundFinished: results => reports.push(results) });
+  const aysel = game.join('Aysel');
+  const nicat = game.join('Nicat');
+  const pointSystem = { name: 'Perfect', simple: { correct: 2 }, streak: { isOn: true, from: 2, bonus: 1 }, allOrNothing: { isOn: true }, perfectBonus: { isOn: true, points: 5 } };
+  game.startRound({ ...ROUND, questions: THREE_QUESTIONS, pointSystem });
+  await playQuestion(game, [[aysel, 'Bakı'], [nicat, 'Bakı']]);
+  game.next();
+  await playQuestion(game, [[aysel, 'Nizami Gəncəvi'], [nicat, 'Nizami Gəncəvi']]);
+  assert.equal(game.playerView(aysel).reveal.streakBonus, 1);
+  game.next();
+  await playQuestion(game, [[aysel, 'Kür'], [nicat, 'Araz']]);
+  assert.equal(game.playerView(nicat).reveal.isRoundLost, true);
+  assert.equal(game.playerView(aysel).reveal.perfectBonus, 5);
+  game.next();
+  assert.equal(game.phase, 'finished');
+  assert.deepEqual(game.leaderboard().map(entry => [entry.name, entry.score]), [['Aysel', 2 + 3 + 3 + 5], ['Nicat', 0]]);
+  assert.deepEqual(reports[0].map(({ name, points }) => [name, points]), [['Aysel', 13], ['Nicat', 0]]);
+});
+
+test('show pages play before the round, each for its seconds, can be skipped or paused, and serve their pictures', async () => {
+  const picture = path.join(fs.mkdtempSync(path.join(require('node:os').tmpdir(), 'show-')), 'welcome.png');
+  fs.writeFileSync(picture, Buffer.from('89504e470d0a1a0a', 'hex'));
+  const { game, close } = await openParty({ judge: judgeByText }, { port: 0 });
+  const base = `http://127.0.0.1:${game.port}`;
+  try {
+    const aysel = game.join('Aysel');
+    const pages = [
+      { title: 'Welcome', seconds: 5, blocks: [{ type: 'text', text: 'Hello everyone', isLarge: true }, { type: 'image', image: 'own-image:x.png', src: require('node:url').pathToFileURL(picture).href }] },
+      { title: 'Round 1 rules', seconds: 8, blocks: [{ type: 'text', text: 'No phones.' }] },
+    ];
+    game.startRound({ ...ROUND, showPages: pages });
+    assert.equal(game.phase, 'show');
+    assert.ok(game.remainingMs() > 4000 && game.remainingMs() <= 5000);
+    const tv = game.tvView().showPage;
+    assert.deepEqual([tv.index, tv.total, tv.title, tv.blocks[0].text, tv.blocks[1].src], [0, 2, 'Welcome', 'Hello everyone', '/tv/show-image?page=0&block=1']);
+    assert.equal(game.playerView(aysel).showPage.blocks[1].src, '/show-image?page=0&block=1');
+    assert.equal(game.playerView(aysel).question, null);
+    assert.equal((await fetch(`${base}/tv/show-image?page=0&block=1`)).status, 200);
+    assert.equal((await fetch(`${base}/tv/show-image?page=0&block=0`)).status, 404);
+    assert.equal((await fetch(`${base}/show-image?page=0&block=1`)).status, 401);
+    assert.equal((await fetch(`${base}/show-image?page=0&block=1&token=${aysel.token}`)).status, 200);
+    game.pause();
+    assert.ok(game.hostView().isPaused);
+    game.resume();
+    game.skipWait();
+    assert.deepEqual([game.phase, game.showIndex, game.hostView().showPage.title], ['show', 1, 'Round 1 rules']);
+    assert.equal((await fetch(`${base}/tv/show-image?page=0&block=1`)).status, 404);
+    assert.equal(game.skipStatus().isAvailable, true);
+    game.skipWait();
+    assert.equal(game.phase, 'question');
+    assert.equal(game.tvView().showPage, null);
+  } finally {
+    await close();
+  }
+});
+
+test('the host decides per show page whether players may skip it; the host always can', () => {
+  const game = newGame();
+  const aysel = game.join('Aysel');
+  game.startRound({ ...ROUND, showPages: [
+    { title: 'Rules', seconds: 30, canPlayersSkip: false, blocks: [] },
+    { title: 'Ready?', seconds: 10, blocks: [] },
+  ] });
+  assert.deepEqual([game.tvView().showPage.canPlayersSkip, game.playerView(aysel).skip.isAvailable], [false, false]);
+  assert.throws(() => game.toggleSkip(aysel.token), /Nothing to skip/);
+  game.skipWait();
+  assert.deepEqual([game.showIndex, game.playerView(aysel).skip.isAvailable, game.hostView().showPage.canPlayersSkip], [1, true, true]);
+  game.stopTimer();
+});
+
+test('phones and the TV page block selecting, copying and saving questions; only the answer box takes a selection', () => {
+  for (const page of ['player.html', 'tv.html']) {
+    const html = fs.readFileSync(path.join(__dirname, 'party', page), 'utf8');
+    assert.match(html, /body \{[^}]*user-select: none/, page);
+    assert.match(html, /\['copy', 'cut', 'contextmenu', 'selectstart', 'dragstart'\]/, page);
+  }
+  assert.match(fs.readFileSync(path.join(__dirname, 'party', 'player.html'), 'utf8'), /input, textarea \{ user-select: text/);
 });

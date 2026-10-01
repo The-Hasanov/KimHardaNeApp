@@ -3,131 +3,69 @@ import { toast } from 'sonner';
 import { cn } from 'cn';
 import {
   ArrowRightIcon, EyeIcon, FlagIcon, Gamepad2Icon, ImageIcon, PauseIcon, PlayIcon, PresentationIcon, RotateCcwIcon, SettingsIcon,
-  ShuffleIcon, SkipForwardIcon, SparklesIcon, UsersIcon,
+  ClapperboardIcon, LayoutTemplateIcon, ShuffleIcon, SigmaIcon, SkipForwardIcon, SparklesIcon, TrophyIcon, UserRoundIcon, UsersIcon,
 } from 'lucide-react';
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter,
   AlertDialogHeader, AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { Badge } from '@/components/ui/badge';
+import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Kbd } from '@/components/ui/kbd';
 import { Label } from '@/components/ui/label';
 import { Progress } from '@/components/ui/progress';
-import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
-import { Select, SelectContent, SelectItem, SelectSeparator, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Spinner } from '@/components/ui/spinner';
 import { Switch } from '@/components/ui/switch';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
-  KEY_HINT_ON_PRIMARY_BUTTON, Media, NextQuestionNumber, QuestionOnScreen, WARNING_AT_SECONDS_LEFT, formatClock, playTenSecondsLeftTone,
-  playTimeUpTone, withLineBreaks,
+  GamePicker, KEY_HINT_ON_PRIMARY_BUTTON, MIN_SECONDS_TO_CHECK_ANSWERS, Media, NextQuestionNumber, NumberField, QuestionSourceSelect, QuestionOnScreen, WARNING_AT_SECONDS_LEFT, formatClock, playTenSecondsLeftTone,
+  playTimeUpTone, withLineBreaks, withoutIpcPrefix,
 } from './gameShared';
-import PartyScreen from './Party';
+import PartyScreen, { AllTimeLeaderboard, PARTY_TITLE_KEY } from './Party';
+import Profiles from './Profiles';
+import PointSystems, { usePointSystems } from './PointSystems';
+import RoundPlan, { NEW_ROUND, pointSystemOf, roundProblem } from './RoundPlan';
+import Templates from './Templates';
+import ShowPages from './ShowPages';
 import { PlayHistory, PlayResults, PlayRound } from './Play';
 
 const { api } = window;
 const DEFAULT_RANDOM_COUNT = 10;
 const MAX_RANDOM_COUNT = 50;
 const DEFAULT_SECONDS_PER_QUESTION = 60;
-const RANDOM_SOURCE = 'random';
 const MAX_SECONDS_BETWEEN_QUESTIONS = 120;
-const MIN_SECONDS_TO_CHECK_ANSWERS = 15;
-const DEFAULT_SECONDS_ON_ANSWER = 10;
-const RANDOM_GAME_TITLE = 'Random · Nə? Harada? Nə zaman?';
-
-function NumberField({ id, label, value, min, max, step = 1, onChange }) {
-  const [draft, setDraft] = useState(String(value));
-  useEffect(() => setDraft(String(value)), [value]);
-  const isAllowed = number => Number.isFinite(number) && number >= min && number <= max;
-  return (
-    <div className="grid gap-2">
-      <Label htmlFor={id}>{label}</Label>
-      <Input id={id} type="number" min={min} max={max} step={step} value={draft} className="w-28"
-        onChange={e => {
-          setDraft(e.target.value);
-          const number = Math.round(Number(e.target.value));
-          if (e.target.value.trim() !== '' && isAllowed(number)) onChange(number);
-        }}
-        onBlur={() => setDraft(String(value))} />
-    </div>
-  );
-}
+const RANDOM_GAME_TITLE = 'Random questions';
 
 const MODE_DESCRIPTIONS = {
   host: summary => `Host mode: ${summary} and a timer. Answers stay hidden until you end the game.`,
   play: summary => `Play mode: answer ${summary} yourself against the clock, then mark each answer correct or wrong, or let AI search check it.`,
-  party: summary => `Party mode: players join from any phone, tablet or computer with a web browser (scan the QR code or type the address), then answer ${summary} on their own screens. You mark the answers, or AI search checks them; scores add up over rounds.`,
+  party: summary => `Party mode: players join from any phone, tablet or computer with a web browser (scan the QR code or type the address), then play ${summary} on their own screens. You mark the answers, or AI search checks them; scores add up over the rounds.`,
 };
 const TIMING_HELP = {
   host: "Between questions the next question's number fills the screen; Space skips the wait. Auto-start starts each question's timer as soon as the question appears.",
   play: "Between questions the next question's number fills the screen; Space skips the wait. Each question's timer starts as soon as it appears.",
-  party: "Between questions the next question's number fills every screen. Autoplay moves on to the next question once the answer has been shown for that many seconds; Pause holds it. Showing the answers at the end keeps every answer and score hidden until the last question: you check each question's answers during the seconds between questions (Pause gives more time), and the last one's before you show the answers one by one. A blank answer scores 0; a wrong one scores the points for a wrong answer (use a negative number as a penalty).",
 };
 
-function RoundSettings({ mode, questions, lists, listId, onListIdChange, onNewSet, settings, onSettingsChange, action }) {
+function RoundSettings({ mode, questions, lists, sources, listId, onListIdChange, onNewSet, settings, onSettingsChange, action }) {
   const chosenList = lists.find(list => list.id === listId);
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-end gap-3">
-        <div className="grid gap-2">
-          <Label>Questions</Label>
-          <Select value={listId == null ? RANDOM_SOURCE : String(listId)}
-            onValueChange={value => onListIdChange(value === RANDOM_SOURCE ? null : Number(value))}>
-            <SelectTrigger className="w-64"><SelectValue /></SelectTrigger>
-            <SelectContent position="popper">
-              <SelectItem value={RANDOM_SOURCE}>Random questions</SelectItem>
-              {lists.length > 0 && <SelectSeparator />}
-              {lists.map(list => (
-                <SelectItem key={list.id} value={String(list.id)} disabled={!list.count}>
-                  {list.name}<span className="text-muted-foreground tabular-nums">{list.count}</span>
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
+        <QuestionSourceSelect id="question-source" lists={lists} listId={listId} onListIdChange={onListIdChange} className="w-52" />
         {!chosenList && <>
+          <GamePicker id="random-games" sources={sources} games={settings.games} onGamesChange={games => onSettingsChange({ games })} className="w-52" />
           <NumberField id="random-question-count" label="How many" value={settings.randomCount} min={1} max={MAX_RANDOM_COUNT}
             onChange={randomCount => onSettingsChange({ randomCount })} />
           <Button variant="outline" onClick={onNewSet} disabled={!questions}><ShuffleIcon />New set</Button>
         </>}
         <div className="ml-auto">{action}</div>
       </div>
-      {!chosenList && (
-        <RadioGroup value={settings.includeOwn ? 'with-own' : 'bank'} onValueChange={value => onSettingsChange({ includeOwn: value === 'with-own' })}
-          className="flex flex-wrap gap-x-6 gap-y-2">
-          <div className="flex items-center gap-2">
-            <RadioGroupItem id="random-from-bank" value="bank" />
-            <Label htmlFor="random-from-bank" className="font-normal">Only Nə? Harada? Nə zaman?</Label>
-          </div>
-          <div className="flex items-center gap-2">
-            <RadioGroupItem id="random-with-own" value="with-own" />
-            <Label htmlFor="random-with-own" className="font-normal">Include my questions (picked first)</Label>
-          </div>
-        </RadioGroup>
-      )}
       <div className="flex flex-wrap items-end gap-x-6 gap-y-4 rounded-lg border p-4">
-        {mode === 'party' && (
-          <div className="grid basis-full gap-2">
-            <Label>Show the answers</Label>
-            <RadioGroup value={settings.isRevealAtEnd ? 'end' : 'each'} onValueChange={value => onSettingsChange({ isRevealAtEnd: value === 'end' })}
-              className="flex flex-wrap gap-x-6 gap-y-2">
-              <div className="flex items-center gap-2">
-                <RadioGroupItem id="reveal-after-each" value="each" />
-                <Label htmlFor="reveal-after-each" className="font-normal">After each question</Label>
-              </div>
-              <div className="flex items-center gap-2">
-                <RadioGroupItem id="reveal-at-end" value="end" />
-                <Label htmlFor="reveal-at-end" className="font-normal">At the end of the round</Label>
-              </div>
-            </RadioGroup>
-          </div>
-        )}
         <NumberField id="seconds-per-question" label="Seconds per question" value={settings.secondsPerQuestion} min={10} max={600} step={5}
           onChange={secondsPerQuestion => onSettingsChange({ secondsPerQuestion })} />
         <NumberField id="seconds-between-questions" label="Seconds between questions" value={settings.secondsBetweenQuestions}
-          min={mode === 'party' && settings.isRevealAtEnd ? MIN_SECONDS_TO_CHECK_ANSWERS : 0} max={MAX_SECONDS_BETWEEN_QUESTIONS} step={5} onChange={secondsBetweenQuestions => onSettingsChange({ secondsBetweenQuestions })} />
+          min={0} max={MAX_SECONDS_BETWEEN_QUESTIONS} step={5} onChange={secondsBetweenQuestions => onSettingsChange({ secondsBetweenQuestions })} />
         {mode === 'host' && (
           <div className="flex h-8 items-center gap-2">
             <Switch id="auto-start-next-question" checked={settings.shouldAutoStartTimer}
@@ -135,36 +73,22 @@ function RoundSettings({ mode, questions, lists, listId, onListIdChange, onNewSe
             <Label htmlFor="auto-start-next-question" className="font-normal">Auto-start next question</Label>
           </div>
         )}
-        {mode === 'party' && <>
-          <div className="flex h-8 items-center gap-2">
-            <Switch id="autoplay" checked={settings.isAutoplay} onCheckedChange={isAutoplay => onSettingsChange({ isAutoplay })} />
-            <Label htmlFor="autoplay" className="font-normal">Autoplay</Label>
-          </div>
-          {settings.isAutoplay && (
-            <NumberField id="seconds-on-answer" label="Seconds on the answer" value={settings.secondsOnAnswer} min={3} max={120} step={5}
-              onChange={secondsOnAnswer => onSettingsChange({ secondsOnAnswer })} />
-          )}
-          <NumberField id="points-for-correct" label="Points for correct" value={settings.pointsForCorrect} min={1} max={10}
-            onChange={pointsForCorrect => onSettingsChange({ pointsForCorrect })} />
-          <NumberField id="points-for-wrong" label="Points for wrong" value={settings.pointsForWrong} min={-10} max={0}
-            onChange={pointsForWrong => onSettingsChange({ pointsForWrong })} />
-        </>}
         <p className="basis-full text-xs text-muted-foreground">{TIMING_HELP[mode]}</p>
       </div>
     </div>
   );
 }
 
-function GameSetup({ mode, onModeChange, isAiReady, onOpenSettings, onStart, ...roundSettings }) {
+function GameSetup({ mode, onModeChange, isAiReady, onOpenSettings, onStart, roundPlan, planSummary, canOpenParty, ...roundSettings }) {
   const { questions, lists, listId } = roundSettings;
   const chosenList = lists.find(list => list.id === listId);
   const needsAi = mode !== 'host';
-  const questionsSummary = chosenList ? `the ${questions?.length ?? chosenList.count} questions of this list` : `${questions?.length ?? roundSettings.settings.randomCount} random questions`;
+  const questionsSummary = mode === 'party' ? planSummary : chosenList ? `the ${questions?.length ?? chosenList.count} questions of this list` : `${questions?.length ?? roundSettings.settings.randomCount} random questions`;
   return (
     <div className="mx-auto max-w-3xl space-y-6 px-6 py-8">
       <div className="flex flex-wrap items-start gap-4">
         <div className="min-w-0 flex-1 space-y-1">
-          <h1 className="text-2xl font-semibold">{chosenList ? chosenList.name : 'Nə? Harada? Nə zaman?'}</h1>
+          <h1 className="text-2xl font-semibold">{mode === 'party' ? 'Party' : chosenList ? chosenList.name : RANDOM_GAME_TITLE}</h1>
           <p className="text-muted-foreground">{MODE_DESCRIPTIONS[mode](questionsSummary)}</p>
         </div>
         <Tabs value={mode} onValueChange={onModeChange}>
@@ -182,12 +106,12 @@ function GameSetup({ mode, onModeChange, isAiReady, onOpenSettings, onStart, ...
           <Button size="sm" variant="outline" onClick={onOpenSettings}><SettingsIcon />Open Settings</Button>
         </div>
       )}
-      <RoundSettings mode={mode} {...roundSettings} action={
-        <Button size="lg" onClick={onStart} disabled={!questions?.length}>
-          {mode === 'party' ? <><UsersIcon />Open party</> : <><PlayIcon />Start game</>}
-        </Button>
-      } />
-      {!questions ? (
+      {mode === 'party' ? roundPlan(<Button onClick={onStart} disabled={!canOpenParty}><UsersIcon />Open party</Button>) : (
+        <RoundSettings mode={mode} {...roundSettings} action={
+          <Button size="lg" onClick={onStart} disabled={!questions?.length}><PlayIcon />Start game</Button>
+        } />
+      )}
+      {mode === 'party' ? null : !questions ? (
         <div className="flex items-center gap-2 text-sm text-muted-foreground"><Spinner />Loading questions…</div>
       ) : mode === 'play' ? <PlayHistory isVisible /> : mode === 'host' && (
         <ol className="divide-y rounded-lg border">
@@ -200,6 +124,25 @@ function GameSetup({ mode, onModeChange, isAiReady, onOpenSettings, onStart, ...
           ))}
         </ol>
       )}
+    </div>
+  );
+}
+
+const GAME_SECTIONS = [['play', PlayIcon, 'Play'], ['templates', LayoutTemplateIcon, 'Templates'], ['shows', ClapperboardIcon, 'Show pages'], ['points', SigmaIcon, 'Point systems'], ['profiles', UserRoundIcon, 'Profiles'], ['leaderboard', TrophyIcon, 'Leaderboard']];
+
+function GameSections({ section, onSectionChange, children }) {
+  return (
+    <div className="flex h-full flex-col">
+      <div className="shrink-0 border-b">
+        <Tabs value={section} onValueChange={onSectionChange} className="mx-auto max-w-3xl px-6">
+          <TabsList variant="line" className="h-10">
+            {GAME_SECTIONS.map(([value, Icon, label]) => (
+              <TabsTrigger key={value} value={value} className="px-2.5"><Icon />{label}</TabsTrigger>
+            ))}
+          </TabsList>
+        </Tabs>
+      </div>
+      <div className="min-h-0 flex-1 overflow-y-auto">{children}</div>
     </div>
   );
 }
@@ -226,21 +169,36 @@ function AnswerCard({ question, number, isRevealed, onReveal }) {
   );
 }
 
-export default function Game({ isVisible, lists, listId, onListIdChange, isAiReady, onOpenSettings }) {
+export default function Game({ isVisible, lists, sources, listId, onListIdChange, isAiReady, onOpenSettings }) {
   const [mode, setMode] = useState(() => localStorage.getItem('gameMode') ?? 'host');
   const [playGameId, setPlayGameId] = useState(null);
   const [phase, setPhase] = useState('setup');
+  const [section, setSection] = useState('play');
   const [questions, setQuestions] = useState(null);
   const [secondsPerQuestion, setSecondsPerQuestion] = useState(DEFAULT_SECONDS_PER_QUESTION);
   const [secondsBetweenQuestions, setSecondsBetweenQuestions] = useState(0);
   const [shouldAutoStartTimer, setShouldAutoStartTimer] = useState(false);
-  const [pointsForCorrect, setPointsForCorrect] = useState(1);
-  const [pointsForWrong, setPointsForWrong] = useState(0);
-  const [isAutoplay, setIsAutoplay] = useState(false);
-  const [isRevealAtEnd, setIsRevealAtEnd] = useState(false);
-  const [secondsOnAnswer, setSecondsOnAnswer] = useState(DEFAULT_SECONDS_ON_ANSWER);
+  const [pointSystems, setPointSystems] = usePointSystems();
+  const [showPages, setShowPages] = useState(null);
+  const [isManagingShowPages, setIsManagingShowPages] = useState(false);
+  const [plan, setPlan] = useState(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem('partyPlan'));
+      if (Array.isArray(saved) && saved.length) return saved.map(round => ({ ...NEW_ROUND, ...round }));
+    } catch {}
+    return [{ ...NEW_ROUND }];
+  });
+  const [templateName, setTemplateName] = useState(() => localStorage.getItem('partyPlanTemplate'));
+  const [templates, setTemplates] = useState(null);
   const [randomCount, setRandomCount] = useState(() => Number(localStorage.getItem('randomQuestionCount')) || DEFAULT_RANDOM_COUNT);
-  const [includeOwn, setIncludeOwn] = useState(() => localStorage.getItem('includeOwnQuestions') === '1');
+  const [games, setGames] = useState(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem('randomGames'));
+      return Array.isArray(saved) ? saved : [];
+    } catch {
+      return [];
+    }
+  });
   const [partyState, setPartyState] = useState(null);
   const [waitEndsAt, setWaitEndsAt] = useState(null);
   const [waitSecondsLeft, setWaitSecondsLeft] = useState(0);
@@ -254,16 +212,17 @@ export default function Game({ isVisible, lists, listId, onListIdChange, isAiRea
   const handleKeyDown = useRef(null);
   const listIdOfQuestions = useRef(null);
 
-  const pickQuestions = ({ count = randomCount, withOwn = includeOwn } = {}) => {
+  const pickQuestions = ({ count = randomCount, fromGames = games } = {}) => {
     setQuestions(null);
     listIdOfQuestions.current = listId;
-    const loading = listId == null ? api.gameQuestions(count, withOwn) : api.listQuestions(listId);
+    const loading = listId == null ? api.gameQuestions(fromGames, count) : api.listQuestions(listId);
     loading.then(setQuestions, e => toast.error('Could not load questions', { description: e.message }));
   };
+  const questionTotal = sources.reduce((sum, source) => sum + source.games.reduce((count, game) => count + game.n, 0), 0);
   useEffect(() => {
-    if (!isVisible || !['setup', 'party'].includes(phase)) return;
-    if (listId != null || !questions || listIdOfQuestions.current !== listId) pickQuestions();
-  }, [isVisible, listId]);
+    if (!isVisible || phase !== 'setup' || mode === 'party') return;
+    if (listId != null || !questions?.length || listIdOfQuestions.current !== listId) pickQuestions();
+  }, [isVisible, listId, mode, questionTotal]);
 
   const resetTimer = () => {
     setTimerEndsAt(null);
@@ -306,8 +265,23 @@ export default function Game({ isVisible, lists, listId, onListIdChange, isAiRea
     setPhase('setup');
     pickQuestions();
   };
+  const changePlan = rounds => {
+    setPlan(rounds);
+    localStorage.setItem('partyPlan', JSON.stringify(rounds));
+  };
+  const changeTemplateName = name => {
+    setTemplateName(name);
+    if (name) localStorage.setItem('partyPlanTemplate', name);
+    else localStorage.removeItem('partyPlanTemplate');
+  };
+  const planProblems = plan.map(round => roundProblem(round, lists, pointSystems, sources));
+  const planSummary = `${plan.length} ${plan.length === 1 ? 'round' : 'rounds'}`;
+  const roundPlan = (playedCount, action) => (
+    <RoundPlan rounds={plan} onRoundsChange={changePlan} lists={lists} pointSystems={pointSystems} sources={sources} showPages={showPages} onManageShowPages={() => (phase === 'party' ? setIsManagingShowPages(true) : setSection('shows'))} templates={templates} onTemplatesChange={setTemplates}
+      templateName={templateName} onTemplateNameChange={changeTemplateName} playedCount={playedCount} action={action} />
+  );
   const roundSettingsValues = {
-    secondsPerQuestion, secondsBetweenQuestions, shouldAutoStartTimer, pointsForCorrect, pointsForWrong, isAutoplay, secondsOnAnswer, randomCount, includeOwn, isRevealAtEnd,
+    secondsPerQuestion, secondsBetweenQuestions, shouldAutoStartTimer, randomCount, games,
   };
   const changeRoundSettings = changes => {
     if ('secondsPerQuestion' in changes) {
@@ -316,46 +290,59 @@ export default function Game({ isVisible, lists, listId, onListIdChange, isAiRea
     }
     if ('secondsBetweenQuestions' in changes) setSecondsBetweenQuestions(changes.secondsBetweenQuestions);
     if ('shouldAutoStartTimer' in changes) setShouldAutoStartTimer(changes.shouldAutoStartTimer);
-    if ('pointsForCorrect' in changes) setPointsForCorrect(changes.pointsForCorrect);
-    if ('pointsForWrong' in changes) setPointsForWrong(changes.pointsForWrong);
-    if ('isAutoplay' in changes) setIsAutoplay(changes.isAutoplay);
-    if ('isRevealAtEnd' in changes) {
-      setIsRevealAtEnd(changes.isRevealAtEnd);
-      if (changes.isRevealAtEnd) setSecondsBetweenQuestions(seconds => Math.max(seconds, MIN_SECONDS_TO_CHECK_ANSWERS));
-    }
-    if ('secondsOnAnswer' in changes) setSecondsOnAnswer(changes.secondsOnAnswer);
     if ('randomCount' in changes) {
       setRandomCount(changes.randomCount);
       localStorage.setItem('randomQuestionCount', String(changes.randomCount));
       pickQuestions({ count: changes.randomCount });
     }
-    if ('includeOwn' in changes) {
-      setIncludeOwn(changes.includeOwn);
-      localStorage.setItem('includeOwnQuestions', changes.includeOwn ? '1' : '0');
-      pickQuestions({ withOwn: changes.includeOwn });
+    if ('games' in changes) {
+      setGames(changes.games);
+      localStorage.setItem('randomGames', JSON.stringify(changes.games));
+      pickQuestions({ fromGames: changes.games });
     }
   };
   const roundSettingsProps = {
-    questions, lists, listId, onListIdChange, onNewSet: () => pickQuestions(), settings: roundSettingsValues, onSettingsChange: changeRoundSettings,
+    questions, lists, sources, listId, onListIdChange, onNewSet: () => pickQuestions(), settings: roundSettingsValues, onSettingsChange: changeRoundSettings,
   };
+  useEffect(() => {
+    api.pointSystems().then(setPointSystems);
+    api.gameTemplates().then(setTemplates);
+    api.showPages().then(setShowPages);
+  }, [section]);
   useEffect(() => { api.onParty(setPartyState); }, []);
   const openParty = async () => {
     try {
-      setPartyState(await api.partyOpen());
+      setPartyState(await api.partyOpen(localStorage.getItem(PARTY_TITLE_KEY)));
       setPhase('party');
     } catch (e) {
       toast.error('Could not open the party', { description: e.message });
     }
   };
-  const startPartyRound = () => api.partyStartRound({
-    uids: questions.map(question => question.uid), secondsPerQuestion, pointsForCorrect, pointsForWrong,
-    secondsBetweenQuestions: isRevealAtEnd ? Math.max(secondsBetweenQuestions, MIN_SECONDS_TO_CHECK_ANSWERS) : secondsBetweenQuestions,
-    secondsOnAnswer: isAutoplay ? secondsOnAnswer : 0, revealAtEnd: isRevealAtEnd,
-  });
-  const partyBackToLobby = async keepScores => {
-    await api.partyBackToLobby(keepScores);
-    pickQuestions();
+  const [isStartingRound, setIsStartingRound] = useState(false);
+  const startPartyRound = async () => {
+    const round = plan[partyState.round];
+    if (!round) return;
+    setIsStartingRound(true);
+    try {
+      const roundQuestions = await (round.listId == null ? api.gameQuestions(round.games ?? [], round.randomCount) : api.listQuestions(round.listId));
+      await api.partyStartRound({
+        uids: roundQuestions.map(question => question.uid), secondsPerQuestion: round.secondsPerQuestion, pointSystemId: pointSystemOf(round, pointSystems)?.id,
+        secondsBetweenQuestions: round.revealAtEnd ? Math.max(round.secondsBetweenQuestions, MIN_SECONDS_TO_CHECK_ANSWERS) : round.secondsBetweenQuestions,
+        secondsOnAnswer: round.secondsOnAnswer, revealAtEnd: round.revealAtEnd, showPageIds: round.showPageIds ?? [],
+      });
+    } catch (e) {
+      toast.error('Could not start the round', { description: withoutIpcPrefix(e) });
+    }
+    setIsStartingRound(false);
   };
+  const applyTemplate = template => {
+    changePlan(template.rounds);
+    changeTemplateName(template.name);
+    changeMode('party');
+    setSection('play');
+  };
+  const partyBackToLobby = keepScores => api.partyBackToLobby(keepScores);
+
   const closeParty = async () => {
     await api.partyClose();
     setPartyState(null);
@@ -435,23 +422,37 @@ export default function Game({ isVisible, lists, listId, onListIdChange, isAiRea
 
   if (phase === 'setup') {
     return (
-      <div className="h-full overflow-y-auto">
-        <GameSetup mode={mode} onModeChange={changeMode} isAiReady={isAiReady} onOpenSettings={onOpenSettings} onStart={startGame}
-          {...roundSettingsProps} />
-      </div>
+      <GameSections section={section} onSectionChange={setSection}>
+        {section === 'templates' ? (
+          <Templates templates={templates} onTemplatesChange={setTemplates} lists={lists} pointSystems={pointSystems} sources={sources} showPages={showPages} onUse={applyTemplate}
+            onPlanNew={() => { changeMode('party'); changeTemplateName(null); setSection('play'); }} />
+        ) : section === 'shows' ? <ShowPages showPages={showPages} onShowPagesChange={setShowPages} />
+        : section === 'points' ? <PointSystems /> : section === 'profiles' ? <Profiles /> : section === 'leaderboard' ? (
+          <div className="mx-auto max-w-3xl px-6 py-8"><AllTimeLeaderboard /></div>
+        ) : (
+          <GameSetup mode={mode} onModeChange={changeMode} isAiReady={isAiReady} onOpenSettings={onOpenSettings} onStart={startGame}
+            {...roundSettingsProps} roundPlan={action => roundPlan(0, action)} planSummary={planSummary} canOpenParty={!!pointSystems && planProblems.every(problem => !problem)} />
+        )}
+      </GameSections>
     );
   }
 
   if (phase === 'party' && partyState) {
     return (
-      <PartyScreen party={partyState} isVisible={isVisible} onBackToLobby={partyBackToLobby} onClose={closeParty}
-        lobbySettings={
-          <RoundSettings mode="party" {...roundSettingsProps} action={
-            <Button size="lg" onClick={startPartyRound} disabled={!questions?.length || !partyState.players.length}>
-              <PlayIcon />Start round {partyState.round + 1}
+      <>
+        <PartyScreen party={partyState} isVisible={isVisible} onBackToLobby={partyBackToLobby} onClose={closeParty}
+          lobbySettings={roundPlan(partyState.round, (
+            <Button onClick={startPartyRound} disabled={isStartingRound || !plan[partyState.round] || !partyState.players.length || !!planProblems[partyState.round]}>
+              <PlayIcon />{plan[partyState.round] ? `Start round ${partyState.round + 1}` : 'No round left'}
             </Button>
-          } />
-        } />
+          ))} />
+        <Dialog open={isManagingShowPages} onOpenChange={setIsManagingShowPages}>
+          <DialogContent className="max-h-[90vh] overflow-y-auto p-0 sm:max-w-3xl" aria-describedby={undefined}>
+            <DialogTitle className="sr-only">Show pages</DialogTitle>
+            <ShowPages showPages={showPages} onShowPagesChange={setShowPages} />
+          </DialogContent>
+        </Dialog>
+      </>
     );
   }
 

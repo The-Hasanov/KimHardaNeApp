@@ -36,7 +36,7 @@ test('keyword search is accent-insensitive, prefix-aware and filterable', () => 
   const s = store();
   assert.deepEqual(s.search({ q: 'baki', mode: 'keyword' }).hits.map(h => h.uid).sort(), ['1:question:1', '1:theme:3']);
   assert.deepEqual(s.search({ q: 'icerisehe', mode: 'keyword' }).hits.map(h => h.uid), ['1:theme:3']);
-  const nhn = s.search({ q: 'baki', mode: 'keyword', game: '1' });
+  const nhn = s.search({ q: 'baki', mode: 'keyword', games: ['3sual:1'] });
   assert.deepEqual(nhn.hits.map(h => h.uid), ['1:question:1']);
   assert.equal(nhn.hits[0].ai, null);
   assert.equal(s.search({}).matches, 4);
@@ -95,22 +95,22 @@ test('author filter narrows browsing and keyword search to that author', () => {
   const uids = opts => s.search(opts).hits.map(h => h.uid).sort();
   assert.deepEqual(uids({ author: 7 }), ['1:question:1', '1:theme:3']);
   assert.deepEqual(uids({ author: '9' }), ['1:question:1', '1:question:2', '1:theme:3']);
-  assert.deepEqual(uids({ q: 'baki', mode: 'keyword', author: 9, game: '1' }), ['1:question:1']);
+  assert.deepEqual(uids({ q: 'baki', mode: 'keyword', author: 9, games: ['3sual:1'] }), ['1:question:1']);
   assert.deepEqual(uids({ author: 404 }), []);
 });
 
-test('random picks playable questions of one game only', () => {
+test('random picks playable questions from the chosen games of any source, or from everything', () => {
   const s = store();
-  const picked = s.randomPlayableQuestions(1, 10);
+  const picked = s.randomPlayableQuestions(['3sual:1'], 10);
   assert.deepEqual(picked.map(q => q.uid).sort(), ['1:question:1', '1:question:2']);
   assert.equal(picked[0].answer.length > 0, true);
-  assert.equal(s.randomPlayableQuestions(1, 1).length, 1);
-  assert.deepEqual(s.randomPlayableQuestions(99, 10), []);
-  assert.deepEqual(s.randomPlayableQuestions(1, 10, ['1:question:1']).map(q => q.uid), ['1:question:2']);
+  assert.equal(s.randomPlayableQuestions(['3sual:1'], 1).length, 1);
+  assert.deepEqual(s.randomPlayableQuestions(['3sual:99', 'other:1'], 10), []);
+  assert.deepEqual(s.randomPlayableQuestions(['3sual:1'], 10, ['1:question:1']).map(q => q.uid), ['1:question:2']);
   const own = s.createQuestion({ text: 'Qısa?', answer: 'Bəli' });
-  assert.ok(!s.randomPlayableQuestions(1, 10).some(q => q.uid === own.uid));
-  assert.deepEqual(s.randomPlayableQuestions(1, 1, [], { includeOwn: true }).map(q => q.uid), [own.uid]);
-  assert.deepEqual(s.randomPlayableQuestions(1, 10, [], { includeOwn: true }).map(q => q.uid).sort(), [own.uid, '1:question:1', '1:question:2']);
+  assert.ok(!s.randomPlayableQuestions(['3sual:1'], 10).some(q => q.uid === own.uid));
+  assert.deepEqual(s.randomPlayableQuestions(['own:0'], 10).map(q => q.uid), [own.uid]);
+  assert.deepEqual(s.randomPlayableQuestions([], 10).map(q => q.uid).sort(), ['1:question:1', '1:question:2', own.uid]);
 });
 
 test('lists keep their questions in order and survive renames, removals and deletion', () => {
@@ -184,7 +184,8 @@ test('your own questions are searchable under My questions, kept as edits, and d
   assert.ok(mountain.edited_at);
   assert.deepEqual(s.get(mountain.uid).sources, ['https://x.az']);
   assert.deepEqual(s.search({ q: 'sahdag', mode: 'keyword' }).hits.map(h => h.uid), [mountain.uid]);
-  assert.deepEqual(s.games().map(g => [g.id, g.name, g.n]), [[0, 'My questions', 2], [1, 'NHN', 3], [3, 'Fərdi Oyun', 1]]);
+  assert.deepEqual(s.games().map(g => [g.sourceId, g.key, g.name, g.n]), [['3sual', '3sual:1', 'NHN', 3], ['3sual', '3sual:3', 'Fərdi Oyun', 1], ['own', 'own:0', 'My questions', 2]]);
+  assert.deepEqual(s.search({ games: ['own:0'] }).hits.map(h => h.uid).sort(), [mountain.uid, river.uid].sort());
   s.putVectors([mountain, river], [vec(3), vec(4)]);
   const listId = s.createList('Mine');
   s.addToList(listId, mountain.uid);
@@ -213,12 +214,25 @@ test('pictures on your own questions are saved next to the database, shown from 
   assert.throws(() => s.setOwnImage(own.uid, 'rekvizit_url', 'notes.txt'), /PNG, JPEG/);
 });
 
-test('party results add up per player name across rounds and can be reset', () => {
+test('party results add up per player name across rounds, rank by points then time, and can be reset', () => {
   const s = store();
-  s.addPartyResults([{ name: 'Aysel', correct: 3, wrong: 1, unanswered: 1, correctMs: 30000 }, { name: 'Nicat', correct: 1, wrong: 0, unanswered: 4, correctMs: 5000 }]);
-  s.addPartyResults([{ name: 'aysel', correct: 2, wrong: 2, unanswered: 0, correctMs: 15500 }, { name: 'Leyla', correct: 1, wrong: 0, unanswered: 0, correctMs: 2000 }]);
-  assert.deepEqual(s.partyResults().map(({ name, correct, wrong, unanswered, rounds, avg_seconds }) => [name, correct, wrong, unanswered, rounds, avg_seconds]),
-    [['aysel', 5, 3, 1, 2, 9.1], ['Leyla', 1, 0, 0, 1, 2], ['Nicat', 1, 0, 4, 1, 5]]);
+  s.addPartyResults([{ name: 'Aysel', points: 6, correct: 3, wrong: 1, unanswered: 1, correctMs: 30000 }, { name: 'Nicat', points: 10, correct: 1, wrong: 0, unanswered: 4, correctMs: 5000 }]);
+  s.addPartyResults([{ name: 'aysel', points: 4, correct: 2, wrong: 2, unanswered: 0, correctMs: 15500 }, { name: 'Leyla', correct: 1, wrong: 0, unanswered: 0, correctMs: 2000 }]);
+  s.addPartyResults([{ name: 'Orxan', points: 1, correct: 1, wrong: 0, unanswered: 0, correctMs: 9000 }]);
+  assert.deepEqual(s.partyResults().map(({ name, points, correct, wrong, unanswered, rounds, avg_seconds }) => [name, points, correct, wrong, unanswered, rounds, avg_seconds]),
+    [['Nicat', 10, 1, 0, 4, 1, 5], ['aysel', 10, 5, 3, 1, 2, 9.1], ['Leyla', 1, 1, 0, 0, 1, 2], ['Orxan', 1, 1, 0, 0, 1, 9]]);
   s.resetPartyResults();
   assert.deepEqual(s.partyResults(), []);
+});
+
+test('point systems are saved by name, renamed, and deleted', () => {
+  const s = store();
+  const id = s.savePointSystem({ name: 'Brave pool', mode: 'pool', pool: [{ points: 10 }] });
+  assert.throws(() => s.savePointSystem({ name: 'brave POOL', mode: 'simple' }), /already exists/);
+  s.savePointSystem({ id, name: 'Brave pool', mode: 'pool', pool: [{ points: 20 }] });
+  assert.deepEqual(s.pointSystems().find(system => system.id === id).pool, [{ points: 20 }]);
+  const other = s.savePointSystem({ name: 'Classic', mode: 'simple' });
+  assert.deepEqual(s.pointSystems().map(system => system.name), ['Brave pool', 'Classic']);
+  s.deletePointSystem(other);
+  assert.deepEqual(s.pointSystems().map(system => system.id), [id]);
 });

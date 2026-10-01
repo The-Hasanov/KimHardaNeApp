@@ -8,6 +8,8 @@ const { fileURLToPath } = require('node:url');
 const QRCode = require('qrcode');
 const { matchesAsText } = require('./judge');
 const { MEDIA_TYPES } = require('./store');
+const { PlayerProfiles } = require('./profiles');
+const { CLASSIC_POINT_SYSTEM, normalizePointSystem, roundProblem, summaryOf, usesLeft, pickFor, risksLeft, scoreRound } = require('./scoring');
 
 const PARTY_LIMITS = { players: 100, nameLength: 24, answerLength: 200, messageLength: 300, bodyBytes: 4096 };
 const PREFERRED_PORT = 8765;
@@ -17,8 +19,8 @@ const TV_PAGE = path.join(__dirname, 'party', 'tv.html');
 const VIRTUAL_ADAPTER = /vEthernet|VirtualBox|VMware|WSL|Hyper-V|Loopback|Tailscale|ZeroTier|VPN/i;
 const PHASES_WITH_QUESTION = ['question', 'judging', 'reveal'];
 const TV_SCREENS = ['game', 'leaderboard', 'join'];
-const PAUSABLE_PHASES = ['waiting', 'question', 'reveal'];
-const SKIPPABLE_PHASES = ['waiting', 'question', 'reveal'];
+const PAUSABLE_PHASES = ['show', 'waiting', 'question', 'reveal'];
+const SKIPPABLE_PHASES = ['show', 'waiting', 'question', 'reveal'];
 const REACTIONS = ['👏', '😂', '😮', '🤔', '🔥', '❤️', '😢', '🎉'];
 const REACTION_COOLDOWN_MS = 1000;
 const REACTIONS_PER_MINUTE = 10;
@@ -27,7 +29,7 @@ const REACTION_SCREENS = {
   tv: { atOnce: 5, shownMs: 4200, maxWaitMs: 15000 },
   players: { atOnce: 2, shownMs: 3000, maxWaitMs: 8000 },
 };
-const DEFAULT_RULES = { secondsPerQuestion: 60, secondsBetweenQuestions: 0, secondsOnAnswer: 0, pointsForCorrect: 1, pointsForWrong: 0 };
+const DEFAULT_RULES = { secondsPerQuestion: 60, secondsBetweenQuestions: 0, secondsOnAnswer: 0, pointSystem: normalizePointSystem(CLASSIC_POINT_SYSTEM) };
 
 class PartyError extends Error {
   constructor(status, message) {
@@ -36,6 +38,10 @@ class PartyError extends Error {
   }
 }
 
+const DEFAULT_PARTY_TITLE = 'Quiz night';
+const MAX_TITLE_LENGTH = 40;
+const cleanTitle = title => String(title ?? '').replace(/\s+/g, ' ').trim().slice(0, MAX_TITLE_LENGTH) || DEFAULT_PARTY_TITLE;
+const escapeHtml = text => text.replace(/[&<>"']/g, c => `&#${c.charCodeAt(0)};`);
 const cleanName = name => String(name ?? '').replace(/\s+/g, ' ').trim().slice(0, PARTY_LIMITS.nameLength);
 const isBlank = given => !String(given ?? '').trim();
 
@@ -50,8 +56,9 @@ function lanAddresses() {
 }
 
 class PartyGame {
-  constructor({ judge, onChange = () => {}, onRoundFinished = () => {}, onReaction = () => {} }) {
+  constructor({ judge, title, onChange = () => {}, onRoundFinished = () => {}, onReaction = () => {}, profiles = new PlayerProfiles() }) {
     this.id = crypto.randomBytes(6).toString('hex');
+    this.profiles = profiles;
     this.judge = judge;
     this.onChange = onChange;
     this.onRoundFinished = onRoundFinished;
@@ -66,7 +73,10 @@ class PartyGame {
     this.bankedTimes = new Map();
     this.round = 0;
     this.questions = [];
+    this.showPages = [];
+    this.showIndex = -1;
     this.answers = [];
+    this.stakes = [];
     this.rulings = [];
     this.closedCount = 0;
     this.skips = { key: null, playerIds: new Set() };
@@ -81,6 +91,7 @@ class PartyGame {
     this.pausedRemainingMs = null;
     this.screen = 'game';
     this.isNightMode = true;
+    this.title = cleanTitle(title);
     this.shownUids = new Set();
     this.streams = new Set();
     this.urls = [];
@@ -94,20 +105,71 @@ class PartyGame {
     return clean;
   }
 
-  join(name) {
-    const clean = this.checkName(name);
+  playerNamed(name, exceptId = null) {
+    return [...this.players.values()].find(p => p.id !== exceptId && p.name.toLowerCase() === name.toLowerCase()) ?? null;
+  }
+
+  loadProfile(player, { preferences, isRenamed = false } = {}) {
+    this.profiles.ensure(player.name, { preferences, isRenamed });
+    player.preferences = this.profiles.preferencesOf(player.name);
+    player.hasPin = this.profiles.hasPin(player.name);
+  }
+
+  join(name, pin = null) {
+    const typed = cleanName(name);
+    if (!typed) throw new PartyError(400, 'Type your name');
+    const clean = this.profiles.nameOf(typed);
+    this.profiles.unlock(clean, pin);
+    const holder = this.playerNamed(clean);
+    if (holder && !this.profiles.hasPin(clean)) throw new PartyError(409, 'That name is taken');
+    if (holder) return this.moveToNewDevice(holder);
     if (this.players.size >= PARTY_LIMITS.players) throw new PartyError(409, 'The game is full');
     const player = { id: crypto.randomUUID(), token: crypto.randomBytes(16).toString('hex'), name: clean, countsFrom: { round: this.round, position: this.closedCount } };
+    this.loadProfile(player);
     this.players.set(player.id, player);
     this.changed();
     return player;
   }
 
-  rename(token, name) {
-    const player = this.playerByToken(token);
-    player.name = this.checkName(name, player.id);
+  moveToNewDevice(player) {
+    player.token = crypto.randomBytes(16).toString('hex');
+    for (const stream of this.streams) if (stream.playerId === player.id) stream.end({ phase: 'moved' });
+    this.loadProfile(player);
     this.changed();
     return player;
+  }
+
+  rename(token, name, pin = null) {
+    const player = this.playerByToken(token);
+    const clean = this.checkName(name, player.id);
+    const isSameName = clean.toLowerCase() === player.name.toLowerCase();
+    if (!isSameName) this.profiles.unlock(clean, pin);
+    const preferences = player.preferences;
+    player.name = isSameName ? clean : this.profiles.nameOf(clean);
+    this.loadProfile(player, { preferences, isRenamed: isSameName });
+    this.changed();
+    return player;
+  }
+
+  setPin(token, pin) {
+    const player = this.playerByToken(token);
+    this.profiles.setPin(player.name, pin);
+    player.hasPin = this.profiles.hasPin(player.name);
+    this.changed();
+  }
+
+  setPreferences(token, preferences) {
+    const player = this.playerByToken(token);
+    player.preferences = this.profiles.setPreferences(player.name, preferences);
+    this.changed();
+    return player.preferences;
+  }
+
+  profileChanged(name) {
+    const player = this.playerNamed(cleanName(name));
+    if (!player) return;
+    player.hasPin = this.profiles.hasPin(player.name);
+    this.changed();
   }
 
   isOnline(playerId) {
@@ -149,6 +211,85 @@ class PartyGame {
     if (ruling) answer.hostCall = ruling.isCorrect;
     answers.set(player.id, answer);
     this.changed();
+  }
+
+  firstPositionOf(player) {
+    return player.countsFrom.round === this.round ? player.countsFrom.position : 0;
+  }
+
+  stakesBefore(player, position = this.index) {
+    return this.stakes.slice(this.firstPositionOf(player), position).map(stakes => stakes.get(player.id) ?? null);
+  }
+
+  setStake(token, { pick, isRisked } = {}) {
+    const player = this.playerByToken(token);
+    if (this.phase !== 'question') throw new PartyError(409, 'Answers are closed');
+    const system = this.rules.pointSystem;
+    const before = this.stakesBefore(player);
+    const stake = { ...this.stakes[this.index].get(player.id) };
+    if (pick !== undefined) {
+      if (system.mode !== 'pool' || !Number.isInteger(pick) || !system.pool[pick]) throw new PartyError(400, 'Pick one of the points');
+      const left = usesLeft(system, before)[pick];
+      if (left != null && left <= 0) throw new PartyError(409, `No ${system.pool[pick].points}s left this round`);
+      stake.pick = pick;
+    }
+    if (isRisked !== undefined) {
+      if (!system.risk.isOn) throw new PartyError(400, 'This round has no risk');
+      if (isRisked && !stake.isRisked && risksLeft(system, before) <= 0) throw new PartyError(409, 'No risks left this round');
+      stake.isRisked = !!isRisked;
+    }
+    this.stakes[this.index].set(player.id, stake);
+    this.changed();
+    return this.stakeView(player);
+  }
+
+  settleStakes(position) {
+    const system = this.rules.pointSystem;
+    for (const player of this.players.values()) {
+      if (this.firstPositionOf(player) > position) continue;
+      const stake = { ...this.stakes[position].get(player.id) };
+      const answer = this.answers[position].get(player.id);
+      if (system.mode === 'pool') stake.pick = pickFor(system, this.stakesBefore(player, position), stake.pick);
+      if (!answer || isBlank(answer.given)) stake.isRisked = false;
+      this.stakes[position].set(player.id, stake);
+    }
+  }
+
+  stakeView(player) {
+    const system = this.rules.pointSystem;
+    if (!PHASES_WITH_QUESTION.includes(this.phase)) return null;
+    const before = this.stakesBefore(player);
+    const stake = this.stakes[this.index]?.get(player.id) ?? {};
+    return {
+      pick: system.mode === 'pool' ? pickFor(system, before, stake.pick) : null,
+      isPicked: Number.isInteger(stake.pick),
+      isRisked: !!stake.isRisked,
+      usesLeft: system.mode === 'pool' ? usesLeft(system, before) : null,
+      risksLeft: system.risk.isOn ? Math.min(99, risksLeft(system, before)) : 0,
+    };
+  }
+
+  outcomeAt(player, position) {
+    const answer = this.answers[position]?.get(player.id);
+    if (answer?.isCorrect === true) return 'correct';
+    if (!answer || isBlank(answer.given)) return position < this.closedCount ? 'unanswered' : 'pending';
+    return answer.isCorrect === false ? 'wrong' : 'pending';
+  }
+
+  scoreOf(player, upTo = this.revealedCount) {
+    const first = this.firstPositionOf(player);
+    const entries = [];
+    for (let position = first; position < upTo; position++) {
+      entries.push({ outcome: this.outcomeAt(player, position), stake: this.stakes[position]?.get(player.id) });
+    }
+    return scoreRound(this.rules.pointSystem, entries, { isComplete: upTo >= this.questions.length && this.questions.length > 0 });
+  }
+
+  pointsAt(player, position) {
+    if (!player || position < this.firstPositionOf(player)) return 0;
+    const { perQuestion } = this.scoreOf(player, position + 1);
+    const last = perQuestion.at(-1);
+    return last ? last.points + last.streakBonus : 0;
   }
 
   rulingFor(position, given) {
@@ -240,7 +381,7 @@ class PartyGame {
   }
 
   skipKey() {
-    return `${this.round}:${this.phase}:${this.index}`;
+    return `${this.round}:${this.phase}:${this.phase === 'show' ? `page${this.showIndex}` : this.index}`;
   }
 
   isHostChecking() {
@@ -251,6 +392,7 @@ class PartyGame {
   }
 
   canSkip() {
+    if (this.phase === 'show' && this.showPages[this.showIndex].canPlayersSkip === false) return false;
     return SKIPPABLE_PHASES.includes(this.phase) && !this.isHostChecking();
   }
 
@@ -278,19 +420,54 @@ class PartyGame {
     if (!this.canSkip() || this.pausedRemainingMs != null) return;
     const { count, of } = this.skipStatus();
     if (!of || count < of) return;
-    ({ waiting: () => this.openAnswers(), question: () => this.closeAnswers(), reveal: () => this.next() })[this.phase]();
+    ({ show: () => this.nextShowPage(), waiting: () => this.openAnswers(), question: () => this.closeAnswers(), reveal: () => this.next() })[this.phase]();
   }
 
-  startRound({ questions, secondsPerQuestion, secondsBetweenQuestions, secondsOnAnswer = 0, pointsForCorrect, pointsForWrong, revealAtEnd = false }) {
+  startRound({ questions, showPages = [], secondsPerQuestion, secondsBetweenQuestions, secondsOnAnswer = 0, pointSystem, pointsForCorrect = 1, pointsForWrong = 0, revealAtEnd = false }) {
     if (this.phase !== 'lobby' || !questions.length) return;
+    const system = normalizePointSystem(pointSystem ?? { name: 'Classic', simple: { correct: pointsForCorrect, wrong: pointsForWrong, unanswered: 0 } });
+    const problem = roundProblem(system, questions.length);
+    if (problem) throw new PartyError(400, problem);
     this.questions = questions;
     this.answers = questions.map(() => new Map());
+    this.stakes = questions.map(() => new Map());
     this.rulings = questions.map(() => []);
     this.closedCount = 0;
-    this.rules = { secondsPerQuestion, secondsBetweenQuestions, secondsOnAnswer, pointsForCorrect, pointsForWrong, revealAtEnd: !!revealAtEnd };
+    this.rules = { secondsPerQuestion, secondsBetweenQuestions, secondsOnAnswer, pointSystem: system, pointsSummary: summaryOf(system), revealAtEnd: !!revealAtEnd };
     this.revealedCount = 0;
     this.round += 1;
+    this.showPages = showPages;
+    if (!showPages.length) return this.goTo(0);
+    this.showPage(0);
+  }
+
+  showPage(position) {
+    this.showIndex = position;
+    this.phase = 'show';
+    this.screen = 'game';
+    this.schedule(this.showPages[position].seconds, () => this.nextShowPage());
+    this.changed();
+  }
+
+  nextShowPage() {
+    if (this.phase !== 'show') return;
+    if (this.showIndex + 1 < this.showPages.length) return this.showPage(this.showIndex + 1);
     this.goTo(0);
+  }
+
+  showImageSrc(url) {
+    const page = this.phase === 'show' && Number(url.searchParams.get('page')) === this.showIndex ? this.showPages[this.showIndex] : null;
+    const block = page?.blocks[Number(url.searchParams.get('block'))];
+    if (block?.type !== 'image') throw new PartyError(404, 'No media');
+    return block.src;
+  }
+
+  showPageView(imageUrl) {
+    const page = this.phase === 'show' ? this.showPages[this.showIndex] : null;
+    return page && {
+      index: this.showIndex, total: this.showPages.length, title: page.title, seconds: page.seconds, canPlayersSkip: page.canPlayersSkip !== false,
+      blocks: page.blocks.map((block, position) => (block.type === 'image' ? { type: 'image', src: imageUrl(block, position) } : block)),
+    };
   }
 
   backToLobby({ keepScores }) {
@@ -308,7 +485,9 @@ class PartyGame {
     }
     this.questions = [];
     this.answers = [];
+    this.stakes = [];
     this.rulings = [];
+    this.showPages = [];
     this.index = -1;
     this.phase = 'lobby';
     this.screen = 'game';
@@ -326,7 +505,8 @@ class PartyGame {
   }
 
   skipWait() {
-    if (this.phase === 'waiting') this.openAnswers();
+    if (this.phase === 'show') this.nextShowPage();
+    else if (this.phase === 'waiting') this.openAnswers();
   }
 
   openAnswers() {
@@ -346,10 +526,15 @@ class PartyGame {
 
   resume() {
     if (this.pausedRemainingMs == null) return;
-    const whenTimeIsUp = { waiting: () => this.openAnswers(), question: () => this.closeAnswers(), reveal: () => this.next() };
+    const whenTimeIsUp = { show: () => this.nextShowPage(), waiting: () => this.openAnswers(), question: () => this.closeAnswers(), reveal: () => this.next() };
     this.schedule(this.pausedRemainingMs / 1000, whenTimeIsUp[this.phase]);
     this.changed();
     this.skipIfEveryoneAgrees();
+  }
+
+  setTitle(title) {
+    this.title = cleanTitle(title);
+    this.changed();
   }
 
   setNightMode(isNightMode) {
@@ -385,6 +570,7 @@ class PartyGame {
     const position = this.index;
     const answers = this.answers;
     this.closedCount = position + 1;
+    this.settleStakes(position);
     for (const answer of answers[position].values()) {
       if (answer.hostCall === undefined) {
         try {
@@ -457,25 +643,15 @@ class PartyGame {
 
   roundResults() {
     return [...this.players.values()].map(player => {
-      const result = { name: player.name, correct: 0, wrong: 0, unanswered: 0, correctMs: 0 };
-      const firstPosition = player.countsFrom.round === this.round ? player.countsFrom.position : 0;
-      for (const answers of this.answers.slice(firstPosition, this.closedCount)) {
-        const answer = answers.get(player.id);
-        if (answer?.isCorrect) {
-          result.correct += 1;
-          result.correctMs += answer.ms ?? 0;
-        }
-        else if (!answer || isBlank(answer.given)) result.unanswered += 1;
-        else if (answer.isCorrect === false) result.wrong += 1;
+      const result = { name: player.name, points: this.scoreOf(player, this.closedCount).total, correct: 0, wrong: 0, unanswered: 0, correctMs: 0 };
+      for (let position = this.firstPositionOf(player); position < this.closedCount; position++) {
+        const outcome = this.outcomeAt(player, position);
+        if (outcome === 'pending') continue;
+        result[outcome] += 1;
+        if (outcome === 'correct') result.correctMs += this.answers[position].get(player.id).ms ?? 0;
       }
       return result;
     }).filter(result => result.correct + result.wrong + result.unanswered > 0);
-  }
-
-  pointsFor(answer) {
-    if (answer?.isCorrect === undefined) return 0;
-    if (answer.isCorrect) return this.rules.pointsForCorrect;
-    return answer.given ? this.rules.pointsForWrong : 0;
   }
 
   correctTimes(playerId) {
@@ -490,7 +666,7 @@ class PartyGame {
     const byTime = (a, b) => (a.avgSeconds ?? Infinity) - (b.avgSeconds ?? Infinity) || 0;
     const scored = [...this.players.values()]
       .map(p => {
-        const roundScore = this.answers.slice(0, this.revealedCount).reduce((sum, answers) => sum + this.pointsFor(answers.get(p.id)), 0);
+        const roundScore = this.scoreOf(p).total;
         const times = this.correctTimes(p.id);
         const avgSeconds = times.count ? Math.round(times.ms / times.count / 100) / 10 : null;
         return { id: p.id, name: p.name, roundScore, score: (this.bankedScores.get(p.id) ?? 0) + roundScore, avgSeconds };
@@ -507,20 +683,22 @@ class PartyGame {
   hostView() {
     const current = this.answers[this.index];
     const answerRows = position => [...(this.answers[position] ?? [])].map(([playerId, answer]) => ({
-      playerId, name: this.players.get(playerId)?.name, points: this.pointsFor(answer), ...answer,
+      playerId, name: this.players.get(playerId)?.name, points: this.pointsAt(this.players.get(playerId), position), ...answer,
+      stake: this.stakes[position]?.get(playerId) ?? null,
     }));
     const checkedIndex = this.rules.revealAtEnd && this.phase === 'waiting' ? this.index - 1 : -1;
     return {
-      id: this.id, phase: this.phase, round: this.round, index: this.index, total: this.questions.length,
+      id: this.id, title: this.title, phase: this.phase, round: this.round, index: this.index, total: this.questions.length,
       remainingMs: this.remainingMs(), isPaused: this.pausedRemainingMs != null, screen: this.screen,
       rules: this.rules, urls: this.urls, port: this.port, question: this.questions[this.index] ?? null,
-      players: [...this.players.values()].map(p => ({ id: p.id, name: p.name, hasAnswered: !!current?.has(p.id), isOnline: this.isOnline(p.id), timesAway: this.absencesOf(p.id) })),
+      players: [...this.players.values()].map(p => ({ id: p.id, name: p.name, hasPin: !!p.hasPin, hasAnswered: !!current?.has(p.id), isOnline: this.isOnline(p.id), timesAway: this.absencesOf(p.id) })),
       skips: this.skipStatus(),
       announcement: this.announcement,
       areReactionsOn: this.areReactionsOn,
       answers: answerRows(this.index),
       previous: checkedIndex >= 0 ? { index: checkedIndex, question: this.questions[checkedIndex], answers: answerRows(checkedIndex) } : null,
       leaderboard: this.leaderboard(),
+      showPage: this.showPageView(block => block.src),
     };
   }
 
@@ -541,6 +719,7 @@ class PartyGame {
         }),
       },
       answers: isRevealed ? view.answers.map(({ given, similarity, closestAnswer, hostCall, isDirectCall, ...result }) => result) : [],
+      showPage: this.showPageView((_block, position) => `/tv/show-image?page=${this.showIndex}&block=${position}`),
       isNightMode: this.isNightMode,
     };
   }
@@ -552,16 +731,18 @@ class PartyGame {
     const me = leaderboard.find(entry => entry.id === player.id);
     const showsLeaderboard = ['reveal', 'finished'].includes(this.phase) || (this.phase === 'lobby' && this.round > 0);
     return {
-      partyId: this.id, phase: this.phase, round: this.round, index: this.index, total: this.questions.length,
+      partyId: this.id, title: this.title, phase: this.phase, round: this.round, index: this.index, total: this.questions.length,
       remainingMs: this.remainingMs(), isPaused: this.pausedRemainingMs != null, playerCount: this.players.size, isNightMode: this.isNightMode,
       rules: {
-        pointsForCorrect: this.rules.pointsForCorrect, pointsForWrong: this.rules.pointsForWrong, secondsPerQuestion: this.rules.secondsPerQuestion,
+        pointSystem: this.rules.pointSystem, pointsSummary: this.rules.pointsSummary ?? summaryOf(this.rules.pointSystem), secondsPerQuestion: this.rules.secondsPerQuestion,
         secondsBetweenQuestions: this.rules.secondsBetweenQuestions, secondsOnAnswer: this.rules.secondsOnAnswer,
       },
-      me: { name: player.name, score: me?.score ?? 0, roundScore: me?.roundScore ?? 0, rank: me?.rank ?? null, avgSeconds: me?.avgSeconds ?? null },
+      stake: this.stakeView(player),
+      me: { name: player.name, hasPin: !!player.hasPin, preferences: player.preferences, score: me?.score ?? 0, roundScore: me?.roundScore ?? 0, rank: me?.rank ?? null, avgSeconds: me?.avgSeconds ?? null },
       question: PHASES_WITH_QUESTION.includes(this.phase) ? {
         text: question.text, noteBefore: question.note_before, handoutText: question.rekvizit_text, hasHandoutImage: !!question.rekvizit_src, handoutKind: question.rekvizit_kind ?? 'image',
       } : null,
+      showPage: this.showPageView((_block, position) => `/show-image?page=${this.showIndex}&block=${position}`),
       myAnswer: myAnswer?.given ?? null,
       skip: this.skipStatus(player.id),
       reactions: this.areReactionsOn ? REACTIONS : [],
@@ -569,12 +750,19 @@ class PartyGame {
       announcement: this.announcement,
       reveal: this.phase === 'reveal' ? {
         answer: question.answer, acceptedAnswers: question.accepted_answers, comment: question.comment,
-        hasAnswerImage: !!question.source_media_src, answerKind: question.source_media_kind ?? 'image', isCorrect: myAnswer ? !!myAnswer.isCorrect : null, points: this.pointsFor(myAnswer),
+        hasAnswerImage: !!question.source_media_src, answerKind: question.source_media_kind ?? 'image', isCorrect: myAnswer?.given ? !!myAnswer.isCorrect : null, ...this.revealedPointsOf(player),
         seconds: myAnswer?.ms != null && myAnswer.given ? Math.round(myAnswer.ms / 100) / 10 : null,
         isPending: !!myAnswer && myAnswer.verdict === 'unsure' && !myAnswer.decidedByHost,
       } : null,
       leaderboard: showsLeaderboard ? leaderboard.slice(0, 10).map(({ name, score, rank, avgSeconds }) => ({ name, score, rank, avgSeconds })) : null,
     };
+  }
+
+  revealedPointsOf(player) {
+    if (this.index < this.firstPositionOf(player)) return { points: 0, streakBonus: 0, perfectBonus: 0, isRoundLost: false };
+    const { perQuestion, isBroken, perfectBonus } = this.scoreOf(player, this.index + 1);
+    const { points = 0, streakBonus = 0 } = perQuestion.at(-1) ?? {};
+    return { points, streakBonus, perfectBonus, isRoundLost: isBroken };
   }
 
   changed() {
@@ -662,17 +850,17 @@ function openEventStream(game, req, res, { playerId = null, view }) {
   else stream.send(view());
 }
 
-function sendPage(res, file) {
+function sendPage(res, file, title) {
   res.writeHead(200, {
     'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff',
     'Content-Security-Policy': "default-src 'self'; img-src 'self' https: data:; media-src 'self' https:; style-src 'unsafe-inline'; script-src 'unsafe-inline'; object-src 'none'; base-uri 'none'; form-action 'none'",
     'Referrer-Policy': 'no-referrer',
   });
-  res.end(fs.readFileSync(file));
+  res.end(fs.readFileSync(file, 'utf8').replaceAll('{{title}}', escapeHtml(title)));
 }
 
 function routeTv(game, req, res, url) {
-  if (url.pathname === '/tv' || url.pathname === '/tv/') return sendPage(res, TV_PAGE);
+  if (url.pathname === '/tv' || url.pathname === '/tv/') return sendPage(res, TV_PAGE, game.title);
   if (url.pathname === '/tv/join-qr.svg') {
     res.writeHead(200, { 'Content-Type': 'image/svg+xml', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' });
     return res.end(game.joinQrSvg);
@@ -682,6 +870,7 @@ function routeTv(game, req, res, url) {
     if (!PHASES_WITH_QUESTION.includes(game.phase)) throw new PartyError(404, 'No media');
     return sendMedia(req, res, game.questions[game.index].rekvizit_src);
   }
+  if (url.pathname === '/tv/show-image') return sendMedia(req, res, game.showImageSrc(url));
   if (url.pathname === '/tv/answer-image') {
     if (game.phase !== 'reveal') throw new PartyError(404, 'No media');
     return sendMedia(req, res, game.questions[game.index].source_media_src);
@@ -692,10 +881,11 @@ function routeTv(game, req, res, url) {
 async function route(game, req, res) {
   const url = new URL(req.url, 'http://party');
   const token = url.searchParams.get('token');
-  if (req.method === 'GET' && url.pathname === '/') return sendPage(res, PLAYER_PAGE);
+  if (req.method === 'GET' && url.pathname === '/') return sendPage(res, PLAYER_PAGE, game.title);
   if (req.method === 'POST' && url.pathname === '/join') {
-    const player = game.join((await readJson(req)).name);
-    return sendJson(res, 200, { token: player.token, partyId: game.id });
+    const body = await readJson(req);
+    const player = game.join(body.name, body.pin);
+    return sendJson(res, 200, { token: player.token, partyId: game.id, name: player.name });
   }
   if (req.method === 'GET' && url.pathname === '/me') {
     const player = game.playerByToken(token);
@@ -703,8 +893,17 @@ async function route(game, req, res) {
   }
   if (req.method === 'POST' && url.pathname === '/rename') {
     const body = await readJson(req);
-    const player = game.rename(body.token, body.name);
+    const player = game.rename(body.token, body.name, body.pin);
     return sendJson(res, 200, { name: player.name });
+  }
+  if (req.method === 'POST' && url.pathname === '/pin') {
+    const body = await readJson(req);
+    game.setPin(body.token, body.pin ?? null);
+    return sendJson(res, 200, { ok: true });
+  }
+  if (req.method === 'POST' && url.pathname === '/preferences') {
+    const body = await readJson(req);
+    return sendJson(res, 200, { preferences: game.setPreferences(body.token, body.preferences) });
   }
   if (req.method === 'POST' && url.pathname === '/away') {
     game.reportAway((await readJson(req)).token);
@@ -723,6 +922,10 @@ async function route(game, req, res) {
     game.toggleSkip((await readJson(req)).token);
     return sendJson(res, 200, { ok: true });
   }
+  if (req.method === 'POST' && url.pathname === '/stake') {
+    const body = await readJson(req);
+    return sendJson(res, 200, { stake: game.setStake(body.token, { pick: body.pick, isRisked: body.isRisked }) });
+  }
   if (req.method === 'POST' && url.pathname === '/answer') {
     const body = await readJson(req);
     game.submitAnswer(body.token, body.answer);
@@ -738,6 +941,10 @@ async function route(game, req, res) {
     if (!PHASES_WITH_QUESTION.includes(game.phase)) throw new PartyError(404, 'No media');
     return sendMedia(req, res, game.questions[game.index].rekvizit_src);
   }
+  if (req.method === 'GET' && url.pathname === '/show-image') {
+    game.playerByToken(token);
+    return sendMedia(req, res, game.showImageSrc(url));
+  }
   if (req.method === 'GET' && url.pathname === '/answer-image') {
     game.playerByToken(token);
     if (game.phase !== 'reveal') throw new PartyError(404, 'No media');
@@ -749,7 +956,7 @@ async function route(game, req, res) {
 async function openParty(settings, { port = PREFERRED_PORT } = {}) {
   const game = new PartyGame(settings);
   const server = http.createServer((req, res) => route(game, req, res).catch(e => {
-    if (!res.headersSent) sendJson(res, e.status ?? 500, { error: e.status ? e.message : 'Something went wrong' });
+    if (!res.headersSent) sendJson(res, e.status ?? 500, { error: e.status ? e.message : 'Something went wrong', ...(e.needsPin && { needsPin: true }) });
     else res.end();
   }));
   const listen = candidatePort => new Promise((resolve, reject) => {
@@ -780,4 +987,4 @@ async function openParty(settings, { port = PREFERRED_PORT } = {}) {
   };
 }
 
-module.exports = { PARTY_LIMITS, DEFAULT_RULES, REACTIONS, PartyGame, PartyError, lanAddresses, openParty };
+module.exports = { DEFAULT_PARTY_TITLE, PARTY_LIMITS, DEFAULT_RULES, REACTIONS, PartyGame, PartyError, lanAddresses, openParty };

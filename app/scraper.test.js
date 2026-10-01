@@ -355,7 +355,7 @@ test('downloads use https only, stay under size limits and refuse redirects away
 
 test('image download fetches only question bank pictures and keeps only real images', async () => {
   const db = memdb();
-  const add = db.prepare("INSERT INTO questions (package_id, kind, value_id, uid, origin, ordinal, rekvizit_url) VALUES (1, 'question', ?, ?, 'package', ?, ?)");
+  const add = db.prepare("INSERT INTO questions (source_id, package_id, kind, value_id, uid, origin, ordinal, rekvizit_url) VALUES ('3sual', 1, 'question', ?, ?, 'package', ?, ?)");
   const site = 'https://api.3sual.az/images/good.png';
   const fake = 'https://api.3sual.az/images/fake.png';
   [site, fake, 'http://192.168.1.1/admin', 'https://tracker.example/pixel.png', 'own-image:abc.png', 'https://api.3sual.az/api/secret']

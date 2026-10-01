@@ -6,7 +6,7 @@ const ai = require('../ai');
 const { Store, embeddable } = require('../store');
 
 const model = process.argv[2];
-const DB = process.env.QUIZ_DB || path.join(__dirname, '..', '..', 'data', '3sual.sqlite');
+const DB = process.env.QUIZ_DB || path.join(__dirname, '..', '..', 'data', 'kimhardane.sqlite');
 const base = path.join(__dirname, 'cache', model.replace(/[^\w.-]+/g, '_'));
 const meta = JSON.parse(fs.readFileSync(`${base}.json`, 'utf8'));
 const store = new Store(DB);

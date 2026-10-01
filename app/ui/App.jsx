@@ -3,7 +3,7 @@ import { toast } from 'sonner';
 import { useDefaultLayout } from 'react-resizable-panels';
 import { cn } from 'cn';
 import {
-  DownloadIcon, EyeIcon, FileDownIcon, FileUpIcon, FileTextIcon, ImagePlusIcon, PencilIcon, RotateCcwIcon, SaveIcon, SearchIcon,
+  DatabaseIcon, DownloadIcon, EyeIcon, FileDownIcon, FileUpIcon, FileTextIcon, ImagePlusIcon, PencilIcon, RotateCcwIcon, SaveIcon, SearchIcon,
   ListIcon, ListPlusIcon, MoonIcon, NotebookPenIcon, PlusIcon, SearchXIcon, SettingsIcon, SparklesIcon, TimerIcon, Trash2Icon, UserIcon, XIcon,
 } from 'lucide-react';
 import {
@@ -33,8 +33,9 @@ import {
 import Game from './Game';
 import Lists, { ListNameDialog } from './Lists';
 import SettingsDialog, { describeAiWork } from './Settings';
+import { useDataSources } from './DataSources';
 import { setNightMode, useNightMode } from './theme';
-import { Media } from './gameShared';
+import { GamePicker, Media, withoutIpcPrefix } from './gameShared';
 import { exportedMessage, importDetails, questionCountLabel, runTransfer } from './transferMessages';
 
 const { api } = window;
@@ -47,13 +48,11 @@ const MODES = [
   ['keyword', 'Keyword', 'Exact words (BM25), tolerant of small typos'],
   ['ai', 'AI', 'Similar meaning, even without shared words'],
 ];
-const STAGES = { list: 'Listing packages', packages: 'Downloading packages', audit: 'Checking authors',
-  images: 'Downloading images', index: 'Rebuilding search index', embed: 'Computing AI vectors' };
 const PAGE = 100;
 const VIEWS = [['search', SearchIcon, 'Search'], ['mine', NotebookPenIcon, 'Custom'], ['lists', ListIcon, 'Lists'], ['game', TimerIcon, 'Game']];
-const OWN_PACKAGE_ID = 0;
-const OWN_GAME_ID = 0;
-const NEW_QUESTION = { uid: null, package_id: OWN_PACKAGE_ID, game_name: 'My questions' };
+const OWN_SOURCE_ID = 'own';
+const OWN_GAMES = ['own:0'];
+const NEW_QUESTION = { uid: null, source_id: OWN_SOURCE_ID, game_name: 'My questions' };
 const PICTURES = [
   ['rekvizit_url', 'rekvizit_src', 'rekvizit_kind', 'Handout', 'shown with the question'],
   ['source_media_url', 'source_media_src', 'source_media_kind', 'Answer media', 'shown with the answer'],
@@ -169,8 +168,8 @@ function OwnPictures({ q, concealed, onReveal, onZoom, onPick, onRemove }) {
   );
 }
 
-function Editor({ q, draft, setDraft, dirtyKeys, saving, savedAt, concealed, onReveal, onAuthor, onSave, onDiscard, onDelete, onZoom, onPickPicture, onRemovePicture, listControl }) {
-  const isOwn = q.package_id === OWN_PACKAGE_ID;
+function Editor({ q, draft, setDraft, dirtyKeys, saving, savedAt, concealed, onReveal, onAuthor, onSave, onDiscard, onDelete, onZoom, onPickPicture, onRemovePicture, listControl, sourceName }) {
+  const isOwn = q.source_id === OWN_SOURCE_ID;
   const isNew = !q.uid;
   const canCreate = !!(draft.text.trim() && draft.answer.trim());
   const path = (q.phase_path ?? []).map(p => p.name).filter(Boolean).join(' › ');
@@ -197,7 +196,7 @@ function Editor({ q, draft, setDraft, dirtyKeys, saving, savedAt, concealed, onR
         <div className="mx-auto max-w-3xl space-y-6 px-6 py-5">
           <div className="space-y-3">
             <div className="flex items-center gap-2">
-              <Badge variant="secondary">{q.game_name}</Badge>
+              <Badge variant="secondary">{[!isOwn && sourceName, q.game_name].filter(Boolean).join(' · ')}</Badge>
               {q.edited_at && <Badge variant="outline" className={EDITED}><PencilIcon />edited</Badge>}
               {!isNew && listControl}
             </div>
@@ -293,7 +292,8 @@ export default function App() {
   const [mode, setMode] = useState('hybrid');
   const [aiStatus, setAiStatus] = useState({ state: 'off' });
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-  const [game, setGame] = useState('all');
+  const [settingsTab, setSettingsTab] = useState('general');
+  const [games, setGames] = useState([]);
   const [edited, setEdited] = useState(false);
   const [withImage, setWithImage] = useState(false);
   const [author, setAuthor] = useState(null);
@@ -314,9 +314,6 @@ export default function App() {
   const [draft, setDraft] = useState({});
   const [saving, setSaving] = useState(false);
   const [savedAt, setSavedAt] = useState(null);
-  const [progress, setProgress] = useState(null);
-  const [stopping, setStopping] = useState(false);
-  const [refreshMode, setRefreshMode] = useState('quick');
   const [ask, setAsk] = useState(null);
   const [zoom, setZoom] = useState(null);
   const [update, setUpdate] = useState(null);
@@ -337,19 +334,19 @@ export default function App() {
   const isBrowsing = view === 'search' || isMine;
   const aiWork = describeAiWork(aiStatus);
   const changeAiSearch = isOn => api.setAiSearch(isOn).then(setAiStatus);
+  const dataSources = useDataSources(() => {
+    api.info().then(setInfo);
+    refreshLists();
+  });
+  const openSettings = tab => {
+    setSettingsTab(tab);
+    setIsSettingsOpen(true);
+  };
 
   useEffect(() => {
-    api.info().then(i => {
-      setInfo(i);
-      if (i.dataUpdate) {
-        const { from, carried, newer } = i.dataUpdate;
-        const kept = [carried && `your ${plural(carried, 'edited question')}`, newer && `${plural(newer, 'package')} you refreshed later`].filter(Boolean);
-        toast.info(`Data updated from v${from}`, { description: kept.length ? `Kept ${kept.join(' and ')}.` : undefined, duration: 15000 });
-      }
-    }, e => setLoadError(e.message));
+    api.info().then(setInfo, e => setLoadError(e.message));
     api.onAi(setAiStatus);
     api.aiStatus().then(setAiStatus);
-    api.onRefresh(setProgress);
     api.onUpdate(u => {
       setUpdate(prev => ({ ...prev, ...u }));
       if (u.state === 'ready') toast.info(`Update ${u.version} is ready`, { duration: Infinity, action: { label: 'Restart', onClick: () => onKey.current.restart() } });
@@ -368,8 +365,8 @@ export default function App() {
     if (!info) return;
     const my = ++searchSeq.current;
     setSearching(true);
-    const request = isMine ? { q: '', mode: 'keyword', game: String(OWN_GAME_ID), limit }
-      : { q: query, mode: searchMode, game: game === 'all' ? null : game, edited, withImage, author: author?.id, limit };
+    const request = isMine ? { q: '', mode: 'keyword', games: OWN_GAMES, limit }
+      : { q: query, mode: searchMode, games, edited, withImage, author: author?.id, limit };
     api.search(request).then(res => {
       if (my !== searchSeq.current) return;
       setResults(res);
@@ -379,7 +376,7 @@ export default function App() {
       setSearching(false);
       toast.error('Search failed', { description: e.message });
     });
-  }, [info, isMine, query, searchMode, game, edited, withImage, author, limit]);
+  }, [info, isMine, query, searchMode, games, edited, withImage, author, limit]);
 
   const refreshLists = () => api.lists().then(setLists);
   useEffect(() => { refreshLists(); }, []);
@@ -467,7 +464,7 @@ export default function App() {
       const question = await (shouldRemove ? api.removeQuestionImage(uid, column) : api.pickQuestionImage(uid, column));
       if (question) setCurrent(question);
     } catch (e) {
-      toast.error('Picture not saved', { description: e.message.replace(/^Error invoking remote method '[^']+': (Error: )?/, '') });
+      toast.error('Picture not saved', { description: withoutIpcPrefix(e) });
     }
   }
 
@@ -509,24 +506,6 @@ export default function App() {
     } finally {
       setSaving(false);
     }
-  }
-
-  async function startRefresh() {
-    setProgress({ stage: 'start' });
-    const r = await api.refresh(refreshMode).catch(e => ({ error: e.message }));
-    setProgress(null);
-    setStopping(false);
-    const sign = n => (n > 0 ? '+' : '') + fmt(n);
-    const done = r.newRows == null ? '' : `${plural(r.newPackages, 'new package')}, ${sign(r.newRows)} questions, ${plural(r.images, 'image')}`;
-    if (r.error) toast.error('Refresh failed', { description: r.error + (done && ` (${done})`), duration: 20000 });
-    else if (r.cancelled) toast.info('Refresh stopped', { description: `${done}. Refresh again within a day to continue where it stopped.`, duration: 10000 });
-    else toast.success('Data refreshed', { description: done + (r.failures ? `, ${plural(r.failures, 'failure')}` : ''), duration: 10000 });
-    setInfo(await api.info());
-  }
-
-  function stopRefresh() {
-    setStopping(true);
-    api.cancelRefresh();
   }
 
   onKey.current = e => {
@@ -574,12 +553,10 @@ export default function App() {
     isSearching && searchMode !== 'keyword' && (results.ai ? 'AI ranked' : 'AI unavailable, keyword only'),
     `showing ${fmt(hits.length)}`, `${results.ms} ms`,
   ].filter(Boolean).join(' · ');
-  const stage = progress && (stopping ? 'Stopping…'
-    : `${STAGES[progress.stage] ?? 'Starting refresh'}${progress.total ? ` ${fmt(progress.done)}/${fmt(progress.total)}` : '…'}`);
   const resetSearch = () => {
     setQ('');
     setQuery('');
-    setGame('all');
+    setGames([]);
     setEdited(false);
     setWithImage(false);
     setAuthor(null);
@@ -619,7 +596,7 @@ export default function App() {
         <InputGroup className="min-w-40 flex-1 basis-40">
           <InputGroupAddon><SearchIcon /></InputGroupAddon>
           <InputGroupInput ref={searchBox} value={q} onChange={e => setQ(e.target.value)} autoFocus spellCheck={false}
-            placeholder="Search questions, answers, comments…  (e.g. Nizami, futbol klubu)"
+            placeholder="Search questions, answers, comments…"
             onKeyDown={e => {
               if (e.key === 'Enter') { setQuery(q); setLimit(PAGE); }
               if (e.key === 'Escape') setQ('');
@@ -632,7 +609,7 @@ export default function App() {
             ) : <KbdGroup><Kbd>Ctrl</Kbd><Kbd>K</Kbd></KbdGroup>}
           </InputGroupAddon>
         </InputGroup>
-        <Select value={searchMode} onValueChange={v => (v === 'keyword' || isAiReady ? filter(setMode)(v) : setIsSettingsOpen(true))}>
+        <Select value={searchMode} onValueChange={v => (v === 'keyword' || isAiReady ? filter(setMode)(v) : openSettings('general'))}>
           <SelectTrigger className="w-28" aria-label="Ranking"><SelectValue /></SelectTrigger>
           <SelectContent position="popper">
             {MODES.map(([value, label, hint]) => (
@@ -643,15 +620,7 @@ export default function App() {
             ))}
           </SelectContent>
         </Select>
-        <Select value={game} onValueChange={filter(setGame)}>
-          <SelectTrigger className="w-48" aria-label="Game"><SelectValue /></SelectTrigger>
-          <SelectContent position="popper">
-            <SelectItem value="all">All games</SelectItem>
-            {info.games.map(g => (
-              <SelectItem key={g.id} value={String(g.id)}>{g.name}<span className="text-muted-foreground tabular-nums">{fmt(g.n)}</span></SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <GamePicker id="search-games" label={null} sources={info.questionSources} games={games} onGamesChange={filter(setGames)} className="w-52" />
         <div className="flex items-center gap-2 px-1">
           <Switch id="edited" checked={edited} onCheckedChange={filter(setEdited)} />
           <Label htmlFor="edited" className="font-normal">Edited only</Label>
@@ -664,7 +633,7 @@ export default function App() {
         <Tooltip>
           <TooltipTrigger asChild>
             <Button variant="ghost" size="icon" aria-label="Settings" className={cn(view === 'lists' && 'ml-auto')}
-              onClick={() => setIsSettingsOpen(true)}><SettingsIcon /></Button>
+              onClick={() => openSettings(settingsTab)}><SettingsIcon /></Button>
           </TooltipTrigger>
           <TooltipContent>Settings</TooltipContent>
         </Tooltip>
@@ -706,7 +675,20 @@ export default function App() {
                   <EmptyContent><Button variant="outline" size="sm" onClick={startNewQuestion}><PlusIcon />New question</Button></EmptyContent>
                 </Empty>
               )}
-              {results && !hits.length && !isMine && (
+              {results && !hits.length && !isMine && info.rows === 0 && (
+                <Empty className="h-full">
+                  <EmptyHeader>
+                    <EmptyMedia variant="icon"><DatabaseIcon /></EmptyMedia>
+                    <EmptyTitle>No questions yet</EmptyTitle>
+                    <EmptyDescription>Install a question bank from Data sources, or write your own questions in Custom.</EmptyDescription>
+                  </EmptyHeader>
+                  <EmptyContent className="flex-row justify-center">
+                    <Button size="sm" onClick={() => openSettings('data-sources')}><DatabaseIcon />Open data sources</Button>
+                    <Button variant="outline" size="sm" onClick={() => setView('mine')}><NotebookPenIcon />Write a question</Button>
+                  </EmptyContent>
+                </Empty>
+              )}
+              {results && !hits.length && !isMine && info.rows > 0 && (
                 <Empty className="h-full">
                   <EmptyHeader>
                     <EmptyMedia variant="icon"><SearchXIcon /></EmptyMedia>
@@ -716,7 +698,7 @@ export default function App() {
                         : edited ? 'Only edited questions are shown. Turn off "Edited only" to search everything.'
                         : withImage ? 'Only questions with a handout image are shown. Turn off "With image" to search everything.'
                         : searchMode === 'keyword' ? `Try fewer words, or ${isAiReady ? 'switch to' : 'turn on'} AI search to match by meaning.`
-                          : 'Try different words, or pick another game.'}
+                          : 'Try different words, or pick other questions.'}
                     </EmptyDescription>
                   </EmptyHeader>
                   <EmptyContent><Button variant="outline" size="sm" onClick={resetSearch}>Clear search and filters</Button></EmptyContent>
@@ -733,7 +715,7 @@ export default function App() {
         <ResizableHandle withHandle />
         <ResizablePanel id="editor" minSize={380}>
           {current ? (
-            <Editor q={current} draft={draft} setDraft={setDraft} dirtyKeys={dirtyKeys} saving={saving} savedAt={savedAt}
+            <Editor q={current} sourceName={info.questionSources.find(source => source.id === current.source_id)?.name} draft={draft} setDraft={setDraft} dirtyKeys={dirtyKeys} saving={saving} savedAt={savedAt}
               concealed={hideAnswers && !revealed} onReveal={() => setRevealed(true)} onAuthor={filter(setAuthor)}
               onSave={save} onDiscard={() => setDraft(draftOf(current))} onDelete={deleteCurrent} onZoom={setZoom}
               onPickPicture={column => changePicture(column, false)} onRemovePicture={column => changePicture(column, true)}
@@ -757,33 +739,31 @@ export default function App() {
           onOpenQuestion={openInQuestionsTab} onStartGame={startGameWithList} />
       </div>
       <div className={cn('min-h-0 flex-1', view !== 'game' && 'hidden')}>
-        <Game key={gameSession} isVisible={view === 'game'} lists={lists} listId={gameListId} onListIdChange={setGameListId}
-          isAiReady={isAiReady} onOpenSettings={() => setIsSettingsOpen(true)} />
+        <Game key={gameSession} isVisible={view === 'game'} lists={lists} sources={info.questionSources} listId={gameListId} onListIdChange={setGameListId}
+          isAiReady={isAiReady} onOpenSettings={() => openSettings('general')} />
       </div>
-      <SettingsDialog open={isSettingsOpen} onOpenChange={setIsSettingsOpen} aiStatus={aiStatus} onAiSearchChange={changeAiSearch}
-        refresh={{ stage, isRunning: !!progress, isStopping: stopping, percent: progress?.total ? (progress.done / progress.total) * 100 : null,
-          mode: refreshMode, dataDate: info?.dataDate, onModeChange: setRefreshMode, onStart: startRefresh, onStop: stopRefresh }} />
+      <SettingsDialog open={isSettingsOpen} onOpenChange={setIsSettingsOpen} tab={settingsTab} onTabChange={setSettingsTab}
+        aiStatus={aiStatus} onAiSearchChange={changeAiSearch} dataSources={dataSources} />
       <ListNameDialog open={isCreatingListForCurrent} title="New list" confirmLabel="Create and add"
         onOpenChange={setIsCreatingListForCurrent} onSubmit={createListWithCurrent} />
 
       <footer className="flex h-8 shrink-0 items-center gap-4 border-t bg-muted/30 px-3 text-xs text-muted-foreground">
         <span className="truncate">
           {[`v${info.version}`, `${fmt(info.rows)} questions`,
-            isAiReady ? `${fmt(aiStatus.vectors)} AI vectors` : { off: 'AI search off', error: 'AI search failed' }[aiStatus.state],
-            info.dataDate && `data checked ${info.dataDate.slice(0, 10)}`].filter(Boolean).join(' · ')}
+            isAiReady ? `${fmt(aiStatus.vectors)} AI vectors` : { off: 'AI search off', error: 'AI search failed' }[aiStatus.state]].filter(Boolean).join(' · ')}
         </span>
         <div className="ml-auto flex shrink-0 items-center gap-3">
           {aiWork && (
-            <button type="button" className="flex items-center gap-2 text-foreground" onClick={() => setIsSettingsOpen(true)}>
+            <button type="button" className="flex items-center gap-2 text-foreground" onClick={() => openSettings('general')}>
               {aiWork.percent == null ? <Spinner className="size-3.5" /> : <SparklesIcon className="size-3.5" />}{aiWork.text}
               {aiWork.percent != null && <Progress value={aiWork.percent} className="w-32" />}
             </button>
           )}
-          {progress && (
-            <span className="flex items-center gap-2 text-foreground">
-              <Spinner className="size-3.5" />{stage}
-              {progress.total > 0 && <Progress value={(progress.done / progress.total) * 100} className="w-32" />}
-            </span>
+          {dataSources.job && (
+            <button type="button" className="flex items-center gap-2 text-foreground" onClick={() => openSettings('data-sources')}>
+              <Spinner className="size-3.5" />{dataSources.runningName}: {dataSources.stage}
+              {dataSources.percent != null && <Progress value={dataSources.percent} className="w-32" />}
+            </button>
           )}
           {update?.state === 'downloading' && (
             <span className="flex items-center gap-1.5"><DownloadIcon className="size-3.5" />Downloading update {update.version} · {update.percent}%</span>

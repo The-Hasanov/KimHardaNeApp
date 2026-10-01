@@ -2,7 +2,7 @@ import { createContext, useContext, useEffect, useMemo, useRef, useState } from 
 import QRCode from 'qrcode';
 import { cn } from 'cn';
 import {
-  AppWindowIcon, ArrowRightIcon, CastIcon, MegaphoneIcon, SendIcon, SmilePlusIcon, CheckIcon, ChevronDownIcon, CircleHelpIcon, DoorClosedIcon, EyeIcon, EyeOffIcon, FlagIcon, GamepadIcon, PauseIcon, PlayIcon, QrCodeIcon,
+  AppWindowIcon, ArrowRightIcon, CastIcon, DicesIcon, MegaphoneIcon, SendIcon, SmilePlusIcon, CheckIcon, ChevronDownIcon, CircleHelpIcon, DoorClosedIcon, EyeIcon, EyeOffIcon, FlagIcon, GamepadIcon, PauseIcon, PlayIcon, QrCodeIcon,
   RotateCcwIcon, SkipForwardIcon, TimerIcon, Trash2Icon, TriangleAlertIcon, TrophyIcon, TvIcon, UserXIcon, UsersIcon, WifiOffIcon, XIcon,
 } from 'lucide-react';
 import {
@@ -15,7 +15,9 @@ import {
   Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import { Input } from '@/components/ui/input';
 import { Kbd } from '@/components/ui/kbd';
+import { Label } from '@/components/ui/label';
 import { Progress } from '@/components/ui/progress';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Spinner } from '@/components/ui/spinner';
@@ -23,18 +25,19 @@ import { Textarea } from '@/components/ui/textarea';
 import { Toggle } from '@/components/ui/toggle';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import {
-  KEY_HINT_ON_PRIMARY_BUTTON, QuestionOnScreen, WARNING_AT_SECONDS_LEFT, formatClock, useCountdown, withLineBreaks,
+  KEY_HINT_ON_PRIMARY_BUTTON, QuestionOnScreen, pointsLabel, withoutIpcPrefix, WARNING_AT_SECONDS_LEFT, formatClock, useCountdown, withLineBreaks,
 } from './gameShared';
 import { toast } from 'sonner';
 import { CorrectAnswer } from './Play';
 import { useNightMode } from './theme';
+import { ShowPageSlide } from './ShowPages';
 
 const { api } = window;
-const PHASES_IN_ROUND = ['waiting', 'question', 'judging', 'reveal'];
+const PHASES_IN_ROUND = ['show', 'waiting', 'question', 'judging', 'reveal'];
+const SKIPPED_BY_HOST = ['show', 'waiting'];
 
 const secondsLabel = seconds => (seconds == null ? '—' : `${seconds.toFixed(1)} s`);
 const answerSeconds = answer => (answer?.ms == null || !answer.given ? null : answer.ms / 1000);
-const pointsLabel = points => (points > 0 ? `+${points}` : points < 0 ? `−${-points}` : '0');
 const hostOf = url => url.replace(/^http:\/\//, '').replace(/\/$/, '');
 const isWaitingToReveal = party => party.phase === 'judging' && party.rules.revealAtEnd && party.answers.every(answer => answer.isCorrect !== undefined);
 const outcomeOf = answer => (answer.isCorrect ? 'correct' : answer.verdict === 'unsure' && !answer.decidedByHost ? 'unsure' : 'wrong');
@@ -43,6 +46,16 @@ const OUTCOMES = {
   wrong: { label: 'Wrong', Icon: XIcon, className: 'text-destructive' },
   unsure: { label: 'Not sure', Icon: CircleHelpIcon, className: 'text-amber-600 dark:text-amber-400' },
 };
+
+function StakeBadge({ stake, pointSystem }) {
+  if (pointSystem?.mode === 'pool' && Number.isInteger(stake?.pick)) {
+    return <Badge variant="outline" className="shrink-0 tabular-nums" title="Points picked for this question">{pointSystem.pool[stake.pick]?.points}</Badge>;
+  }
+  if (stake?.isRisked) {
+    return <Badge variant="outline" className="shrink-0 border-amber-500/50 text-amber-700 dark:text-amber-400" title="Risked this answer"><DicesIcon />Risk</Badge>;
+  }
+  return null;
+}
 
 function JoinQrCode({ url, className = 'size-64' }) {
   const [svg, setSvg] = useState('');
@@ -155,7 +168,7 @@ function Podium({ party }) {
           Round {party.round} · {winners.length > 1 ? 'shared first place' : 'winner'}
         </p>
         <h1 className="text-4xl font-bold">Congratulations, {namesOf(winners)}!</h1>
-        <p className="text-muted-foreground">Correct {pointsLabel(party.rules.pointsForCorrect)} · wrong {pointsLabel(party.rules.pointsForWrong)} · no answer 0 · ties go to the faster average</p>
+        <p className="text-muted-foreground">{party.rules.pointSystem?.name}: {party.rules.pointsSummary?.join(' · ')} · ties go to the faster average</p>
       </div>
       <div className="flex items-end justify-center gap-3">
         {podiumOrder.map(entry => {
@@ -201,7 +214,7 @@ function Leaderboard({ entries, players = [], onKick, showsRoundScore = false })
   );
 }
 
-function AllTimeLeaderboard() {
+export function AllTimeLeaderboard() {
   const [results, setResults] = useState(null);
   const [isConfirmingReset, setIsConfirmingReset] = useState(false);
   useEffect(() => {
@@ -214,6 +227,7 @@ function AllTimeLeaderboard() {
     <div className="space-y-3">
       <div className="flex items-center gap-2">
         <h2 className="flex items-center gap-2 font-medium"><TrophyIcon className="size-4" />All-time leaderboard</h2>
+        {results.length > 0 && <span className="text-sm text-muted-foreground">ranked by points, then average time</span>}
         {results.length > 0 && (
           <Button size="sm" variant="ghost" className="ml-auto text-muted-foreground" onClick={() => setIsConfirmingReset(true)}><Trash2Icon />Reset</Button>
         )}
@@ -225,6 +239,7 @@ function AllTimeLeaderboard() {
               <tr className="text-left">
                 <th className="w-10 px-3 py-2 text-right font-medium">#</th>
                 <th className="px-3 py-2 font-medium">Player</th>
+                <th className="px-3 py-2 text-right font-medium">Points</th>
                 <th className="px-3 py-2 text-right font-medium">Correct</th>
                 <th className="px-3 py-2 text-right font-medium">Wrong</th>
                 <th className="px-3 py-2 text-right font-medium">No answer</th>
@@ -237,7 +252,8 @@ function AllTimeLeaderboard() {
                 <tr key={result.name} className={cn(i === 0 && 'bg-amber-500/10')}>
                   <td className="px-3 py-2 text-right font-semibold text-muted-foreground tabular-nums">{i + 1}</td>
                   <td className="max-w-48 truncate px-3 py-2 font-medium">{result.name}</td>
-                  <td className="px-3 py-2 text-right font-semibold tabular-nums text-emerald-600 dark:text-emerald-400">{result.correct}</td>
+                  <td className="px-3 py-2 text-right text-base font-semibold tabular-nums">{result.points}</td>
+                  <td className="px-3 py-2 text-right tabular-nums text-emerald-600 dark:text-emerald-400">{result.correct}</td>
                   <td className="px-3 py-2 text-right tabular-nums text-destructive">{result.wrong}</td>
                   <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">{result.unanswered}</td>
                   <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">{secondsLabel(result.avg_seconds)}</td>
@@ -247,7 +263,7 @@ function AllTimeLeaderboard() {
             </tbody>
           </table>
         </div>
-      ) : <p className="text-sm text-muted-foreground">Every finished round adds each player's correct, wrong and unanswered questions and answer times here.</p>}
+      ) : <p className="text-sm text-muted-foreground">Every finished round adds each player's points, correct, wrong and unanswered questions and answer times here. Players are ranked by points, then by the faster average time.</p>}
       <AlertDialog open={isConfirmingReset} onOpenChange={setIsConfirmingReset}>
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -310,7 +326,8 @@ function LiveAnswers({ party, onKick }) {
             <li key={player.id} className="flex items-center gap-2 px-3 py-2">
               <OnlineDot isOnline={player.isOnline} />
               <div className="min-w-0 flex-1">
-                <p className="flex items-center gap-1.5 text-sm font-medium"><span className="truncate">{player.name}</span><AwayWarning timesAway={player.timesAway} /><PlayerReaction playerId={player.id} /></p>
+                <p className="flex items-center gap-1.5 text-sm font-medium"><span className="truncate">{player.name}</span><AwayWarning timesAway={player.timesAway} /><PlayerReaction playerId={player.id} />
+                  {showsAnswers && <StakeBadge stake={answer?.stake} pointSystem={party.rules.pointSystem} />}</p>
                 {showsAnswers && (
                   <p className={cn('truncate text-sm', !answer?.given && 'text-muted-foreground')} title={answer?.given}>
                     {answer ? answer.given || 'Blank' : 'No answer yet'}
@@ -349,10 +366,10 @@ function PlayerAnswers({ party, answers = party.answers, position = party.index 
           return (
             <li key={answer.playerId} className="flex flex-wrap items-center gap-x-4 gap-y-1 px-4 py-2.5">
               <span className="flex w-32 items-center gap-1.5 font-medium"><span className="truncate">{answer.name}</span><AwayWarning timesAway={timesAway.get(answer.playerId)} /></span>
-              <span className="min-w-0 flex-1 truncate">{answer.given || '—'}</span>
+              <span className="flex min-w-0 flex-1 items-center gap-2"><span className="truncate">{answer.given || '—'}</span><StakeBadge stake={answer.stake} pointSystem={party.rules.pointSystem} /></span>
               <span className="w-14 text-right text-sm text-muted-foreground tabular-nums" title="Answer time">{answerSeconds(answer) != null && secondsLabel(answerSeconds(answer))}</span>
               <span className={cn('flex items-center gap-1 text-sm font-semibold', className)}><Icon className="size-4" />{label}</span>
-              <span className="w-8 text-right text-sm tabular-nums">{pointsLabel(answer.points)}</span>
+              <span className="w-10 text-right text-sm tabular-nums">{pointsLabel(answer.points)}</span>
               <CallButtons answer={answer} position={position} isCalledNow={answer.isCorrect ? true : outcomeOf(answer) === 'wrong' ? false : null} />
             </li>
           );
@@ -362,6 +379,21 @@ function PlayerAnswers({ party, answers = party.answers, position = party.index 
       {silentPlayers.length > 0 && answers.length > 0 && (
         <p className="text-sm text-muted-foreground">No answer: {silentPlayers.map(player => player.name).join(', ')}</p>
       )}
+    </div>
+  );
+}
+
+function ShowForHost({ party }) {
+  const page = party.showPage;
+  const isLast = page.index + 1 === page.total;
+  return (
+    <div className="mx-auto max-w-4xl space-y-4 px-8 py-8">
+      <p className="text-sm font-medium text-muted-foreground">On the TV and phones · show page {page.index + 1} of {page.total}</p>
+      <div className="@container"><ShowPageSlide page={page} /></div>
+      <p className="text-sm text-muted-foreground">
+        {isLast ? `Then question 1 of ${party.total}.` : 'Then the next show page.'}{' '}
+        {page.canPlayersSkip ? 'Players can skip it together.' : 'Players cannot skip it; only you can.'}
+      </p>
     </div>
   );
 }
@@ -393,7 +425,6 @@ function QuestionForHost({ party, onKick }) {
   );
 }
 
-const withoutIpcPrefix = error => error.message.replace(/^Error invoking remote method '[^']+': (Error: )?/, '');
 
 function SamsungTvDialog({ isOpen, onOpenChange }) {
   const [tvs, setTvs] = useState(null);
@@ -591,6 +622,28 @@ function AnnouncementStrip({ announcement, onOpen }) {
   );
 }
 
+export const PARTY_TITLE_KEY = 'partyTitle';
+
+function PartyNameField({ title }) {
+  const [draft, setDraft] = useState(title);
+  useEffect(() => setDraft(title), [title]);
+  const save = () => {
+    const clean = draft.replace(/\s+/g, ' ').trim();
+    if (clean) localStorage.setItem(PARTY_TITLE_KEY, clean);
+    else localStorage.removeItem(PARTY_TITLE_KEY);
+    if (clean !== title) api.partySetTitle(clean);
+    else setDraft(title);
+  };
+  return (
+    <div className="grid gap-2">
+      <Label htmlFor="party-name">Party name</Label>
+      <Input id="party-name" value={draft} maxLength={40} className="max-w-sm" onChange={e => setDraft(e.target.value)} onBlur={save}
+        onKeyDown={e => e.key === 'Enter' && e.currentTarget.blur()} />
+      <p className="text-xs text-muted-foreground">Shown on the TV and on every phone.</p>
+    </div>
+  );
+}
+
 function PlayersInLobby({ players, onKick }) {
   return (
     <div className="space-y-3">
@@ -645,7 +698,7 @@ export default function PartyScreen({ party, isVisible, lobbySettings, onBackToL
   const secondsLeft = party.isPaused ? party.remainingMs / 1000 : countdownSeconds;
   const wholeSecondsLeft = Math.ceil(secondsLeft);
   const isRunningOut = party.phase === 'question' && wholeSecondsLeft <= WARNING_AT_SECONDS_LEFT;
-  const hasRunningClock = ['waiting', 'question'].includes(party.phase) || (party.phase === 'reveal' && party.remainingMs != null);
+  const hasRunningClock = ['show', 'waiting', 'question'].includes(party.phase) || (party.phase === 'reveal' && party.remainingMs != null);
 
   const nightMode = useNightMode();
   useEffect(() => {
@@ -654,8 +707,8 @@ export default function PartyScreen({ party, isVisible, lobbySettings, onBackToL
 
   handleKeyDown.current = e => {
     if (!isVisible || e.target.closest?.('input, textarea, [role=dialog], [role=alertdialog], [role=listbox]')) return;
-    if (party.phase === 'waiting' && [' ', 'ArrowRight'].includes(e.key)) api.partySkipWait();
-    else if (hasRunningClock && party.phase !== 'waiting' && e.key === ' ') (party.isPaused ? api.partyResume : api.partyPause)();
+    if (SKIPPED_BY_HOST.includes(party.phase) && [' ', 'ArrowRight'].includes(e.key)) api.partySkipWait();
+    else if (hasRunningClock && !SKIPPED_BY_HOST.includes(party.phase) && e.key === ' ') (party.isPaused ? api.partyResume : api.partyPause)();
     else if ((party.phase === 'reveal' || isWaitingToReveal(party)) && ['Enter', 'ArrowRight'].includes(e.key)) api.partyNext();
     else return;
     e.preventDefault();
@@ -669,15 +722,15 @@ export default function PartyScreen({ party, isVisible, lobbySettings, onBackToL
   const isInRound = PHASES_IN_ROUND.includes(party.phase);
   const answeredCount = party.players.filter(player => player.hasAnswered).length;
   const isLastQuestion = party.index + 1 === party.total;
-  const secondsOfPhase = { waiting: party.rules.secondsBetweenQuestions, question: party.rules.secondsPerQuestion, reveal: party.rules.secondsOnAnswer };
+  const secondsOfPhase = { show: party.showPage?.seconds, waiting: party.rules.secondsBetweenQuestions, question: party.rules.secondsPerQuestion, reveal: party.rules.secondsOnAnswer };
   const timerPercent = hasRunningClock ? (secondsLeft / secondsOfPhase[party.phase]) * 100 : 0;
 
   return (
     <RecentReactions.Provider value={recentReactions}>
       <div className="flex h-full flex-col">
         <div className="flex shrink-0 flex-wrap items-center gap-x-4 gap-y-2 border-b px-6 py-3">
-          <span className="flex items-center gap-2 text-sm font-medium"><UsersIcon className="size-4" />Party</span>
-          {isInRound && <span className="text-sm">Round {party.round} · Question {party.index + 1} of {party.total}</span>}
+          <span className="flex min-w-0 items-center gap-2 text-sm font-medium"><UsersIcon className="size-4 shrink-0" /><span className="truncate">{party.title}</span></span>
+          {isInRound && <span className="text-sm">Round {party.round} · {party.phase === 'show' ? `Show page ${party.showPage.index + 1} of ${party.showPage.total}` : `Question ${party.index + 1} of ${party.total}`}</span>}
           <span className="text-sm text-muted-foreground">{party.players.length} {party.players.length === 1 ? 'player' : 'players'}</span>
           {party.urls[0] && isInRound && <span className="font-mono text-sm text-muted-foreground">Join: {hostOf(party.urls[0].url)}</span>}
           <div className="ml-auto flex gap-2">
@@ -707,6 +760,7 @@ export default function PartyScreen({ party, isVisible, lobbySettings, onBackToL
               <div className="grid gap-6 md:grid-cols-[auto_1fr]">
                 <JoinCard urls={party.urls} />
                 <div className="space-y-6">
+                  <PartyNameField title={party.title} />
                   <PlayersInLobby players={party.players} onKick={kick} />
                   {party.round > 0 && (
                     <div className="space-y-2">
@@ -720,6 +774,7 @@ export default function PartyScreen({ party, isVisible, lobbySettings, onBackToL
               <AllTimeLeaderboard />
             </div>
           )}
+          {party.phase === 'show' && <ShowForHost party={party} />}
           {['waiting', 'question', 'judging'].includes(party.phase) && <QuestionForHost party={party} onKick={kick} />}
           {party.phase === 'reveal' && (
             <div className="mx-auto grid max-w-6xl gap-8 px-8 py-8 lg:grid-cols-[1fr_20rem]">
@@ -753,13 +808,18 @@ export default function PartyScreen({ party, isVisible, lobbySettings, onBackToL
                 isRunningOut && 'text-amber-500')}>{formatClock(wholeSecondsLeft)}</span>
             )}
             {party.phase === 'reveal' && hasRunningClock && <span className="text-lg text-muted-foreground">until {isLastQuestion ? 'the round results' : party.rules.revealAtEnd ? 'the next answer' : 'the next question'} (autoplay)</span>}
+            {party.phase === 'show' && (
+              <Button size="lg" onClick={() => api.partySkipWait()}>
+                <SkipForwardIcon />{party.showPage.index + 1 === party.showPage.total ? 'Start the questions' : 'Next show page'}<Kbd className={KEY_HINT_ON_PRIMARY_BUTTON}>Space</Kbd>
+              </Button>
+            )}
             {party.phase === 'waiting' && (
               <Button size="lg" onClick={() => api.partySkipWait()}><SkipForwardIcon />Skip wait<Kbd className={KEY_HINT_ON_PRIMARY_BUTTON}>Space</Kbd></Button>
             )}
             {hasRunningClock && (
               party.isPaused
-                ? <Button size="lg" variant="outline" onClick={() => api.partyResume()}><PlayIcon />Resume{party.phase !== 'waiting' && <Kbd>Space</Kbd>}</Button>
-                : <Button size="lg" variant="outline" onClick={() => api.partyPause()}><PauseIcon />Pause{party.phase !== 'waiting' && <Kbd>Space</Kbd>}</Button>
+                ? <Button size="lg" variant="outline" onClick={() => api.partyResume()}><PlayIcon />Resume{!SKIPPED_BY_HOST.includes(party.phase) && <Kbd>Space</Kbd>}</Button>
+                : <Button size="lg" variant="outline" onClick={() => api.partyPause()}><PauseIcon />Pause{!SKIPPED_BY_HOST.includes(party.phase) && <Kbd>Space</Kbd>}</Button>
             )}
             {party.skips.isAvailable && party.skips.count > 0 && <SkipProgress skips={party.skips} />}
             {party.phase === 'question' && <>
