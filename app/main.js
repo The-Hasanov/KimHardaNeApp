@@ -243,7 +243,7 @@ app.whenReady().then(() => {
     action(party.game, ...args);
     return party.game.hostView();
   };
-  const playerProfiles = new PlayerProfiles(store.partyProfileStorage);
+  const playerProfiles = new PlayerProfiles({ get: key => store.partyProfile(key), save: profile => store.savePartyProfile(profile) });
   handle('party-open', async title => {
     await closeParty();
     party = await openParty({ judge: judgeNow, title, profiles: playerProfiles, onChange: sendPartyState, onReaction: reaction => win.webContents.send('party-reaction', reaction), onRoundFinished: results => {
