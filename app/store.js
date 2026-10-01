@@ -136,7 +136,7 @@ class Store {
   }
 
   staleRows() {
-    return this.rows.filter((r, i) => !this.has[i] && embeddable(r));
+    return this.rows.filter((r, i) => !this.has?.[i] && embeddable(r));
   }
 
   dropVectors() {

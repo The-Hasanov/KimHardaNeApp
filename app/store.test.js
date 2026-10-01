@@ -25,6 +25,11 @@ function store(withVectors = false) {
   return s;
 }
 
+test('with AI search off no vectors are loaded and every embeddable row is stale', () => {
+  const s = new Store(tempDb());
+  assert.deepEqual(s.staleRows().map(r => r.uid), ['1:question:1', '1:question:2', '1:theme:3']);
+});
+
 test('fold ignores case, diacritics, ə and dotless ı', () => {
   assert.equal(fold('BAKI'), fold('Bakı'));
   assert.equal(fold('Baki'), fold('bakı'));
