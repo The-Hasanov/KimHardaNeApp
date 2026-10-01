@@ -10,7 +10,7 @@ module.exports = {
   directories: { output: 'dist' },
   files: [
     '**/*',
-    '!{bench,dist,fixtures,models,ui}/**',
+    '!{bench,bundle,dist,fixtures,models,ui}/**',
     '!{vite.config.mjs,components.json,jsconfig.json}',
     '!**/*.test.js',
     '!electron-builder.config.js',

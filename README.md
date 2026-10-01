@@ -17,13 +17,18 @@ game from the app. Bring your own questions or install a question bank from *Dat
   and the host can overrule any verdict, or mark answers while the question is still running. Players answer
   in a chat-style bar, send reactions that show on the TV and on everyone's screen, skip a wait together, rename
   themselves and reconnect without losing their place. Answer times break ties, the round ends with a podium, and
-  an all-time leaderboard adds up every round. The host can send messages to all players and sees who leaves the
-  game screen during a question.
-- **Your own quiz show**: name the party, plan its rounds, and put **show pages** (titles, text and pictures, each on
-  screen for its own seconds) before any round to greet the players or explain the rules. Save the whole show as a
-  template.
+  an all-time leaderboard ranks everyone by total points. The host can send messages to all players and sees who
+  leaves the game screen during a question. Questions cannot be selected or copied on the phones or the TV page.
+- **Your own quiz show**: name the party and plan its rounds, each with its own questions, timers and point
+  system. Put **show pages** (titles, text and pictures, each on screen for its own seconds) before any round to
+  greet the players or explain the rules. Save the whole show as a template and play it again.
+- **Point systems**: fixed points for right, wrong and blank answers, or a point pool where players pick 10, 20 or
+  30 for each question. Add a streak bonus, all or nothing, a bonus for an all-correct round, or let players
+  *Risk it* for more points.
+- **Player profiles**: every name keeps its preferences and all-time results. A player can protect their name with
+  a 4-digit PIN and move to another phone without losing their score.
 - **Any TV**: a TV window on a second screen, Miracast, or the web browser of a Samsung Smart TV.
-- **Host controls**: points for right and wrong answers, pause, autoplay, answers shown after each question or
+- **Host controls**: pause, autoplay, answers shown after each question or
   all at the end of the round, several rounds with or without keeping the scores, and no question shown twice
   in one party.
 - **Your own questions**: write them on the *Custom* tab, add a picture, video or audio file to the question and to
@@ -31,7 +36,8 @@ game from the app. Bring your own questions or install a question bank from *Dat
   file, media included.
 - **Game helper and solo play**: a timer for the host, or play alone and mark your answers yourself or let the
   AI check them.
-- **Question bank**: search by keyword or by meaning, ignoring case, diacritics and small typos, and edit
+- **Question banks**: install them from *Data sources* in Settings, then pick which sources and games each search,
+  game or round draws from. Search by keyword or by meaning, ignoring case, diacritics and small typos, and edit
   any question. Works offline. Night mode included.
 
 ## Party mode
@@ -69,6 +75,9 @@ Download `KimHardaNeApp-Setup-<version>.exe` from
 code-signed, so Windows SmartScreen warns on the first install: choose **More info → Run anyway**.
 On a Mac with Apple silicon, download `KimHardaNeApp-<version>-arm64.dmg`, drag the app to Applications, and on the
 first launch choose **System Settings → Privacy & Security → Open Anyway**.
+
+Version 2 starts with an empty question bank: questions, lists and results from version 1 are not carried over,
+and version 1 export files do not import. Install the question banks again from *Settings → Data sources*.
 
 Windows Firewall asks once whether KimHardaNeApp may accept connections on private networks. Allow it, or
 phones cannot join a party.
