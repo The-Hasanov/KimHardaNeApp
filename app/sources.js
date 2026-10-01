@@ -62,10 +62,8 @@ function describe(source, db, roots) {
   const stats = questionStats(db, roots, source.id);
   const { hasStarted, isComplete, checkedAt } = source.progress(db);
   const state = isComplete ? 'installed' : stats.questions || hasStarted ? 'unfinished' : 'available';
-  return {
-    id: source.id, name: source.name, kind: source.kind, price: source.price, website: source.website, description: source.description,
-    installTime: source.installTime, refreshModes: source.refreshModes, state, checkedAt, ...stats,
-  };
+  const { progress, download, tables, ...info } = source;
+  return { ...info, state, checkedAt, ...stats };
 }
 
 function removeDataSource(source, db, roots) {

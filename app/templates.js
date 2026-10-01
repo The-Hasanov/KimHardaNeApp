@@ -35,4 +35,4 @@ function normalizeTemplate({ id = null, name, rounds } = {}) {
   return { id: idOf(id), name: cleanName, rounds: cleanRounds };
 }
 
-module.exports = { MAX_ROUNDS, DEFAULT_ROUND, normalizeRound, normalizeTemplate };
+module.exports = { whole, MAX_ROUNDS, DEFAULT_ROUND, normalizeRound, normalizeTemplate };

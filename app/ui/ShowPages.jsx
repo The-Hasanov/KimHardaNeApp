@@ -20,14 +20,6 @@ const { api } = window;
 const MAX_BLOCKS = 12;
 const NEW_SHOW_PAGE = { title: '', seconds: 10, canPlayersSkip: true, blocks: [{ type: 'text', text: '', isLarge: false }] };
 
-export function useShowPages() {
-  const [showPages, setShowPages] = useState(null);
-  useEffect(() => {
-    api.showPages().then(setShowPages);
-  }, []);
-  return [showPages, setShowPages];
-}
-
 export function ShowPageSlide({ page, className }) {
   return (
     <div className={cn('flex aspect-video flex-col items-center justify-center gap-[4%] overflow-hidden rounded-lg bg-neutral-950 p-[5%] text-center text-white', className)}>

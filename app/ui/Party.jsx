@@ -629,10 +629,8 @@ function PartyNameField({ title }) {
   useEffect(() => setDraft(title), [title]);
   const save = () => {
     const clean = draft.replace(/\s+/g, ' ').trim();
-    try {
-      if (clean) localStorage.setItem(PARTY_TITLE_KEY, clean);
-      else localStorage.removeItem(PARTY_TITLE_KEY);
-    } catch {}
+    if (clean) localStorage.setItem(PARTY_TITLE_KEY, clean);
+    else localStorage.removeItem(PARTY_TITLE_KEY);
     if (clean !== title) api.partySetTitle(clean);
     else setDraft(title);
   };

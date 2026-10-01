@@ -86,7 +86,6 @@ class Store {
     this.db.exec(POINT_SYSTEMS_SCHEMA);
     this.db.exec(GAME_TEMPLATES_SCHEMA);
     this.db.exec(SHOW_PAGES_SCHEMA);
-    if (!this.db.prepare('PRAGMA table_info(show_pages)').all().some(c => c.name === 'can_players_skip')) this.db.exec('ALTER TABLE show_pages ADD COLUMN can_players_skip INTEGER NOT NULL DEFAULT 1');
     const resultColumns = this.db.prepare('PRAGMA table_info(party_results)').all().map(c => c.name);
     if (!resultColumns.includes('correct_ms')) this.db.exec('ALTER TABLE party_results ADD COLUMN correct_ms INTEGER NOT NULL DEFAULT 0');
     if (!resultColumns.includes('points')) this.db.exec('ALTER TABLE party_results ADD COLUMN points INTEGER NOT NULL DEFAULT 0; UPDATE party_results SET points = correct');

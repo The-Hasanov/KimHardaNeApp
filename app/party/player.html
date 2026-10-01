@@ -288,10 +288,9 @@ function saveSession(value) {
   } catch {}
 }
 
-const isTypingIn = target => !!target?.closest?.('input, textarea');
 for (const blocked of ['copy', 'cut', 'contextmenu', 'selectstart', 'dragstart']) {
   document.addEventListener(blocked, event => {
-    if (!isTypingIn(event.target)) event.preventDefault();
+    if (!event.target.closest?.('input, textarea')) event.preventDefault();
   });
 }
 

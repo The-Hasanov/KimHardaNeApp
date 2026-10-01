@@ -211,4 +211,4 @@ function importList(store, archive, { fileName = null } = {}) {
   return { listId, createdUids, summary: { ...summary, total: new Set(uids).size } };
 }
 
-module.exports = { APP, FORMAT, META, QUESTIONS_FILE, QUZIP_TYPES, LIMITS, exportArchive, readArchive, readArchiveFile, importOwnQuestions, importList };
+module.exports = { META, QUESTIONS_FILE, LIMITS, exportArchive, readArchive, readArchiveFile, importOwnQuestions, importList };

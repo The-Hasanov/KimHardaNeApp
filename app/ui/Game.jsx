@@ -27,7 +27,7 @@ import Profiles from './Profiles';
 import PointSystems, { usePointSystems } from './PointSystems';
 import RoundPlan, { NEW_ROUND, pointSystemOf, roundProblem } from './RoundPlan';
 import Templates from './Templates';
-import ShowPages, { useShowPages } from './ShowPages';
+import ShowPages from './ShowPages';
 import { PlayHistory, PlayResults, PlayRound } from './Play';
 
 const { api } = window;
@@ -179,7 +179,7 @@ export default function Game({ isVisible, lists, sources, listId, onListIdChange
   const [secondsBetweenQuestions, setSecondsBetweenQuestions] = useState(0);
   const [shouldAutoStartTimer, setShouldAutoStartTimer] = useState(false);
   const [pointSystems, setPointSystems] = usePointSystems();
-  const [showPages, setShowPages] = useShowPages();
+  const [showPages, setShowPages] = useState(null);
   const [isManagingShowPages, setIsManagingShowPages] = useState(false);
   const [plan, setPlan] = useState(() => {
     try {
@@ -312,11 +312,7 @@ export default function Game({ isVisible, lists, sources, listId, onListIdChange
   useEffect(() => { api.onParty(setPartyState); }, []);
   const openParty = async () => {
     try {
-      let title = null;
-      try {
-        title = localStorage.getItem(PARTY_TITLE_KEY);
-      } catch {}
-      setPartyState(await api.partyOpen(title));
+      setPartyState(await api.partyOpen(localStorage.getItem(PARTY_TITLE_KEY)));
       setPhase('party');
     } catch (e) {
       toast.error('Could not open the party', { description: e.message });

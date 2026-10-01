@@ -365,7 +365,6 @@ function prepareDb(db) {
   db.exec(SCHEMA);
   const columns = db.prepare('PRAGMA table_info(questions)').all().map(c => c.name);
   if (!columns.includes('edited_at')) db.exec('ALTER TABLE questions ADD COLUMN edited_at TEXT');
-  if (!columns.includes('source_id')) db.exec(`ALTER TABLE questions ADD COLUMN source_id TEXT NOT NULL DEFAULT '${SOURCE_ID}'`);
   db.exec('CREATE INDEX IF NOT EXISTS questions_source ON questions (source_id, game_id)');
   return db;
 }
