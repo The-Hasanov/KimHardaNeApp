@@ -4,7 +4,7 @@
 [3sual.az](https://3sual.az/) through its public JSON API. It stores the raw
 package documents and normalized question records in SQLite and exports JSONL.
 It has no dependencies beyond Node, runs one request at a time, and can resume
-after an interruption. The desktop editor in `app/` ships the same scraper as its *Refresh data* button.
+after an interruption. The desktop app in `app/` runs the same scraper as its 3sual.az data source (*Settings → Data sources*).
 
 ## Install
 
@@ -117,9 +117,9 @@ Text fields may contain the site's line-break marker `/-/`. It is preserved as-i
 | `authors` | `id` | Per-author counts reported by the site (audit) |
 | `embeddings` | `uid` | Created by the desktop app: `hash` (model + embedded text) and `vec` (1,024 float32). A hash mismatch means the vector is stale |
 | `images` | `url` | `status` (`ok`/`failed`), `path` (relative to the database folder, `images/<ab>/<sha1(url)>.<ext>`), bytes, content type, SHA-256, error |
-| `lists` | `id` | Created by the desktop app: the user's question lists (`name`, `created_at`). Not in the installer's bundled database |
+| `lists` | `id` | Created by the desktop app: the user's question lists (`name`, `created_at`). Kept when the 3sual.az data source is deleted |
 | `list_questions` | `(list_id, uid)` | Questions of each list, ordered by `position`, with `added_at` |
-| `play_games` | `id` | Created by the desktop app: one row per Play-mode game (title, list, timing, question count, start and finish). Not bundled |
+| `play_games` | `id` | Created by the desktop app: one row per Play-mode game (title, list, timing, question count, start and finish). Kept when the data source is deleted |
 | `play_answers` | `(game_id, position)` | The player's answer to each question, the AI verdict and similarity, the final `is_correct` and whether the player decided it |
 | `errors` | `id` | `stage` (`list`/`fetch`/`parse`/`audit`/`stats`), `severity` (`error`/`warning`), package ID, JSON path, message, raw snippet |
 

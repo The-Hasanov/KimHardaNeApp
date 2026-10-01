@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Nə? Harada? Nə zaman? · TV</title>
+<title>{{title}} · TV</title>
 <style>
 * { box-sizing: border-box; }
 html, body { height: 100%; margin: 0; overflow: hidden; background: #0a0a0a; color: #fafafa; }
@@ -96,6 +96,14 @@ video.image { width: 100%; background: #000; }
 .image { display: block; max-width: 100%; max-height: 45vh; border-radius: .8vw; border: 1px solid #262626; }
 .caption { font-size: .8em; color: #a3a3a3; text-transform: uppercase; letter-spacing: .05em; }
 .pre { white-space: pre-line; }
+.show { -webkit-flex: 1; flex: 1; min-height: 0; overflow: hidden; display: -webkit-flex; display: flex; -webkit-flex-direction: column; flex-direction: column; -webkit-align-items: center; align-items: center; -webkit-justify-content: center; justify-content: center; text-align: center; padding: 3vw 8vw; }
+.show-title { font-size: 4.6vw; font-weight: 700; line-height: 1.15; margin: 0 0 2vw; }
+.show-text { font-size: 2.3vw; line-height: 1.4; color: #d4d4d4; margin: 0 0 1.6vw; max-width: 84vw; }
+.show-text.large { font-size: 3.4vw; font-weight: 600; color: inherit; }
+.show-image { display: block; max-width: 84vw; max-height: 42vh; border-radius: .8vw; margin: 0 0 1.6vw; }
+.show-count { position: fixed; bottom: 1.5vw; left: 2vw; font-size: 1.2vw; }
+.light .show-text { color: #404040; }
+.light .show-text.large { color: inherit; }
 .credits { font-size: .75em; color: #a3a3a3; }
 .reveal { -webkit-flex: 1; flex: 1; min-height: 0; display: -webkit-flex; display: flex; padding: 3vw; }
 .reveal .main { -webkit-flex: 1; flex: 1; min-width: 0; overflow: hidden; display: -webkit-flex; display: flex; -webkit-flex-direction: column; flex-direction: column; margin-right: 3vw; }
@@ -120,6 +128,8 @@ html.light, html.light body { background: #ffffff; color: #0a0a0a; }
 .light .progress.low div { background: #d97706; }
 .light .lobby .qr img { border: 1px solid #e5e5e5; }
 .light .hint { color: #a3a3a3; }
+body { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+img { -webkit-user-drag: none; }
 </style>
 </head>
 <body>
@@ -176,6 +186,10 @@ function append(node, child) {
   if (Object.prototype.toString.call(child) === '[object Array]') return child.forEach(function (item) { append(node, item); });
   node.appendChild(typeof child === 'object' ? child : document.createTextNode(String(child)));
 }
+
+['copy', 'cut', 'contextmenu', 'selectstart', 'dragstart'].forEach(function (blocked) {
+  document.addEventListener(blocked, function (event) { event.preventDefault(); });
+});
 
 function el(tag, className) {
   var node = document.createElement(tag);
@@ -256,7 +270,7 @@ function lobbyScreen() {
   return el('div', 'lobby',
     el('div', 'qr', joinUrl ? [image('', '/tv/join-qr.svg', 'Join code'), el('div', 'address', hostOf(joinUrl))] : el('p', '', 'No network connection')),
     el('div', 'side stack',
-      el('h1', 'title', 'Nə? Harada? Nə zaman?'),
+      el('h1', 'title', state.title),
       el('p', 'muted', 'Scan the code or open the address in any browser to join. Same Wi-Fi.'),
       showsScores
         ? el('div', 'stack', el('div', '', 'Scores after round ' + state.round), leaderboard(state.leaderboard.slice(0, 8), false))
@@ -268,6 +282,16 @@ function standingsScreen() {
   return el('div', 'standings',
     el('h1', 'title', 'Leaderboard ', isRoundUnderway && el('span', 'muted', '· round ' + state.round + ' · after question ' + (state.index + 1) + ' of ' + state.total)),
     leaderboard(state.leaderboard.slice(0, 12), isRoundUnderway));
+}
+
+function showScreen() {
+  var page = state.showPage;
+  return el('div', 'show',
+    page.title && el('h1', 'show-title', page.title),
+    page.blocks.map(function (block) {
+      return block.type === 'image' ? image('show-image', block.src, '') : el('p', block.isLarge ? 'show-text large pre' : 'show-text pre', block.text);
+    }),
+    page.total > 1 && el('div', 'show-count muted numbers', (page.index + 1) + ' / ' + page.total));
 }
 
 function waitingScreen() {
@@ -388,12 +412,17 @@ function updateLiveParts() {
   tick();
 }
 
+function partyTitle() {
+  return state ? state.title : document.title.replace(/ · TV$/, '');
+}
+
 function render(next) {
   state = next && next.phase !== 'closed' ? next : null;
   document.documentElement.className = state && state.isNightMode === false ? 'light' : '';
   deadline = state && state.remainingMs != null && !state.isPaused ? Date.now() + state.remainingMs : null;
   var screen = shownScreen();
-  var key = screen === 'question' ? 'question:' + state.round + ':' + state.index : screen === 'none' ? 'none' : JSON.stringify(state);
+  if (state) document.title = state.title + ' · TV';
+  var key = screen === 'question' ? 'question:' + state.round + ':' + state.index : screen === 'show' ? 'show:' + state.round + ':' + state.showPage.index : screen === 'none' ? 'none:' + partyTitle() : JSON.stringify(state);
   if (state && !hasChimed) {
     hasChimed = true;
     chime();
@@ -404,9 +433,10 @@ function render(next) {
   renderedKey = key;
   countedSecond = null;
   clockElement = progressElement = answeredElement = null;
-  if (screen === 'none') show(el('div', 'center', el('h1', 'title', 'Nə? Harada? Nə zaman?'), el('p', 'muted', 'Waiting for the host…')));
+  if (screen === 'none') show(el('div', 'center', el('h1', 'title', partyTitle()), el('p', 'muted', 'Waiting for the host…')));
   else if (screen === 'lobby' || screen === 'join') show(lobbyScreen());
   else if (screen === 'leaderboard') show(standingsScreen());
+  else if (screen === 'show') show(showScreen());
   else if (screen === 'waiting') show(waitingScreen());
   else if (screen === 'question') show(questionScreen());
   else if (screen === 'reveal') show(revealScreen());

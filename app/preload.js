@@ -8,7 +8,7 @@ contextBridge.exposeInMainWorld('api', {
   aiStatus: () => ipcRenderer.invoke('ai-status'),
   setAiSearch: isOn => ipcRenderer.invoke('set-ai-search', isOn),
   onAi: cb => ipcRenderer.on('ai', (_e, status) => cb(status)),
-  gameQuestions: (count, includeOwn) => ipcRenderer.invoke('game-questions', count, includeOwn),
+  gameQuestions: (games, count) => ipcRenderer.invoke('game-questions', games, count),
   lists: () => ipcRenderer.invoke('lists'),
   createList: name => ipcRenderer.invoke('create-list', name),
   renameList: (listId, name) => ipcRenderer.invoke('rename-list', listId, name),
@@ -25,7 +25,8 @@ contextBridge.exposeInMainWorld('api', {
   deletePlayGame: gameId => ipcRenderer.invoke('delete-play-game', gameId),
   playGames: () => ipcRenderer.invoke('play-games'),
   playGameAnswers: gameId => ipcRenderer.invoke('play-game-answers', gameId),
-  partyOpen: () => ipcRenderer.invoke('party-open'),
+  partyOpen: title => ipcRenderer.invoke('party-open', title),
+  partySetTitle: title => ipcRenderer.invoke('party-set-title', title),
   partyStartRound: round => ipcRenderer.invoke('party-start-round', round),
   partySkipWait: () => ipcRenderer.invoke('party-skip-wait'),
   partyPause: () => ipcRenderer.invoke('party-pause'),
@@ -54,6 +55,10 @@ contextBridge.exposeInMainWorld('api', {
   deleteGameTemplate: id => ipcRenderer.invoke('delete-game-template', id),
   savePointSystem: system => ipcRenderer.invoke('save-point-system', system),
   deletePointSystem: id => ipcRenderer.invoke('delete-point-system', id),
+  showPages: () => ipcRenderer.invoke('show-pages'),
+  saveShowPage: page => ipcRenderer.invoke('save-show-page', page),
+  deleteShowPage: id => ipcRenderer.invoke('delete-show-page', id),
+  pickShowPageImage: () => ipcRenderer.invoke('pick-show-page-image'),
   partyProfiles: () => ipcRenderer.invoke('party-profiles'),
   clearPartyProfilePin: name => ipcRenderer.invoke('clear-party-profile-pin', name),
   deletePartyProfile: (name, options) => ipcRenderer.invoke('delete-party-profile', name, options),
@@ -81,7 +86,13 @@ contextBridge.exposeInMainWorld('api', {
   removeQuestionImage: (uid, column) => ipcRenderer.invoke('remove-question-image', uid, column),
   onUpdate: cb => ipcRenderer.on('update', (_e, status) => cb(status)),
   installUpdate: () => ipcRenderer.invoke('install-update'),
-  refresh: mode => ipcRenderer.invoke('refresh', mode),
-  cancelRefresh: () => ipcRenderer.invoke('cancel-refresh'),
-  onRefresh: cb => ipcRenderer.on('refresh', (_e, progress) => cb(progress)),
+  dataSources: () => ipcRenderer.invoke('data-sources'),
+  updateDataSource: (id, mode) => ipcRenderer.invoke('update-data-source', id, mode),
+  stopDataSource: () => ipcRenderer.invoke('stop-data-source'),
+  deleteDataSource: id => ipcRenderer.invoke('delete-data-source', id),
+  onDataSourceProgress: cb => {
+    const listener = (_e, progress) => cb(progress);
+    ipcRenderer.on('data-source-progress', listener);
+    return () => ipcRenderer.removeListener('data-source-progress', listener);
+  },
 });

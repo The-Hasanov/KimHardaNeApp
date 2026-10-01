@@ -80,6 +80,23 @@ test('lan addresses list private IPv4 addresses of this computer', () => {
   for (const { address } of lanAddresses()) assert.match(address, /^\d+\.\d+\.\d+\.\d+$/);
 });
 
+test('the host names the party: phones, TV and page titles show it, escaped, with a default', async () => {
+  const { game, close } = await openParty({ judge: judgeByText, title: '  Friday   <b>quiz</b> ' }, { port: 0 });
+  const base = `http://127.0.0.1:${game.port}`;
+  try {
+    assert.equal(game.title, 'Friday <b>quiz</b>');
+    assert.match(await (await fetch(base)).text(), /<title>Friday &#60;b&#62;quiz&#60;\/b&#62;<\/title>/);
+    assert.match(await (await fetch(`${base}/tv`)).text(), /<title>Friday &#60;b&#62;quiz&#60;\/b&#62; · TV<\/title>/);
+    game.setTitle('   ');
+    assert.equal(game.tvView().title, 'Quiz night');
+    game.setTitle('Office cup');
+    assert.equal(game.playerView(game.join('Aysel')).title, 'Office cup');
+    assert.equal(game.hostView().title, 'Office cup');
+  } finally {
+    await close();
+  }
+});
+
 test('the party server serves the player page, joins, streams state and rejects bad requests', async () => {
   const { game, close } = await openParty({ judge: judgeByText }, { port: 0 });
   const base = `http://127.0.0.1:${game.port}`;
@@ -716,4 +733,64 @@ test('streak bonuses and all or nothing count through a whole round and reach th
   assert.equal(game.phase, 'finished');
   assert.deepEqual(game.leaderboard().map(entry => [entry.name, entry.score]), [['Aysel', 2 + 3 + 3 + 5], ['Nicat', 0]]);
   assert.deepEqual(reports[0].map(({ name, points }) => [name, points]), [['Aysel', 13], ['Nicat', 0]]);
+});
+
+test('show pages play before the round, each for its seconds, can be skipped or paused, and serve their pictures', async () => {
+  const picture = path.join(fs.mkdtempSync(path.join(require('node:os').tmpdir(), 'show-')), 'welcome.png');
+  fs.writeFileSync(picture, Buffer.from('89504e470d0a1a0a', 'hex'));
+  const { game, close } = await openParty({ judge: judgeByText }, { port: 0 });
+  const base = `http://127.0.0.1:${game.port}`;
+  try {
+    const aysel = game.join('Aysel');
+    const pages = [
+      { title: 'Welcome', seconds: 5, blocks: [{ type: 'text', text: 'Hello everyone', isLarge: true }, { type: 'image', image: 'own-image:x.png', src: require('node:url').pathToFileURL(picture).href }] },
+      { title: 'Round 1 rules', seconds: 8, blocks: [{ type: 'text', text: 'No phones.' }] },
+    ];
+    game.startRound({ ...ROUND, showPages: pages });
+    assert.equal(game.phase, 'show');
+    assert.ok(game.remainingMs() > 4000 && game.remainingMs() <= 5000);
+    const tv = game.tvView().showPage;
+    assert.deepEqual([tv.index, tv.total, tv.title, tv.blocks[0].text, tv.blocks[1].src], [0, 2, 'Welcome', 'Hello everyone', '/tv/show-image?page=0&block=1']);
+    assert.equal(game.playerView(aysel).showPage.blocks[1].src, '/show-image?page=0&block=1');
+    assert.equal(game.playerView(aysel).question, null);
+    assert.equal((await fetch(`${base}/tv/show-image?page=0&block=1`)).status, 200);
+    assert.equal((await fetch(`${base}/tv/show-image?page=0&block=0`)).status, 404);
+    assert.equal((await fetch(`${base}/show-image?page=0&block=1`)).status, 401);
+    assert.equal((await fetch(`${base}/show-image?page=0&block=1&token=${aysel.token}`)).status, 200);
+    game.pause();
+    assert.ok(game.hostView().isPaused);
+    game.resume();
+    game.skipWait();
+    assert.deepEqual([game.phase, game.showIndex, game.hostView().showPage.title], ['show', 1, 'Round 1 rules']);
+    assert.equal((await fetch(`${base}/tv/show-image?page=0&block=1`)).status, 404);
+    assert.equal(game.skipStatus().isAvailable, true);
+    game.skipWait();
+    assert.equal(game.phase, 'question');
+    assert.equal(game.tvView().showPage, null);
+  } finally {
+    await close();
+  }
+});
+
+test('the host decides per show page whether players may skip it; the host always can', () => {
+  const game = newGame();
+  const aysel = game.join('Aysel');
+  game.startRound({ ...ROUND, showPages: [
+    { title: 'Rules', seconds: 30, canPlayersSkip: false, blocks: [] },
+    { title: 'Ready?', seconds: 10, blocks: [] },
+  ] });
+  assert.deepEqual([game.tvView().showPage.canPlayersSkip, game.playerView(aysel).skip.isAvailable], [false, false]);
+  assert.throws(() => game.toggleSkip(aysel.token), /Nothing to skip/);
+  game.skipWait();
+  assert.deepEqual([game.showIndex, game.playerView(aysel).skip.isAvailable, game.hostView().showPage.canPlayersSkip], [1, true, true]);
+  game.stopTimer();
+});
+
+test('phones and the TV page block selecting, copying and saving questions; only the answer box takes a selection', () => {
+  for (const page of ['player.html', 'tv.html']) {
+    const html = fs.readFileSync(path.join(__dirname, 'party', page), 'utf8');
+    assert.match(html, /body \{[^}]*user-select: none/, page);
+    assert.match(html, /\['copy', 'cut', 'contextmenu', 'selectstart', 'dragstart'\]/, page);
+  }
+  assert.match(fs.readFileSync(path.join(__dirname, 'party', 'player.html'), 'utf8'), /input, textarea \{ user-select: text/);
 });

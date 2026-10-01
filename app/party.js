@@ -19,8 +19,8 @@ const TV_PAGE = path.join(__dirname, 'party', 'tv.html');
 const VIRTUAL_ADAPTER = /vEthernet|VirtualBox|VMware|WSL|Hyper-V|Loopback|Tailscale|ZeroTier|VPN/i;
 const PHASES_WITH_QUESTION = ['question', 'judging', 'reveal'];
 const TV_SCREENS = ['game', 'leaderboard', 'join'];
-const PAUSABLE_PHASES = ['waiting', 'question', 'reveal'];
-const SKIPPABLE_PHASES = ['waiting', 'question', 'reveal'];
+const PAUSABLE_PHASES = ['show', 'waiting', 'question', 'reveal'];
+const SKIPPABLE_PHASES = ['show', 'waiting', 'question', 'reveal'];
 const REACTIONS = ['👏', '😂', '😮', '🤔', '🔥', '❤️', '😢', '🎉'];
 const REACTION_COOLDOWN_MS = 1000;
 const REACTIONS_PER_MINUTE = 10;
@@ -38,6 +38,10 @@ class PartyError extends Error {
   }
 }
 
+const DEFAULT_PARTY_TITLE = 'Quiz night';
+const MAX_TITLE_LENGTH = 40;
+const cleanTitle = title => String(title ?? '').replace(/\s+/g, ' ').trim().slice(0, MAX_TITLE_LENGTH) || DEFAULT_PARTY_TITLE;
+const escapeHtml = text => text.replace(/[&<>"']/g, c => `&#${c.charCodeAt(0)};`);
 const cleanName = name => String(name ?? '').replace(/\s+/g, ' ').trim().slice(0, PARTY_LIMITS.nameLength);
 const isBlank = given => !String(given ?? '').trim();
 
@@ -52,7 +56,7 @@ function lanAddresses() {
 }
 
 class PartyGame {
-  constructor({ judge, onChange = () => {}, onRoundFinished = () => {}, onReaction = () => {}, profiles = new PlayerProfiles() }) {
+  constructor({ judge, title, onChange = () => {}, onRoundFinished = () => {}, onReaction = () => {}, profiles = new PlayerProfiles() }) {
     this.id = crypto.randomBytes(6).toString('hex');
     this.profiles = profiles;
     this.judge = judge;
@@ -69,6 +73,8 @@ class PartyGame {
     this.bankedTimes = new Map();
     this.round = 0;
     this.questions = [];
+    this.showPages = [];
+    this.showIndex = -1;
     this.answers = [];
     this.stakes = [];
     this.rulings = [];
@@ -85,6 +91,7 @@ class PartyGame {
     this.pausedRemainingMs = null;
     this.screen = 'game';
     this.isNightMode = true;
+    this.title = cleanTitle(title);
     this.shownUids = new Set();
     this.streams = new Set();
     this.urls = [];
@@ -374,7 +381,7 @@ class PartyGame {
   }
 
   skipKey() {
-    return `${this.round}:${this.phase}:${this.index}`;
+    return `${this.round}:${this.phase}:${this.phase === 'show' ? `page${this.showIndex}` : this.index}`;
   }
 
   isHostChecking() {
@@ -385,6 +392,7 @@ class PartyGame {
   }
 
   canSkip() {
+    if (this.phase === 'show' && this.showPages[this.showIndex].canPlayersSkip === false) return false;
     return SKIPPABLE_PHASES.includes(this.phase) && !this.isHostChecking();
   }
 
@@ -412,10 +420,10 @@ class PartyGame {
     if (!this.canSkip() || this.pausedRemainingMs != null) return;
     const { count, of } = this.skipStatus();
     if (!of || count < of) return;
-    ({ waiting: () => this.openAnswers(), question: () => this.closeAnswers(), reveal: () => this.next() })[this.phase]();
+    ({ show: () => this.nextShowPage(), waiting: () => this.openAnswers(), question: () => this.closeAnswers(), reveal: () => this.next() })[this.phase]();
   }
 
-  startRound({ questions, secondsPerQuestion, secondsBetweenQuestions, secondsOnAnswer = 0, pointSystem, pointsForCorrect = 1, pointsForWrong = 0, revealAtEnd = false }) {
+  startRound({ questions, showPages = [], secondsPerQuestion, secondsBetweenQuestions, secondsOnAnswer = 0, pointSystem, pointsForCorrect = 1, pointsForWrong = 0, revealAtEnd = false }) {
     if (this.phase !== 'lobby' || !questions.length) return;
     const system = normalizePointSystem(pointSystem ?? { name: 'Classic', simple: { correct: pointsForCorrect, wrong: pointsForWrong, unanswered: 0 } });
     const problem = roundProblem(system, questions.length);
@@ -428,7 +436,38 @@ class PartyGame {
     this.rules = { secondsPerQuestion, secondsBetweenQuestions, secondsOnAnswer, pointSystem: system, pointsSummary: summaryOf(system), revealAtEnd: !!revealAtEnd };
     this.revealedCount = 0;
     this.round += 1;
+    this.showPages = showPages;
+    if (!showPages.length) return this.goTo(0);
+    this.showPage(0);
+  }
+
+  showPage(position) {
+    this.showIndex = position;
+    this.phase = 'show';
+    this.screen = 'game';
+    this.schedule(this.showPages[position].seconds, () => this.nextShowPage());
+    this.changed();
+  }
+
+  nextShowPage() {
+    if (this.phase !== 'show') return;
+    if (this.showIndex + 1 < this.showPages.length) return this.showPage(this.showIndex + 1);
     this.goTo(0);
+  }
+
+  showImageSrc(url) {
+    const page = this.phase === 'show' && Number(url.searchParams.get('page')) === this.showIndex ? this.showPages[this.showIndex] : null;
+    const block = page?.blocks[Number(url.searchParams.get('block'))];
+    if (block?.type !== 'image') throw new PartyError(404, 'No media');
+    return block.src;
+  }
+
+  showPageView(imageUrl) {
+    const page = this.phase === 'show' ? this.showPages[this.showIndex] : null;
+    return page && {
+      index: this.showIndex, total: this.showPages.length, title: page.title, seconds: page.seconds, canPlayersSkip: page.canPlayersSkip !== false,
+      blocks: page.blocks.map((block, position) => (block.type === 'image' ? { type: 'image', src: imageUrl(block, position) } : block)),
+    };
   }
 
   backToLobby({ keepScores }) {
@@ -448,6 +487,7 @@ class PartyGame {
     this.answers = [];
     this.stakes = [];
     this.rulings = [];
+    this.showPages = [];
     this.index = -1;
     this.phase = 'lobby';
     this.screen = 'game';
@@ -465,7 +505,8 @@ class PartyGame {
   }
 
   skipWait() {
-    if (this.phase === 'waiting') this.openAnswers();
+    if (this.phase === 'show') this.nextShowPage();
+    else if (this.phase === 'waiting') this.openAnswers();
   }
 
   openAnswers() {
@@ -485,10 +526,15 @@ class PartyGame {
 
   resume() {
     if (this.pausedRemainingMs == null) return;
-    const whenTimeIsUp = { waiting: () => this.openAnswers(), question: () => this.closeAnswers(), reveal: () => this.next() };
+    const whenTimeIsUp = { show: () => this.nextShowPage(), waiting: () => this.openAnswers(), question: () => this.closeAnswers(), reveal: () => this.next() };
     this.schedule(this.pausedRemainingMs / 1000, whenTimeIsUp[this.phase]);
     this.changed();
     this.skipIfEveryoneAgrees();
+  }
+
+  setTitle(title) {
+    this.title = cleanTitle(title);
+    this.changed();
   }
 
   setNightMode(isNightMode) {
@@ -642,7 +688,7 @@ class PartyGame {
     }));
     const checkedIndex = this.rules.revealAtEnd && this.phase === 'waiting' ? this.index - 1 : -1;
     return {
-      id: this.id, phase: this.phase, round: this.round, index: this.index, total: this.questions.length,
+      id: this.id, title: this.title, phase: this.phase, round: this.round, index: this.index, total: this.questions.length,
       remainingMs: this.remainingMs(), isPaused: this.pausedRemainingMs != null, screen: this.screen,
       rules: this.rules, urls: this.urls, port: this.port, question: this.questions[this.index] ?? null,
       players: [...this.players.values()].map(p => ({ id: p.id, name: p.name, hasPin: !!p.hasPin, hasAnswered: !!current?.has(p.id), isOnline: this.isOnline(p.id), timesAway: this.absencesOf(p.id) })),
@@ -652,6 +698,7 @@ class PartyGame {
       answers: answerRows(this.index),
       previous: checkedIndex >= 0 ? { index: checkedIndex, question: this.questions[checkedIndex], answers: answerRows(checkedIndex) } : null,
       leaderboard: this.leaderboard(),
+      showPage: this.showPageView(block => block.src),
     };
   }
 
@@ -672,6 +719,7 @@ class PartyGame {
         }),
       },
       answers: isRevealed ? view.answers.map(({ given, similarity, closestAnswer, hostCall, isDirectCall, ...result }) => result) : [],
+      showPage: this.showPageView((_block, position) => `/tv/show-image?page=${this.showIndex}&block=${position}`),
       isNightMode: this.isNightMode,
     };
   }
@@ -683,7 +731,7 @@ class PartyGame {
     const me = leaderboard.find(entry => entry.id === player.id);
     const showsLeaderboard = ['reveal', 'finished'].includes(this.phase) || (this.phase === 'lobby' && this.round > 0);
     return {
-      partyId: this.id, phase: this.phase, round: this.round, index: this.index, total: this.questions.length,
+      partyId: this.id, title: this.title, phase: this.phase, round: this.round, index: this.index, total: this.questions.length,
       remainingMs: this.remainingMs(), isPaused: this.pausedRemainingMs != null, playerCount: this.players.size, isNightMode: this.isNightMode,
       rules: {
         pointSystem: this.rules.pointSystem, pointsSummary: this.rules.pointsSummary ?? summaryOf(this.rules.pointSystem), secondsPerQuestion: this.rules.secondsPerQuestion,
@@ -694,6 +742,7 @@ class PartyGame {
       question: PHASES_WITH_QUESTION.includes(this.phase) ? {
         text: question.text, noteBefore: question.note_before, handoutText: question.rekvizit_text, hasHandoutImage: !!question.rekvizit_src, handoutKind: question.rekvizit_kind ?? 'image',
       } : null,
+      showPage: this.showPageView((_block, position) => `/show-image?page=${this.showIndex}&block=${position}`),
       myAnswer: myAnswer?.given ?? null,
       skip: this.skipStatus(player.id),
       reactions: this.areReactionsOn ? REACTIONS : [],
@@ -801,17 +850,17 @@ function openEventStream(game, req, res, { playerId = null, view }) {
   else stream.send(view());
 }
 
-function sendPage(res, file) {
+function sendPage(res, file, title) {
   res.writeHead(200, {
     'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff',
     'Content-Security-Policy': "default-src 'self'; img-src 'self' https: data:; media-src 'self' https:; style-src 'unsafe-inline'; script-src 'unsafe-inline'; object-src 'none'; base-uri 'none'; form-action 'none'",
     'Referrer-Policy': 'no-referrer',
   });
-  res.end(fs.readFileSync(file));
+  res.end(fs.readFileSync(file, 'utf8').replaceAll('{{title}}', escapeHtml(title)));
 }
 
 function routeTv(game, req, res, url) {
-  if (url.pathname === '/tv' || url.pathname === '/tv/') return sendPage(res, TV_PAGE);
+  if (url.pathname === '/tv' || url.pathname === '/tv/') return sendPage(res, TV_PAGE, game.title);
   if (url.pathname === '/tv/join-qr.svg') {
     res.writeHead(200, { 'Content-Type': 'image/svg+xml', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' });
     return res.end(game.joinQrSvg);
@@ -821,6 +870,7 @@ function routeTv(game, req, res, url) {
     if (!PHASES_WITH_QUESTION.includes(game.phase)) throw new PartyError(404, 'No media');
     return sendMedia(req, res, game.questions[game.index].rekvizit_src);
   }
+  if (url.pathname === '/tv/show-image') return sendMedia(req, res, game.showImageSrc(url));
   if (url.pathname === '/tv/answer-image') {
     if (game.phase !== 'reveal') throw new PartyError(404, 'No media');
     return sendMedia(req, res, game.questions[game.index].source_media_src);
@@ -831,7 +881,7 @@ function routeTv(game, req, res, url) {
 async function route(game, req, res) {
   const url = new URL(req.url, 'http://party');
   const token = url.searchParams.get('token');
-  if (req.method === 'GET' && url.pathname === '/') return sendPage(res, PLAYER_PAGE);
+  if (req.method === 'GET' && url.pathname === '/') return sendPage(res, PLAYER_PAGE, game.title);
   if (req.method === 'POST' && url.pathname === '/join') {
     const body = await readJson(req);
     const player = game.join(body.name, body.pin);
@@ -891,6 +941,10 @@ async function route(game, req, res) {
     if (!PHASES_WITH_QUESTION.includes(game.phase)) throw new PartyError(404, 'No media');
     return sendMedia(req, res, game.questions[game.index].rekvizit_src);
   }
+  if (req.method === 'GET' && url.pathname === '/show-image') {
+    game.playerByToken(token);
+    return sendMedia(req, res, game.showImageSrc(url));
+  }
   if (req.method === 'GET' && url.pathname === '/answer-image') {
     game.playerByToken(token);
     if (game.phase !== 'reveal') throw new PartyError(404, 'No media');
@@ -933,4 +987,4 @@ async function openParty(settings, { port = PREFERRED_PORT } = {}) {
   };
 }
 
-module.exports = { PARTY_LIMITS, DEFAULT_RULES, REACTIONS, PartyGame, PartyError, lanAddresses, openParty };
+module.exports = { DEFAULT_PARTY_TITLE, PARTY_LIMITS, DEFAULT_RULES, REACTIONS, PartyGame, PartyError, lanAddresses, openParty };

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { LayoutTemplateIcon, PlayIcon, Trash2Icon, TriangleAlertIcon } from 'lucide-react';
+import { ClapperboardIcon, LayoutTemplateIcon, PlayIcon, Trash2Icon, TriangleAlertIcon } from 'lucide-react';
 import { toast } from 'sonner';
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter,
@@ -8,11 +8,11 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { withoutIpcPrefix } from './gameShared';
-import { roundProblem, roundSummary } from './RoundPlan';
+import { roundProblem, roundSummary, showPagesOf } from './RoundPlan';
 
 const { api } = window;
 
-export default function Templates({ templates, onTemplatesChange, lists, pointSystems, onUse, onPlanNew }) {
+export default function Templates({ templates, onTemplatesChange, lists, pointSystems, sources, showPages, onUse, onPlanNew }) {
   const [templateToDelete, setTemplateToDelete] = useState(null);
   const remove = async template => {
     try {
@@ -29,8 +29,8 @@ export default function Templates({ templates, onTemplatesChange, lists, pointSy
         <div className="min-w-0 flex-1 space-y-1">
           <h1 className="text-2xl font-semibold">Game templates</h1>
           <p className="text-muted-foreground">
-            A template keeps a party's rounds: their questions, timers and point systems. Plan the rounds under Play in Party mode, then press
-            Save as template. Editing a point system changes every template that uses it.
+            A template keeps a party's rounds: their show pages, questions, timers and point systems. Plan the rounds under Play in Party mode, then press
+            Save as template. Editing a point system or a show page changes every template that uses it.
           </p>
         </div>
         <Button variant="outline" onClick={onPlanNew}><LayoutTemplateIcon />Plan a new game</Button>
@@ -38,7 +38,7 @@ export default function Templates({ templates, onTemplatesChange, lists, pointSy
       {templates.length ? (
         <ul className="space-y-3">
           {templates.map(template => {
-            const problems = template.rounds.map(round => roundProblem(round, lists, pointSystems));
+            const problems = template.rounds.map(round => roundProblem(round, lists, pointSystems, sources));
             return (
               <li key={template.id} className="space-y-3 rounded-lg border p-4">
                 <div className="flex flex-wrap items-center gap-2">
@@ -53,7 +53,12 @@ export default function Templates({ templates, onTemplatesChange, lists, pointSy
                     <li key={index} className="flex gap-3">
                       <span className="w-16 shrink-0 text-muted-foreground">Round {index + 1}</span>
                       <span className="min-w-0 flex-1">
-                        {roundSummary(round, lists, pointSystems)}
+                        {showPagesOf(round, showPages).length > 0 && (
+                          <span className="flex items-center gap-1.5 text-muted-foreground">
+                            <ClapperboardIcon className="size-3.5" />{showPagesOf(round, showPages).map(page => page.title || 'Untitled').join(' → ')}
+                          </span>
+                        )}
+                        {roundSummary(round, lists, pointSystems, sources)}
                         {problems[index] && <span className="mt-0.5 flex items-center gap-1.5 text-destructive"><TriangleAlertIcon className="size-3.5" />{problems[index]}</span>}
                       </span>
                     </li>

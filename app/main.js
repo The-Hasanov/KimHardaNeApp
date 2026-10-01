@@ -4,43 +4,36 @@ const { autoUpdater } = require('electron-updater');
 const { execFile } = require('node:child_process');
 const fs = require('node:fs');
 const path = require('node:path');
-const { Store, OWN_PACKAGE_ID } = require('./store');
-const { installData } = require('./data');
+const { Store, OWN_SOURCE_ID } = require('./store');
+const { prepareLibrary } = require('./data');
+const { DATA_SOURCES, dataSourceById, describe, removeDataSource } = require('./sources');
 const ai = require('./ai');
-const scraper = require('./scraper');
 const { judgeAnswer } = require('./judge');
 const { openParty } = require('./party');
 const { PlayerProfiles } = require('./profiles');
 const { CLASSIC_POINT_SYSTEM, normalizePointSystem, summaryOf } = require('./scoring');
 const { normalizeTemplate } = require('./templates');
+const { normalizeShowPage } = require('./showPages');
 const transfer = require('./transfer');
 const { findSamsungTvs, openInTvBrowser, isLocalNetworkAddress } = require('./samsungTv');
 
-const WHAT_WHERE_WHEN_GAME_ID = 1;
 const USER_DATA_BEFORE_RENAME = path.join(app.getPath('appData'), '3sual Editor');
 if (!app.commandLine.hasSwitch('user-data-dir') && fs.existsSync(USER_DATA_BEFORE_RENAME)) app.setPath('userData', USER_DATA_BEFORE_RENAME);
 let store;
 let imageRoots;
-let refreshing = null;
+let dataSourceJob = null;
 let aiStatus = { state: 'off' };
 let aiJob = null;
 let party = null;
 let partyDisplay = null;
-let dataUpdate = null;
 
 function openStore() {
-  if (!app.isPackaged) {
-    const file = process.env.QUIZ_DB || path.join(__dirname, '..', 'data', '3sual.sqlite');
-    imageRoots = [path.dirname(path.resolve(file))];
-    if (process.env.QUIZ_MODELS) ai.configure({ modelsDir: process.env.QUIZ_MODELS });
-    return new Store(file, { imagesRoot: imageRoots });
-  }
-  const res = process.resourcesPath;
-  ai.configure({ modelsDir: path.join(app.getPath('userData'), 'models') });
-  const r = installData({ bundled: path.join(res, 'data', '3sual.sqlite'), dir: path.join(app.getPath('userData'), 'data'), version: app.getVersion() });
-  if (r.replaced && r.from) dataUpdate = { from: r.from, carried: r.carried, newer: r.newer };
-  imageRoots = [path.dirname(r.db), path.join(res, 'data')];
-  return new Store(r.db, { imagesRoot: imageRoots });
+  const file = prepareLibrary(app.isPackaged ? path.join(app.getPath('userData'), 'data', 'kimhardane.sqlite')
+    : process.env.QUIZ_DB || path.join(__dirname, '..', 'data', 'kimhardane.sqlite'));
+  if (app.isPackaged) ai.configure({ modelsDir: path.join(app.getPath('userData'), 'models') });
+  else if (process.env.QUIZ_MODELS) ai.configure({ modelsDir: process.env.QUIZ_MODELS });
+  imageRoots = [path.dirname(path.resolve(file))];
+  return new Store(file, { imagesRoot: imageRoots });
 }
 
 const settingsFile = () => path.join(app.getPath('userData'), 'settings.json');
@@ -151,30 +144,22 @@ function checkForUpdates(win) {
   autoUpdater.checkForUpdates().catch(() => {});
 }
 
-const dataDate = () => {
-  try {
-    return store.db.prepare(`SELECT MAX(d) AS d FROM (SELECT MAX(finished_at) AS d FROM runs WHERE status = 'finished'
-      UNION ALL SELECT MAX(fetched_at) FROM packages WHERE status != 'failed')`).get().d;
-  } catch {
-    return null;
+const dataSources = () => DATA_SOURCES.map(source => describe(source, store.db, imageRoots));
+const sourceNameOf = id => (id === OWN_SOURCE_ID ? 'My questions' : DATA_SOURCES.find(source => source.id === id)?.name ?? id);
+function questionSources() {
+  const bySource = new Map();
+  for (const { sourceId, key, name, n } of store.games()) {
+    if (!bySource.has(sourceId)) bySource.set(sourceId, { id: sourceId, name: sourceNameOf(sourceId), games: [] });
+    bySource.get(sourceId).games.push({ key, name, n });
   }
-};
+  return [...bySource.values()];
+}
 
-async function refresh(win, mode, signal) {
-  const progress = p => win.webContents.send('refresh', p);
-  const count = sql => store.db.prepare(sql).get().n;
-  const db = scraper.prepareDb(store.db);
-  const before = { rows: count('SELECT COUNT(*) AS n FROM questions'), packages: count("SELECT COUNT(*) AS n FROM packages WHERE status != 'failed'") };
-  const last = db.prepare('SELECT status, started_at FROM runs ORDER BY id DESC LIMIT 1').get();
-  const resume = !!last && last.status !== 'finished' && Date.now() - Date.parse(last.started_at) < 864e5;
-  const client = new scraper.Client({ signal });
-  let crawled, images = null, error = null;
-  try {
-    crawled = await scraper.crawl(db, { client, refresh: mode === 'full', newRun: !resume, audit: 'counts', progress });
-    if (crawled.status === 'finished') images = await scraper.downloadImages(db, client, imageRoots, { progress });
-  } catch (e) {
-    if (!(e instanceof scraper.Interrupted)) error = e.message;
-  }
+async function updateDataSource(win, source, mode, signal) {
+  const progress = p => win.webContents.send('data-source-progress', { sourceId: source.id, ...p });
+  const count = () => store.db.prepare('SELECT COUNT(*) AS n FROM questions').get().n;
+  const before = count();
+  const result = await source.download(store.db, { mode, signal, roots: imageRoots, progress });
   progress({ stage: 'index' });
   await new Promise(r => setTimeout(r, 50));
   store.reload();
@@ -183,18 +168,13 @@ async function refresh(win, mode, signal) {
     try {
       await ai.embedRows(store, stale, (done, total) => {
         progress({ stage: 'embed', done, total });
-        if (signal.aborted || !isAiReady()) throw new scraper.Interrupted();
+        if (signal.aborted || !isAiReady()) throw new Error('stopped');
       });
     } catch (e) {
-      if (!(e instanceof scraper.Interrupted)) error ??= e.message;
+      if (!signal.aborted && isAiReady()) result.error ??= e.message;
     }
   }
-  const report = crawled?.report;
-  return { mode, cancelled: signal.aborted, error, complete: !!report?.complete && !!images?.complete,
-    rows: store.rows.length, newRows: store.rows.length - before.rows,
-    newPackages: count("SELECT COUNT(*) AS n FROM packages WHERE status != 'failed'") - before.packages,
-    images: images?.fetched_this_run ?? 0, failures: (report?.errors ?? 0) + (images?.failed ?? 0),
-    vectors: store.vectorCount, dataDate: dataDate() };
+  return { ...result, cancelled: signal.aborted, newRows: count() - before };
 }
 
 app.whenReady().then(() => {
@@ -206,6 +186,10 @@ app.whenReady().then(() => {
   win.removeMenu();
   win.on('page-title-updated', e => e.preventDefault());
   win.on('close', closePartyDisplay);
+  win.webContents.setWindowOpenHandler(({ url }) => {
+    if (/^https:\/\//i.test(url)) shell.openExternal(url);
+    return { action: 'deny' };
+  });
   win.loadFile('renderer/index.html');
 
   const ready = new Promise(resolve => setTimeout(resolve, 100)).then(() => {
@@ -215,7 +199,7 @@ app.whenReady().then(() => {
   });
   const handle = (channel, fn) => ipcMain.handle(channel, async (_e, ...args) => { await ready; return fn(...args); });
 
-  handle('info', () => ({ version: app.getVersion(), rows: store.rows.length, ownCount: store.rows.filter(row => row.package_id === OWN_PACKAGE_ID).length, games: store.games(), dataUpdate, dataDate: dataDate() }));
+  handle('info', () => ({ version: app.getVersion(), rows: store.rows.length, ownCount: store.rows.filter(row => row.source_id === OWN_SOURCE_ID).length, questionSources: questionSources() }));
   handle('ai-status', () => aiStatus);
   handle('set-ai-search', async isOn => {
     writeSettings({ aiSearch: isOn });
@@ -227,7 +211,7 @@ app.whenReady().then(() => {
     return store.search(opts, useAi ? await ai.embedQuery(opts.q) : null);
   });
   handle('get', uid => store.get(uid));
-  handle('game-questions', (count, includeOwn) => store.randomPlayableQuestions(WHAT_WHERE_WHEN_GAME_ID, count, party ? [...party.game.shownUids] : [], { includeOwn }));
+  handle('game-questions', (games, count) => store.randomPlayableQuestions(games, count, party ? [...party.game.shownUids] : []));
   handle('lists', () => store.allLists());
   handle('create-list', name => store.createList(name));
   handle('rename-list', (listId, name) => store.renameList(listId, name));
@@ -260,18 +244,22 @@ app.whenReady().then(() => {
     return party.game.hostView();
   };
   const playerProfiles = new PlayerProfiles(store.partyProfileStorage);
-  handle('party-open', async () => {
+  handle('party-open', async title => {
     await closeParty();
-    party = await openParty({ judge: judgeNow, profiles: playerProfiles, onChange: sendPartyState, onReaction: reaction => win.webContents.send('party-reaction', reaction), onRoundFinished: results => {
+    party = await openParty({ judge: judgeNow, title, profiles: playerProfiles, onChange: sendPartyState, onReaction: reaction => win.webContents.send('party-reaction', reaction), onRoundFinished: results => {
       store.addPartyResults(results);
       win.webContents.send('party-results', store.partyResults());
     } });
     openPartyDisplay(win, party.game.port);
     return party.game.hostView();
   });
-  handle('party-start-round', withParty((game, { uids, pointSystemId, ...rules }) => game.startRound({
-    questions: uids.map(uid => store.get(uid)).filter(Boolean), ...rules, pointSystem: store.pointSystems().find(system => system.id === pointSystemId),
-  })));
+  handle('party-start-round', withParty((game, { uids, pointSystemId, showPageIds = [], ...rules }) => {
+    const showPages = store.showPages();
+    game.startRound({
+      questions: uids.map(uid => store.get(uid)).filter(Boolean), ...rules, pointSystem: store.pointSystems().find(system => system.id === pointSystemId),
+      showPages: showPageIds.map(id => showPages.find(page => page.id === id)).filter(Boolean),
+    });
+  }));
   handle('party-skip-wait', withParty(game => game.skipWait()));
   handle('party-pause', withParty(game => game.pause()));
   handle('party-resume', withParty(game => game.resume()));
@@ -316,6 +304,27 @@ app.whenReady().then(() => {
     store.deleteGameTemplate(id);
     return store.gameTemplates();
   });
+  const showPagesWithUse = () => store.showPages().map(page => ({ ...page, usedBy: store.templatesUsingShowPage(page.id) }));
+  handle('show-pages', showPagesWithUse);
+  handle('save-show-page', page => {
+    const id = store.saveShowPage(normalizeShowPage(page));
+    return { id, showPages: showPagesWithUse() };
+  });
+  handle('delete-show-page', id => {
+    const usedBy = store.templatesUsingShowPage(id);
+    if (usedBy.length) throw new Error(`It is used by ${usedBy.length === 1 ? 'the template' : 'the templates'} ${usedBy.map(name => `“${name}”`).join(', ')}. Change those rounds first.`);
+    store.deleteShowPage(id);
+    return showPagesWithUse();
+  });
+  handle('pick-show-page-image', async () => {
+    const { canceled, filePaths } = await dialog.showOpenDialog(win, {
+      title: 'Add a picture', properties: ['openFile'], filters: [{ name: 'Pictures', extensions: ['png', 'jpg', 'jpeg', 'gif', 'webp'] }],
+    });
+    if (canceled) return null;
+    if (fs.statSync(filePaths[0]).size > 50 * 1024 * 1024) throw new Error('Pick a picture smaller than 50 MB');
+    const image = store.saveOwnMedia({ bytes: fs.readFileSync(filePaths[0]), extension: path.extname(filePaths[0]).toLowerCase() });
+    return { type: 'image', image, src: store.imageSrc(image) };
+  });
   handle('party-profiles', () => store.partyProfiles());
   handle('clear-party-profile-pin', name => {
     store.clearPartyProfilePin(name);
@@ -332,6 +341,7 @@ app.whenReady().then(() => {
   handle('party-open-display', () => party && openPartyDisplay(win, party.game.port));
   handle('party-cast-miracast', () => shell.openExternal('ms-settings-connectabledevices:devicediscovery'));
   handle('party-extend-display', extendDesktopToWirelessDisplay);
+  handle('party-set-title', withParty((game, title) => game.setTitle(title)));
   handle('party-set-night-mode', withParty((game, isNightMode) => game.setNightMode(isNightMode)));
   handle('party-find-tvs', () => findSamsungTvs());
   handle('party-cast-samsung', async address => {
@@ -352,7 +362,7 @@ app.whenReady().then(() => {
   });
   handle('delete-question', uid => store.deleteQuestion(uid));
   const QUESTION_ARCHIVES = [{ name: 'KimHardaNeApp questions', extensions: ['quzip'] }];
-  const QUESTION_FILES_TO_OPEN = [{ name: 'KimHardaNeApp questions', extensions: ['quzip', 'zip', 'json'] }];
+
   const fileNameOf = name => String(name).replace(/[\\/:*?"<>|]+/g, '-').trim() || 'Questions';
   const embedCreated = async uids => {
     if (uids.length && isAiReady()) await ai.embedRows(store, uids.map(uid => store.rows[store.pos.get(uid)]));
@@ -367,11 +377,11 @@ app.whenReady().then(() => {
     return { file: filePath, count, mediaCount };
   };
   const openQuestionsFile = async () => {
-    const { canceled, filePaths } = await dialog.showOpenDialog(win, { title: 'Import questions', properties: ['openFile'], filters: QUESTION_FILES_TO_OPEN });
+    const { canceled, filePaths } = await dialog.showOpenDialog(win, { title: 'Import questions', properties: ['openFile'], filters: QUESTION_ARCHIVES });
     if (canceled) return null;
     return { archive: transfer.readArchiveFile(filePaths[0]), fileName: path.basename(filePaths[0], path.extname(filePaths[0])) };
   };
-  const ownQuestions = () => store.rows.filter(row => row.package_id === OWN_PACKAGE_ID).map(row => store.get(row.uid));
+  const ownQuestions = () => store.rows.filter(row => row.source_id === OWN_SOURCE_ID).map(row => store.get(row.uid));
   handle('export-own-questions', () => saveQuestionsFile('My questions', ownQuestions()));
   handle('import-own-questions', async () => {
     const opened = await openQuestionsFile();
@@ -405,22 +415,30 @@ app.whenReady().then(() => {
     if (row && isAiReady()) await ai.embedRows(store, [row]);
     return { changed: !!row, question: store.get(uid) };
   });
-  handle('refresh', async mode => {
-    if (refreshing) return { error: 'A refresh is already running' };
-    refreshing = new AbortController();
+  handle('data-sources', dataSources);
+  handle('update-data-source', async (id, mode) => {
+    if (dataSourceJob) throw new Error('A data source is already downloading');
+    const source = dataSourceById(id);
+    dataSourceJob = new AbortController();
     try {
-      return await refresh(win, mode, refreshing.signal);
+      return { ...(await updateDataSource(win, source, mode, dataSourceJob.signal)), dataSources: dataSources() };
     } finally {
-      refreshing = null;
+      dataSourceJob = null;
     }
   });
-  ipcMain.handle('cancel-refresh', () => refreshing?.abort());
+  ipcMain.handle('stop-data-source', () => dataSourceJob?.abort());
+  handle('delete-data-source', id => {
+    if (dataSourceJob) throw new Error('Wait until the download stops');
+    removeDataSource(dataSourceById(id), store.db, imageRoots);
+    store.reload();
+    return dataSources();
+  });
   ipcMain.handle('install-update', () => autoUpdater.quitAndInstall(false, true));
   checkForUpdates(win);
 });
 
 app.on('will-quit', () => {
-  refreshing?.abort();
+  dataSourceJob?.abort();
   aiJob?.controller.abort();
   party?.close();
   store?.db.close();
