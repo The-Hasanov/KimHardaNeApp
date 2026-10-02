@@ -79,6 +79,30 @@ test('pool picks respect the uses left, falling back to the lowest free value', 
   assert.equal(roundProblem(system({ mode: 'pool', pool: [{ points: 10 }, { points: 20, uses: 1 }] }), 50), null);
 });
 
+test('a point list scores each question by its position and blocks longer rounds', () => {
+  const points = system({ mode: 'list', list: [{ points: 10 }, { points: 50, wrong: -20 }, { points: 10 }, { points: 50, unanswered: -5 }], risk: { isOn: true } });
+  assert.deepEqual(perQuestion(round(points, [C, W, C, U])), [10, -20, 10, -5]);
+  assert.deepEqual(perQuestion(round(points, [{ outcome: C, position: 1 }, { outcome: C, position: 3 }])), [50, 50]);
+  assert.equal(points.risk.isOn, false);
+  assert.deepEqual(summaryOf(points), ['Point list: 10, 50, 10, 50']);
+  assert.equal(roundProblem(points, 4), null);
+  assert.match(roundProblem(points, 5), /5 questions.*only 4/);
+});
+
+test('a banned question scores nothing and counts as a miss', () => {
+  const points = system({ simple: { correct: 1, wrong: -1 }, streak: { isOn: true, from: 2, bonus: 1 }, perfectBonus: { isOn: true, points: 5 } });
+  const result = round(points, [C, 'banned', C, C], { isComplete: true });
+  assert.deepEqual(perQuestion(result), [1, 0, 1, 2]);
+  assert.equal(result.perfectBonus, 0);
+  assert.equal(round(system({ allOrNothing: { isOn: true, unansweredCountsAsWrong: false } }), [C, 'banned']).isBroken, true);
+});
+
+test('host adjustments add to the question points and survive all or nothing', () => {
+  assert.deepEqual(perQuestion(round(system({}), [{ outcome: C, adjustment: 4 }, { outcome: W, adjustment: -2 }])), [5, -2]);
+  const broken = round(system({ allOrNothing: { isOn: true } }), [{ outcome: C, adjustment: 3 }, W]);
+  assert.deepEqual([broken.isBroken, broken.total], [true, 3]);
+});
+
 test('risks are limited per round, and a pool never has risk', () => {
   const points = system({ risk: { isOn: true, limit: 2 } });
   assert.equal(risksLeft(points, [{ isRisked: true }, {}, null]), 1);

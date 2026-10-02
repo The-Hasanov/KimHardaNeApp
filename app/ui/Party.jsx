@@ -2,8 +2,8 @@ import { createContext, useContext, useEffect, useMemo, useRef, useState } from 
 import QRCode from 'qrcode';
 import { cn } from 'cn';
 import {
-  AppWindowIcon, ArrowRightIcon, CastIcon, DicesIcon, MegaphoneIcon, SendIcon, SmilePlusIcon, CheckIcon, ChevronDownIcon, CircleHelpIcon, DoorClosedIcon, EyeIcon, EyeOffIcon, FlagIcon, GamepadIcon, PauseIcon, PlayIcon, QrCodeIcon,
-  RotateCcwIcon, SkipForwardIcon, TimerIcon, Trash2Icon, TriangleAlertIcon, TrophyIcon, TvIcon, UserXIcon, UsersIcon, WifiOffIcon, XIcon,
+  AppWindowIcon, ArrowRightIcon, BanIcon, CastIcon, DicesIcon, MegaphoneIcon, SendIcon, SmilePlusIcon, CheckIcon, ChevronDownIcon, CircleHelpIcon, DoorClosedIcon, EyeIcon, EyeOffIcon, FlagIcon, GamepadIcon, PauseIcon, PlayIcon, QrCodeIcon,
+  RotateCcwIcon, SkipForwardIcon, TimerIcon, Trash2Icon, TriangleAlertIcon, TrophyIcon, TvIcon, Undo2Icon, UserXIcon, UsersIcon, WifiOffIcon, XIcon,
 } from 'lucide-react';
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter,
@@ -45,6 +45,12 @@ const OUTCOMES = {
   correct: { label: 'Correct', Icon: CheckIcon, className: 'text-emerald-600 dark:text-emerald-400' },
   wrong: { label: 'Wrong', Icon: XIcon, className: 'text-destructive' },
   unsure: { label: 'Not sure', Icon: CircleHelpIcon, className: 'text-amber-600 dark:text-amber-400' },
+};
+
+const listPointsLabel = (pointSystem, index) => {
+  if (pointSystem?.mode !== 'list') return '';
+  const entry = pointSystem.list[index] ?? pointSystem.list.at(-1);
+  return ` · ${entry.points} ${entry.points === 1 ? 'point' : 'points'}`;
 };
 
 function StakeBadge({ stake, pointSystem }) {
@@ -111,6 +117,26 @@ function AwayWarning({ timesAway }) {
     <span className="inline-flex shrink-0 items-center gap-0.5 text-amber-600 dark:text-amber-400" title={label} aria-label={label}>
       <TriangleAlertIcon className="size-4" />
       {timesAway > 1 && <span className="text-xs font-semibold tabular-nums">{timesAway}</span>}
+    </span>
+  );
+}
+
+function DisconnectWarning({ times }) {
+  if (!times) return null;
+  const label = `Lost the connection ${times === 1 ? 'once' : `${times} times`} during this question; it still counts`;
+  return (
+    <span className="inline-flex shrink-0 items-center gap-0.5 text-muted-foreground" title={label} aria-label={label}>
+      <WifiOffIcon className="size-4" />
+      {times > 1 && <span className="text-xs font-semibold tabular-nums">{times}</span>}
+    </span>
+  );
+}
+
+function BanBadge({ playerId, position }) {
+  return (
+    <span className="inline-flex shrink-0 items-center gap-1">
+      <Badge variant="destructive" title="Left the game screen during this question, so it does not count for this player"><BanIcon />Banned</Badge>
+      <Button size="xs" variant="ghost" className="text-muted-foreground" onClick={() => api.partyUnban(playerId, position)}><Undo2Icon />Count it</Button>
     </span>
   );
 }
@@ -326,7 +352,7 @@ function LiveAnswers({ party, onKick }) {
             <li key={player.id} className="flex items-center gap-2 px-3 py-2">
               <OnlineDot isOnline={player.isOnline} />
               <div className="min-w-0 flex-1">
-                <p className="flex items-center gap-1.5 text-sm font-medium"><span className="truncate">{player.name}</span><AwayWarning timesAway={player.timesAway} /><PlayerReaction playerId={player.id} />
+                <p className="flex items-center gap-1.5 text-sm font-medium"><span className="truncate">{player.name}</span><AwayWarning timesAway={player.timesAway} /><DisconnectWarning times={player.timesDisconnected} /><PlayerReaction playerId={player.id} />
                   {showsAnswers && <StakeBadge stake={answer?.stake} pointSystem={party.rules.pointSystem} />}</p>
                 {showsAnswers && (
                   <p className={cn('truncate text-sm', !answer?.given && 'text-muted-foreground')} title={answer?.given}>
@@ -335,6 +361,7 @@ function LiveAnswers({ party, onKick }) {
                     {answer?.hostCall !== undefined && !answer.isDirectCall && <span className="ml-1.5 text-xs text-muted-foreground">· same as your call</span>}
                   </p>
                 )}
+                {player.isBanned && <div className="mt-1"><BanBadge playerId={player.id} position={party.index} /></div>}
               </div>
               {answer?.given && <CallButtons answer={{ ...answer, name: player.name }} position={party.index} />}
               <KickButton player={player} onKick={onKick} />
@@ -353,32 +380,59 @@ function LiveAnswers({ party, onKick }) {
   );
 }
 
-function PlayerAnswers({ party, answers = party.answers, position = party.index }) {
-  const answeredIds = new Set(answers.map(answer => answer.playerId));
+function AdjustField({ playerId, name, position, value }) {
+  const shown = value ? String(value) : '';
+  const [draft, setDraft] = useState(shown);
+  useEffect(() => setDraft(shown), [shown]);
+  const commit = () => {
+    const points = draft.trim() === '' ? 0 : Math.round(Number(draft));
+    if (Number.isFinite(points) && points !== value) api.partyAdjust(playerId, position, points);
+    else setDraft(shown);
+  };
+  return (
+    <Input type="number" min={-1000} max={1000} step={1} value={draft} placeholder="±0" aria-label={`Host adjustment for ${name}`}
+      title="Host adjustment: extra points for this question. Players see only their points, not that you changed them."
+      className={cn('h-7 w-16 text-right text-sm tabular-nums', value > 0 && 'text-emerald-600 dark:text-emerald-400', value < 0 && 'text-destructive')}
+      onChange={e => setDraft(e.target.value)} onBlur={commit} onKeyDown={e => e.key === 'Enter' && e.currentTarget.blur()} />
+  );
+}
+
+function PlayerAnswers({ party, answers = party.answers, position = party.index, silentPlayers = party.silentPlayers ?? [] }) {
   const timesAway = new Map(position === party.index ? party.players.map(player => [player.id, player.timesAway]) : []);
-  const silentPlayers = party.players.filter(player => !answeredIds.has(player.id));
+  const timesDisconnected = new Map(position === party.index ? party.players.map(player => [player.id, player.timesDisconnected]) : []);
   return (
     <div className="space-y-2">
-      <h2 className="text-sm font-medium text-muted-foreground">Answers</h2>
+      <h2 className="flex items-center gap-2 text-sm font-medium text-muted-foreground">Answers
+        <span className="ml-auto text-xs font-normal">Adjust: extra points for this question; players see only their points</span>
+      </h2>
       <ul className="divide-y rounded-lg border">
         {answers.map(answer => {
           const { label, Icon, className } = OUTCOMES[outcomeOf(answer)];
           return (
             <li key={answer.playerId} className="flex flex-wrap items-center gap-x-4 gap-y-1 px-4 py-2.5">
-              <span className="flex w-32 items-center gap-1.5 font-medium"><span className="truncate">{answer.name}</span><AwayWarning timesAway={timesAway.get(answer.playerId)} /></span>
+              <span className="flex w-32 items-center gap-1.5 font-medium"><span className="truncate">{answer.name}</span><AwayWarning timesAway={timesAway.get(answer.playerId)} /><DisconnectWarning times={timesDisconnected.get(answer.playerId)} /></span>
               <span className="flex min-w-0 flex-1 items-center gap-2"><span className="truncate">{answer.given || '—'}</span><StakeBadge stake={answer.stake} pointSystem={party.rules.pointSystem} /></span>
               <span className="w-14 text-right text-sm text-muted-foreground tabular-nums" title="Answer time">{answerSeconds(answer) != null && secondsLabel(answerSeconds(answer))}</span>
-              <span className={cn('flex items-center gap-1 text-sm font-semibold', className)}><Icon className="size-4" />{label}</span>
+              {answer.isBanned ? <BanBadge playerId={answer.playerId} position={position} />
+                : <span className={cn('flex items-center gap-1 text-sm font-semibold', className)}><Icon className="size-4" />{label}</span>}
               <span className="w-10 text-right text-sm tabular-nums">{pointsLabel(answer.points)}</span>
+              <AdjustField playerId={answer.playerId} name={answer.name} position={position} value={answer.adjustment} />
               <CallButtons answer={answer} position={position} isCalledNow={answer.isCorrect ? true : outcomeOf(answer) === 'wrong' ? false : null} />
             </li>
           );
         })}
-        {!answers.length && <li className="px-4 py-3 text-sm text-muted-foreground">Nobody answered.</li>}
+        {silentPlayers.map(player => (
+          <li key={player.playerId} className="flex flex-wrap items-center gap-x-4 gap-y-1 px-4 py-2.5">
+            <span className="flex w-32 items-center gap-1.5 font-medium"><span className="truncate">{player.name}</span><AwayWarning timesAway={timesAway.get(player.playerId)} /><DisconnectWarning times={timesDisconnected.get(player.playerId)} /></span>
+            <span className="min-w-0 flex-1 text-muted-foreground">No answer</span>
+            {player.isBanned && <BanBadge playerId={player.playerId} position={position} />}
+            <span className="w-10 text-right text-sm tabular-nums">{pointsLabel(player.points)}</span>
+            <AdjustField playerId={player.playerId} name={player.name} position={position} value={player.adjustment} />
+            <span className="w-[3.75rem]" />
+          </li>
+        ))}
+        {!answers.length && !silentPlayers.length && <li className="px-4 py-3 text-sm text-muted-foreground">Nobody answered.</li>}
       </ul>
-      {silentPlayers.length > 0 && answers.length > 0 && (
-        <p className="text-sm text-muted-foreground">No answer: {silentPlayers.map(player => player.name).join(', ')}</p>
-      )}
     </div>
   );
 }
@@ -407,11 +461,11 @@ function QuestionForHost({ party, onKick }) {
           <div className="space-y-4 rounded-lg border p-4">
             <p className="text-sm font-medium text-muted-foreground">Check the answers · question {party.previous.index + 1} of {party.total}</p>
             <CorrectAnswer question={party.previous.question} />
-            <PlayerAnswers party={party} answers={party.previous.answers} position={party.previous.index} />
+            <PlayerAnswers party={party} answers={party.previous.answers} position={party.previous.index} silentPlayers={party.previous.silentPlayers} />
           </div>
         )}
         <p className="text-sm font-medium text-muted-foreground">
-          {isUpNext ? `Up next · question ${party.index + 1} of ${party.total}` : `On the TV · question ${party.index + 1} of ${party.total}`}
+          {isUpNext ? `Up next · question ${party.index + 1} of ${party.total}` : `On the TV · question ${party.index + 1} of ${party.total}`}{listPointsLabel(party.rules.pointSystem, party.index)}
         </p>
         <QuestionOnScreen question={party.question} textClassName="text-xl" imageClassName="max-h-64" />
         <div className="space-y-2 rounded-lg border border-dashed p-4">
@@ -667,20 +721,32 @@ function PlayersInLobby({ players, onKick }) {
 const timesLabel = count => (count === 1 ? 'first time' : count === 2 ? 'second time' : `${count} times`);
 
 function useAwayToasts(party) {
-  const seen = useRef({ question: null, counts: new Map() });
+  const seen = useRef({ question: null, away: new Map(), disconnected: new Map() });
   useEffect(() => {
     const question = `${party.id}:${party.round}:${party.index}`;
-    if (seen.current.question !== question) seen.current = { question, counts: new Map() };
+    if (seen.current.question !== question) seen.current = { question, away: new Map(), disconnected: new Map() };
     for (const player of party.players) {
-      const before = seen.current.counts.get(player.id) ?? 0;
-      seen.current.counts.set(player.id, player.timesAway);
-      if (party.phase !== 'question' || player.timesAway <= before) continue;
-      toast.warning(`${player.name} left the game screen`, {
-        id: `away:${question}:${player.id}`,
-        description: `Switched to another tab or app, ${timesLabel(player.timesAway)} this question.`,
-        icon: <TriangleAlertIcon className="size-4 text-amber-500" />,
-        duration: 4000,
-      });
+      const awayBefore = seen.current.away.get(player.id) ?? 0;
+      const disconnectedBefore = seen.current.disconnected.get(player.id) ?? 0;
+      seen.current.away.set(player.id, player.timesAway);
+      seen.current.disconnected.set(player.id, player.timesDisconnected);
+      if (party.phase !== 'question') continue;
+      if (player.timesAway > awayBefore) {
+        toast.warning(`${player.name} left the game screen`, {
+          id: `away:${question}:${player.id}`,
+          description: `Switched to another tab or app, ${timesLabel(player.timesAway)} this question. It does not count for them unless you choose Count it.`,
+          icon: <TriangleAlertIcon className="size-4 text-amber-500" />,
+          duration: 4000,
+        });
+      }
+      if (player.timesDisconnected > disconnectedBefore) {
+        toast(`${player.name} lost the connection`, {
+          id: `disconnected:${question}:${player.id}`,
+          description: `Their phone dropped off the game, ${timesLabel(player.timesDisconnected)} this question. The question still counts for them.`,
+          icon: <WifiOffIcon className="size-4 text-muted-foreground" />,
+          duration: 4000,
+        });
+      }
     }
   }, [party]);
 }
@@ -730,7 +796,7 @@ export default function PartyScreen({ party, isVisible, lobbySettings, onBackToL
       <div className="flex h-full flex-col">
         <div className="flex shrink-0 flex-wrap items-center gap-x-4 gap-y-2 border-b px-6 py-3">
           <span className="flex min-w-0 items-center gap-2 text-sm font-medium"><UsersIcon className="size-4 shrink-0" /><span className="truncate">{party.title}</span></span>
-          {isInRound && <span className="text-sm">Round {party.round} · {party.phase === 'show' ? `Show page ${party.showPage.index + 1} of ${party.showPage.total}` : `Question ${party.index + 1} of ${party.total}`}</span>}
+          {isInRound && <span className="text-sm">Round {party.round} · {party.phase === 'show' ? `Show page ${party.showPage.index + 1} of ${party.showPage.total}` : `Question ${party.index + 1} of ${party.total}${listPointsLabel(party.rules.pointSystem, party.index)}`}</span>}
           <span className="text-sm text-muted-foreground">{party.players.length} {party.players.length === 1 ? 'player' : 'players'}</span>
           {party.urls[0] && isInRound && <span className="font-mono text-sm text-muted-foreground">Join: {hostOf(party.urls[0].url)}</span>}
           <div className="ml-auto flex gap-2">

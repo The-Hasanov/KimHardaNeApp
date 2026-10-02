@@ -111,8 +111,10 @@ npm test         # offline tests for the scraper, data sources, search, ranking,
   template* or *Game → Templates → Use* loads one. Templates point to their point systems and show pages, so editing one changes
   every template that uses it, and a point system or show page a template uses cannot be deleted. Each round uses a **point system**,
   picked in the round settings and kept under *Game → Point systems* (`point_systems` table, carried through updates;
-  a *Classic* one, correct +1, is made on first use). A point system has either *fixed points* (correct, wrong and no
-  answer, negative for a penalty) or a *point pool* (values such as 10, 20 and 30, each with its own wrong and no-answer
+  a *Classic* one, correct +1, is made on first use). A point system has *fixed points* (correct, wrong and no
+  answer, negative for a penalty), a *point list* (points, wrong and no answer for question 1, 2, 3… in order, shown on the
+  phone above the answer bar and next to the question number on the TV and host screens; a round cannot start when it has
+  more questions than the list has rows) or a *point pool* (values such as 10, 20 and 30, each with its own wrong and no-answer
   points and an optional number of uses per round): phones show the values as buttons above the answer bar, with the uses
   left, and a question without a pick plays for the lowest free value. A round cannot start when it has more questions
   than a limited pool has picks. Extras can be switched on together: a *streak bonus* from the nth correct answer in a
@@ -143,12 +145,19 @@ their score, and the old phone goes back to the name screen. A name without a PI
 loads its profile. The host's *Game* tab has *Play*, *Profiles* and *Leaderboard* sections: *Profiles* lists every profile
 with its PIN state, rounds and last game, and can *Clear PIN* (for a player who forgot it) or delete a profile, optionally
 with its all-time results. While a
-question runs, a phone that switches to another tab or app, or loses the connection, gets a warning sign on the
-host's screen only, with how many times, and a short toast there names the player as it happens (one toast per
-player and question, updated with the count); the count starts again at each question. *Message* in the party header sends a clue or
+question runs, a phone that switches to another tab or app is banned from that question: it scores 0 and counts as a
+miss (it breaks a streak, all or nothing and the all correct bonus), the phone shows a red *You left the game* notice until the
+next question starts and *Not counted* at the reveal, and the host sees a warning sign with how many times, a toast, and a
+*Banned* badge with *Count it* to lift the ban. A phone that loses the connection is not banned: the host sees a crossed-out
+Wi-Fi sign and a toast, and the phone shows *Connection lost · reconnecting…* and asks the player to stay on the page; if the
+player leaves the page while offline, the phone reports it on reconnect and that question is banned. The counts start again at
+each question. While deciding a closed question (at the reveal, or while checking answers at the end of the round) the host can
+give any player, with or without an answer, a *host adjustment*: extra points, positive or negative, for that question. It adds
+to the question's points, survives all or nothing, reaches the leaderboards and all-time results, and phones and the TV only
+see the points, never that the host changed them. *Message* in the party header sends a clue or
 an announcement (up to 300 characters) to every phone, never to the TV; players cannot reply. It shows at the top of each
-phone, which vibrates where it can, until the player closes it, the host clears or replaces it, or the next question starts. Phones have a small *Skip* button that must be held for a second (a ring fills while holding; a quick tap only shows "Hold to skip", so it is not pressed by accident) while the next question's number, a question or an answer is
-shown: when every online player has held it (hold again to take it back), the game moves on, unless the host has
+phone, which vibrates where it can, until the player closes it, the host clears or replaces it, or the next question starts. Phones have a *Swipe to skip* track (a round knob that follows the finger while the track fills; letting go before 80% springs it back, and a tap only shows "Swipe right to skip", so it is not pressed by accident; during a question it is a smaller *Swipe when done* track next to the answer status) while the next question's number, a question or an answer is
+shown, with how many players are ready above it: when every online player has swiped it (the knob stays at the end with a check; swiping it back takes it back), the game moves on, unless the host has
 paused, and never while the host checks answers (between questions when the answers show at the end of the round, or
 while an answer is still *not sure*): phones then show that the host is checking, and only the host moves on. Phones
 and the host see how many tapped, and the count starts again at each step. Every finished round adds

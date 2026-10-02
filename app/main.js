@@ -320,6 +320,8 @@ app.whenReady().then(() => {
   handle('party-close-answers', withParty(game => game.closeAnswers()));
   handle('party-next', withParty(game => game.next()));
   handle('party-finish-round', withParty(game => game.finish()));
+  handle('party-adjust', withParty((game, playerId, position, points) => game.adjust(playerId, position, points)));
+  handle('party-unban', withParty((game, playerId, position) => game.unban(playerId, position)));
   handle('party-set-correct', withParty((game, playerId, position, isCorrect) => game.setCorrect(playerId, position, isCorrect)));
   handle('party-kick', withParty((game, playerId) => game.kick(playerId)));
   handle('party-announce', withParty((game, text) => game.announce(text)));
@@ -333,7 +335,7 @@ app.whenReady().then(() => {
   });
   const pointSystemsWithSummary = () => {
     if (!store.pointSystems().length) store.savePointSystem(normalizePointSystem(CLASSIC_POINT_SYSTEM));
-    return store.pointSystems().map(system => ({ ...system, summary: summaryOf(normalizePointSystem(system)), usedBy: store.templatesUsingPointSystem(system.id) }));
+    return store.pointSystems().map(system => ({ ...system, ...normalizePointSystem(system), summary: summaryOf(normalizePointSystem(system)), usedBy: store.templatesUsingPointSystem(system.id) }));
   };
   handle('point-systems', pointSystemsWithSummary);
   handle('new-point-system', () => ({ ...normalizePointSystem(CLASSIC_POINT_SYSTEM), name: '' }));

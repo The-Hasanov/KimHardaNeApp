@@ -23,8 +23,8 @@ game from the app. Bring your own questions or install a question bank from *Dat
 - **Your own quiz show**: name the party and plan its rounds, each with its own questions, timers and point
   system. Put **show pages** (titles, text and pictures, each on screen for its own seconds) before or after any
   round to greet the players, explain the rules or announce a break. Save the whole show as a template and play it again.
-- **Point systems**: fixed points for right, wrong and blank answers, or a point pool where players pick 10, 20 or
-  30 for each question. Add a streak bonus, all or nothing, a bonus for an all-correct round, or let players
+- **Point systems**: fixed points for right, wrong and blank answers, a point list that gives each question its own
+  points in order (10, 50, 10, 50), or a point pool where players pick 10, 20 or 30 for each question. Add a streak bonus, all or nothing, a bonus for an all-correct round, or let players
   *Risk it* for more points.
 - **Player profiles**: every name keeps its preferences and all-time results. A player can protect their name with
   a 4-digit PIN and move to another phone without losing their score.

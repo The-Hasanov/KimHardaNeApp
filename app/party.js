@@ -83,9 +83,13 @@ class PartyGame {
     this.answers = [];
     this.stakes = [];
     this.rulings = [];
+    this.bans = [];
+    this.adjustments = [];
     this.closedCount = 0;
+    this.isJudging = false;
+    this.isFinishPending = false;
     this.skips = { key: null, playerIds: new Set() };
-    this.absences = { key: null, counts: new Map() };
+    this.absences = { key: null, left: new Map(), disconnected: new Map() };
     this.announcement = null;
     this.rules = { ...DEFAULT_RULES };
     this.phase = 'lobby';
@@ -183,7 +187,7 @@ class PartyGame {
 
   presenceChanged(playerId = null) {
     if (this.isClosed) return;
-    if (playerId && !this.isOnline(playerId)) this.recordAbsence(playerId);
+    if (playerId && !this.isOnline(playerId)) this.recordAbsence(playerId, 'disconnected');
     this.changed();
     this.skipIfEveryoneAgrees();
   }
@@ -199,6 +203,8 @@ class PartyGame {
     this.bankedScores.delete(playerId);
     this.bankedTimes.delete(playerId);
     for (const answers of this.answers) answers.delete(playerId);
+    for (const banned of this.bans) banned.delete(playerId);
+    for (const adjustments of this.adjustments) adjustments.delete(playerId);
     this.skips.playerIds.delete(playerId);
     for (const stream of this.streams) if (stream.playerId === playerId) stream.end({ phase: 'kicked' });
     this.changed();
@@ -255,7 +261,7 @@ class PartyGame {
       const stake = { ...this.stakes[position].get(player.id) };
       const answer = this.answers[position].get(player.id);
       if (system.mode === 'pool') stake.pick = pickFor(system, this.stakesBefore(player, position), stake.pick);
-      if (!answer || isBlank(answer.given)) stake.isRisked = false;
+      if (!answer || isBlank(answer.given) || this.isBanned(player.id, position)) stake.isRisked = false;
       this.stakes[position].set(player.id, stake);
     }
   }
@@ -274,7 +280,12 @@ class PartyGame {
     };
   }
 
+  isBanned(playerId, position) {
+    return !!this.bans[position]?.has(playerId);
+  }
+
   outcomeAt(player, position) {
+    if (this.isBanned(player.id, position)) return 'banned';
     const answer = this.answers[position]?.get(player.id);
     if (answer?.isCorrect === true) return 'correct';
     if (!answer || isBlank(answer.given)) return position < this.closedCount ? 'unanswered' : 'pending';
@@ -285,9 +296,10 @@ class PartyGame {
     const first = this.firstPositionOf(player);
     const entries = [];
     for (let position = first; position < upTo; position++) {
-      entries.push({ outcome: this.outcomeAt(player, position), stake: this.stakes[position]?.get(player.id) });
+      entries.push({ outcome: this.outcomeAt(player, position), stake: this.stakes[position]?.get(player.id), position, adjustment: this.adjustmentOf(player.id, position) });
     }
-    return scoreRound(this.rules.pointSystem, entries, { isComplete: upTo >= this.questions.length && this.questions.length > 0 });
+    const isComplete = this.questions.length > 0 && upTo >= this.questions.length && this.closedCount >= this.questions.length;
+    return scoreRound(this.rules.pointSystem, entries, { isComplete });
   }
 
   pointsAt(player, position) {
@@ -307,21 +319,43 @@ class PartyGame {
     return `${this.round}:${this.index}`;
   }
 
-  recordAbsence(playerId) {
+  recordAbsence(playerId, kind) {
     if (this.phase !== 'question' || !this.players.has(playerId)) return;
-    if (this.absences.key !== this.questionKey()) this.absences = { key: this.questionKey(), counts: new Map() };
-    this.absences.counts.set(playerId, (this.absences.counts.get(playerId) ?? 0) + 1);
+    if (this.absences.key !== this.questionKey()) this.absences = { key: this.questionKey(), left: new Map(), disconnected: new Map() };
+    this.absences[kind].set(playerId, (this.absences[kind].get(playerId) ?? 0) + 1);
+    if (kind === 'left') this.bans[this.index]?.add(playerId);
   }
 
-  reportAway(token) {
-    const player = this.playerByToken(token);
-    if (this.phase !== 'question') return;
-    this.recordAbsence(player.id);
+  adjustmentOf(playerId, position) {
+    return this.adjustments[position]?.get(playerId) ?? 0;
+  }
+
+  adjust(playerId, position, points) {
+    const isDeciding = PHASES_WITH_QUESTION.concat('waiting').includes(this.phase);
+    const player = this.players.get(playerId);
+    if (!isDeciding || !player || !(position < this.closedCount) || position < this.firstPositionOf(player)) throw new PartyError(409, 'Points can be adjusted only while deciding a closed question');
+    const clean = Math.max(-1000, Math.min(1000, Math.round(Number(points)) || 0));
+    if (clean) this.adjustments[position].set(playerId, clean);
+    else this.adjustments[position].delete(playerId);
     this.changed();
   }
 
-  absencesOf(playerId) {
-    return this.absences.key === this.questionKey() ? this.absences.counts.get(playerId) ?? 0 : 0;
+  unban(playerId, position) {
+    if (!this.bans[position]?.delete(playerId)) return;
+    this.changed();
+  }
+
+  reportAway(token, { round = this.round, index = this.index } = {}) {
+    const player = this.playerByToken(token);
+    if (round !== this.round || !Number.isInteger(index) || index < this.firstPositionOf(player)) return;
+    if (index === this.index && this.phase === 'question') this.recordAbsence(player.id, 'left');
+    else if (index < this.closedCount && PHASES_WITH_QUESTION.concat('waiting').includes(this.phase)) this.bans[index].add(player.id);
+    else return;
+    this.changed();
+  }
+
+  absencesOf(playerId, kind) {
+    return this.absences.key === this.questionKey() ? this.absences[kind].get(playerId) ?? 0 : 0;
   }
 
   announce(text) {
@@ -437,6 +471,8 @@ class PartyGame {
     this.answers = questions.map(() => new Map());
     this.stakes = questions.map(() => new Map());
     this.rulings = questions.map(() => []);
+    this.bans = questions.map(() => new Set());
+    this.adjustments = questions.map(() => new Map());
     this.closedCount = 0;
     this.rules = { secondsPerQuestion, secondsBetweenQuestions, secondsOnAnswer, pointSystem: system, pointsSummary: summaryOf(system), revealAtEnd: !!revealAtEnd };
     this.revealedCount = 0;
@@ -500,11 +536,14 @@ class PartyGame {
       this.bankedScores.clear();
       this.bankedTimes.clear();
       this.round = 0;
+      for (const player of this.players.values()) player.countsFrom = { round: 0, position: 0 };
     }
     this.questions = [];
     this.answers = [];
     this.stakes = [];
     this.rulings = [];
+    this.bans = [];
+    this.adjustments = [];
     this.showPages = [];
     this.showPagesAfter = [];
     this.isShowingAfterRound = false;
@@ -591,6 +630,7 @@ class PartyGame {
     const answers = this.answers;
     this.closedCount = position + 1;
     this.settleStakes(position);
+    this.isJudging = true;
     for (const answer of answers[position].values()) {
       if (answer.hostCall === undefined) {
         try {
@@ -602,6 +642,11 @@ class PartyGame {
       answer.hostCall ??= this.rulingFor(position, answer.given)?.isCorrect;
       answer.decidedByHost = answer.hostCall !== undefined;
       answer.isCorrect = answer.decidedByHost ? answer.hostCall : answer.verdict === 'correct';
+    }
+    this.isJudging = false;
+    if (this.isFinishPending) {
+      this.isFinishPending = false;
+      return this.finish();
     }
     if (this.phase !== 'judging' || this.answers !== answers) return;
     if (!this.rules.revealAtEnd) return this.showAnswer();
@@ -654,6 +699,10 @@ class PartyGame {
   finish() {
     if (this.isShowingAfterRound) return this.enterLobby(this.keepsScoresAfterShow);
     if (this.phase === 'lobby' || this.phase === 'finished') return;
+    if (this.isJudging) {
+      this.isFinishPending = true;
+      return;
+    }
     this.stopTimer();
     this.phase = 'finished';
     this.revealedCount = this.questions.length;
@@ -668,7 +717,7 @@ class PartyGame {
       for (let position = this.firstPositionOf(player); position < this.closedCount; position++) {
         const outcome = this.outcomeAt(player, position);
         if (outcome === 'pending') continue;
-        result[outcome] += 1;
+        result[outcome === 'banned' ? 'unanswered' : outcome] += 1;
         if (outcome === 'correct') result.correctMs += this.answers[position].get(player.id).ms ?? 0;
       }
       return result;
@@ -677,9 +726,9 @@ class PartyGame {
 
   correctTimes(playerId) {
     const banked = this.bankedTimes.get(playerId) ?? { ms: 0, count: 0 };
-    return this.answers.slice(0, this.revealedCount).reduce((times, answers) => {
+    return this.answers.slice(0, this.revealedCount).reduce((times, answers, position) => {
       const answer = answers.get(playerId);
-      return answer?.isCorrect && answer.ms != null ? { ms: times.ms + answer.ms, count: times.count + 1 } : times;
+      return answer?.isCorrect && answer.ms != null && !this.isBanned(playerId, position) ? { ms: times.ms + answer.ms, count: times.count + 1 } : times;
     }, banked);
   }
 
@@ -705,14 +754,17 @@ class PartyGame {
     const current = this.answers[this.index];
     const answerRows = position => [...(this.answers[position] ?? [])].map(([playerId, answer]) => ({
       playerId, name: this.players.get(playerId)?.name, points: this.pointsAt(this.players.get(playerId), position), ...answer,
-      stake: this.stakes[position]?.get(playerId) ?? null,
+      stake: this.stakes[position]?.get(playerId) ?? null, isBanned: this.isBanned(playerId, position), adjustment: this.adjustmentOf(playerId, position),
     }));
+    const silentRows = position => [...this.players.values()]
+      .filter(player => !this.answers[position]?.has(player.id) && position >= this.firstPositionOf(player))
+      .map(player => ({ playerId: player.id, name: player.name, points: this.pointsAt(player, position), isBanned: this.isBanned(player.id, position), adjustment: this.adjustmentOf(player.id, position) }));
     const checkedIndex = this.rules.revealAtEnd && this.phase === 'waiting' ? this.index - 1 : -1;
     return {
       id: this.id, title: this.title, phase: this.phase, round: this.round, index: this.index, total: this.questions.length,
       remainingMs: this.remainingMs(), isPaused: this.pausedRemainingMs != null, screen: this.screen,
       rules: this.rules, urls: this.urls, port: this.port, question: this.questions[this.index] ?? null,
-      players: [...this.players.values()].map(p => ({ id: p.id, name: p.name, hasPin: !!p.hasPin, hasAnswered: !!current?.has(p.id), isOnline: this.isOnline(p.id), timesAway: this.absencesOf(p.id) })),
+      players: [...this.players.values()].map(p => ({ id: p.id, name: p.name, hasPin: !!p.hasPin, hasAnswered: !!current?.has(p.id), isOnline: this.isOnline(p.id), timesAway: this.absencesOf(p.id, 'left'), timesDisconnected: this.absencesOf(p.id, 'disconnected'), isBanned: this.isBanned(p.id, this.index) })),
       skips: this.skipStatus(),
       announcement: this.announcement,
       areReactionsOn: this.areReactionsOn,
@@ -720,19 +772,20 @@ class PartyGame {
       isLastRound: this.isLastRound,
       isLeaderboardHidden: this.isLeaderboardHidden,
       answers: answerRows(this.index),
-      previous: checkedIndex >= 0 ? { index: checkedIndex, question: this.questions[checkedIndex], answers: answerRows(checkedIndex) } : null,
+      silentPlayers: this.index < this.closedCount ? silentRows(this.index) : [],
+      previous: checkedIndex >= 0 ? { index: checkedIndex, question: this.questions[checkedIndex], answers: answerRows(checkedIndex), silentPlayers: silentRows(checkedIndex) } : null,
       leaderboard: this.leaderboard(),
       showPage: this.showPageView(block => block.src),
     };
   }
 
   tvView() {
-    const { previous, skips, players, announcement, ...view } = this.hostView();
+    const { previous, skips, players, announcement, silentPlayers, ...view } = this.hostView();
     const question = PHASES_WITH_QUESTION.includes(this.phase) ? this.questions[this.index] : null;
     const isRevealed = this.phase === 'reveal';
     return {
       ...view,
-      players: players.map(({ timesAway, ...player }) => player),
+      players: players.map(({ timesAway, timesDisconnected, isBanned, ...player }) => player),
       question: question && {
         text: question.text, note_before: question.note_before, rekvizit_text: question.rekvizit_text,
         package_name: question.package_name, tournament_name: question.tournament_name, authors: question.authors,
@@ -742,7 +795,7 @@ class PartyGame {
           source_media_src: question.source_media_src && `/tv/answer-image?question=${this.index}`, source_media_kind: question.source_media_kind ?? 'image',
         }),
       },
-      answers: isRevealed ? view.answers.map(({ given, similarity, closestAnswer, hostCall, isDirectCall, ...result }) => result) : [],
+      answers: isRevealed ? view.answers.map(({ given, similarity, closestAnswer, hostCall, isDirectCall, adjustment, isBanned, ...result }) => result) : [],
       showPage: this.showPageView((_block, position) => `/tv/show-image?page=${this.showIndex}&block=${position}`),
       isNightMode: this.isNightMode,
     };
@@ -765,6 +818,7 @@ class PartyGame {
         secondsBetweenQuestions: this.rules.secondsBetweenQuestions, secondsOnAnswer: this.rules.secondsOnAnswer,
       },
       stake: this.stakeView(player),
+      isBanned: PHASES_WITH_QUESTION.includes(this.phase) && this.isBanned(player.id, this.index),
       me: { name: player.name, hasPin: !!player.hasPin, preferences: player.preferences, score: me?.score ?? 0, roundScore: me?.roundScore ?? 0, rank: me?.rank ?? null, avgSeconds: me?.avgSeconds ?? null },
       question: PHASES_WITH_QUESTION.includes(this.phase) ? {
         text: question.text, noteBefore: question.note_before, handoutText: question.rekvizit_text, hasHandoutImage: !!question.rekvizit_src, handoutKind: question.rekvizit_kind ?? 'image',
@@ -933,7 +987,8 @@ async function route(game, req, res) {
     return sendJson(res, 200, { preferences: game.setPreferences(body.token, body.preferences) });
   }
   if (req.method === 'POST' && url.pathname === '/away') {
-    game.reportAway((await readJson(req)).token);
+    const body = await readJson(req);
+    game.reportAway(body.token, { round: body.round, index: body.index });
     return sendJson(res, 200, { ok: true });
   }
   if (req.method === 'POST' && url.pathname === '/leave') {

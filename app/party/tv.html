@@ -303,13 +303,20 @@ function credits(question) {
   return [question.package_name || question.tournament_name, authors].filter(Boolean).join(' · ');
 }
 
+function listPointsLabel() {
+  var system = state.rules.pointSystem;
+  if (!system || system.mode !== 'list') return '';
+  var entry = system.list[state.index] || system.list[system.list.length - 1];
+  return ' · ' + entry.points + (entry.points === 1 ? ' point' : ' points');
+}
+
 function questionScreen() {
   var question = state.question;
   clockElement = el('span', 'clock numbers');
   progressElement = el('div', 'progress', el('div'));
   answeredElement = el('span', 'muted');
   return [
-    el('div', 'top', el('span', 'muted', 'Round ' + state.round + ' · Question ' + (state.index + 1) + ' of ' + state.total), answeredElement, clockElement),
+    el('div', 'top', el('span', 'muted', 'Round ' + state.round + ' · Question ' + (state.index + 1) + ' of ' + state.total + listPointsLabel()), answeredElement, clockElement),
     progressElement,
     el('div', 'question',
       el('div', 'words',

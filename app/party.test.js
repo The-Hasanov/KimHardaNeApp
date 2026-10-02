@@ -425,7 +425,7 @@ test('the party server lets a phone check its place, rename and skip', async () 
   }
 });
 
-test('leaving the page during a question warns the host only, counts each time and starts again at each question', async () => {
+test('leaving the page and losing the connection during a question are counted apart for the host and start again at each question', async () => {
   const game = newGame();
   const aysel = game.join('Aysel');
   const nicat = game.join('Nicat');
@@ -438,8 +438,9 @@ test('leaving the page during a question warns the host only, counts each time a
   game.reportAway(aysel.token);
   game.streams.delete(nicatStream);
   game.presenceChanged(nicat.id);
-  assert.deepEqual(game.hostView().players.map(p => [p.name, p.timesAway]), [['Aysel', 2], ['Nicat', 1]]);
+  assert.deepEqual(game.hostView().players.map(p => [p.name, p.timesAway, p.timesDisconnected, p.isBanned]), [['Aysel', 2, 0, true], ['Nicat', 0, 1, false]]);
   assert.ok(!JSON.stringify(game.tvView()).includes('timesAway'));
+  assert.ok(!JSON.stringify(game.tvView()).includes('timesDisconnected'));
   assert.ok(!('timesAway' in game.playerView(aysel)));
   await game.closeAnswers();
   game.reportAway(aysel.token);
@@ -839,6 +840,127 @@ test('a round can hide the leaderboard from players until the next round; the TV
   game.startRound({ ...ROUND, showsLeaderboard: false });
   game.finish();
   assert.deepEqual([game.playerView(aysel).isLeaderboardHidden, game.playerView(aysel).leaderboard.length], [false, 1]);
+});
+
+test('ending a round early gives no all correct bonus, and the leaderboard matches the saved results', async () => {
+  const reports = [];
+  const game = new PartyGame({ judge: judgeByText, onRoundFinished: results => reports.push(results) });
+  const aysel = game.join('Aysel');
+  game.startRound({ ...ROUND, pointSystem: { name: 'Bonus', simple: { correct: 1 }, perfectBonus: { isOn: true, points: 5 } } });
+  game.submitAnswer(aysel.token, 'Bakı');
+  await game.closeAnswers();
+  game.finish();
+  assert.equal(game.leaderboard()[0].score, 1);
+  assert.equal(reports[0][0].points, 1);
+});
+
+test('a new game counts every question for players who joined late in the game before', async () => {
+  const game = newGame();
+  game.join('Aysel');
+  game.startRound(ROUND);
+  await game.closeAnswers();
+  game.next();
+  const murad = game.join('Murad');
+  game.finish();
+  game.backToLobby({ keepScores: false });
+  game.startRound(ROUND);
+  game.submitAnswer(murad.token, 'Bakı');
+  await game.closeAnswers();
+  assert.equal(game.leaderboard().find(entry => entry.name === 'Murad').score, 1);
+});
+
+test('ending a round while answers are being checked saves them once they are checked', async () => {
+  const reports = [];
+  let release;
+  const judge = () => new Promise(resolve => { release = () => resolve({ verdict: 'correct', similarity: null, closestAnswer: null }); });
+  const game = new PartyGame({ judge, onRoundFinished: results => reports.push(results) });
+  const aysel = game.join('Aysel');
+  game.startRound(ROUND);
+  game.submitAnswer(aysel.token, 'Bakı');
+  const closing = game.closeAnswers();
+  game.finish();
+  assert.equal(game.phase, 'judging');
+  release();
+  await closing;
+  assert.equal(game.phase, 'finished');
+  assert.equal(game.leaderboard()[0].score, 1);
+  assert.deepEqual(reports[0].map(({ name, points, correct }) => ({ name, points, correct })), [{ name: 'Aysel', points: 1, correct: 1 }]);
+});
+
+test('leaving the game during a question bans the player from it until the host counts it again', async () => {
+  const reports = [];
+  const game = new PartyGame({ judge: judgeByText, onRoundFinished: results => reports.push(results) });
+  const aysel = game.join('Aysel');
+  const murad = game.join('Murad');
+  game.startRound(ROUND);
+  game.submitAnswer(aysel.token, 'Bakı');
+  game.submitAnswer(murad.token, 'Bakı');
+  game.reportAway(aysel.token);
+  assert.equal(game.playerView(aysel).isBanned, true);
+  assert.equal(game.playerView(murad).isBanned, false);
+  assert.equal(game.hostView().players.find(player => player.id === aysel.id).isBanned, true);
+  await game.closeAnswers();
+  assert.equal(game.playerView(aysel).isBanned, true);
+  assert.deepEqual(game.leaderboard().map(({ name, score, avgSeconds }) => ({ name, score, hasTime: avgSeconds != null })), [{ name: 'Murad', score: 1, hasTime: true }, { name: 'Aysel', score: 0, hasTime: false }]);
+  assert.equal(game.hostView().answers.find(answer => answer.playerId === aysel.id).isBanned, true);
+  game.next();
+  assert.equal(game.playerView(aysel).isBanned, false);
+  game.submitAnswer(aysel.token, 'Nizami Gəncəvi');
+  game.reportAway(aysel.token);
+  game.unban(aysel.id, 1);
+  await game.closeAnswers();
+  game.finish();
+  assert.deepEqual(reports[0].find(result => result.name === 'Aysel'), { name: 'Aysel', points: 1, correct: 1, wrong: 0, unanswered: 1, correctMs: reports[0].find(result => result.name === 'Aysel').correctMs });
+});
+
+test('a phone that left while offline reports it on reconnect, and that question is banned', async () => {
+  const game = newGame();
+  const aysel = game.join('Aysel');
+  game.startRound(ROUND);
+  game.submitAnswer(aysel.token, 'Bakı');
+  await game.closeAnswers();
+  game.next();
+  game.reportAway(aysel.token, { round: game.round, index: 0 });
+  assert.equal(game.isBanned(aysel.id, 0), true);
+  assert.equal(game.hostView().players[0].timesAway, 0);
+  assert.equal(game.leaderboard()[0].score, 0);
+  game.reportAway(aysel.token, { round: game.round - 1, index: 1 });
+  game.reportAway(aysel.token, { round: game.round, index: 5 });
+  assert.equal(game.isBanned(aysel.id, 1), false);
+});
+
+test('the host can adjust any player on a closed question, and phones and the TV never see the adjustment', async () => {
+  const reports = [];
+  const game = new PartyGame({ judge: judgeByText, onRoundFinished: results => reports.push(results) });
+  const aysel = game.join('Aysel');
+  const murad = game.join('Murad');
+  game.startRound(ROUND);
+  game.submitAnswer(aysel.token, 'Bakı');
+  assert.throws(() => game.adjust(aysel.id, 0, 5), /closed question/);
+  await game.closeAnswers();
+  game.adjust(aysel.id, 0, 5);
+  game.adjust(murad.id, 0, -3);
+  assert.equal(game.hostView().answers[0].adjustment, 5);
+  assert.deepEqual(game.hostView().silentPlayers.map(({ name, points, adjustment }) => ({ name, points, adjustment })), [{ name: 'Murad', points: -3, adjustment: -3 }]);
+  assert.equal(game.playerView(aysel).reveal.points, 6);
+  assert.ok(!JSON.stringify(game.playerView(aysel)).includes('adjust'));
+  assert.ok(!JSON.stringify(game.tvView()).includes('adjust'));
+  assert.ok(!JSON.stringify(game.tvView()).includes('silentPlayers'));
+  assert.deepEqual(game.leaderboard().map(({ name, score }) => [name, score]), [['Aysel', 6], ['Murad', -3]]);
+  game.adjust(murad.id, 0, 0);
+  assert.equal(game.leaderboard().find(entry => entry.name === 'Murad').score, 0);
+  game.finish();
+  assert.throws(() => game.adjust(aysel.id, 0, 1), /closed question/);
+  assert.equal(reports[0].find(result => result.name === 'Aysel').points, 6);
+});
+
+test('leaving outside a question does not ban', () => {
+  const game = newGame();
+  const aysel = game.join('Aysel');
+  game.startRound({ ...ROUND, secondsBetweenQuestions: 5 });
+  game.reportAway(aysel.token);
+  game.skipWait();
+  assert.equal(game.playerView(aysel).isBanned, false);
 });
 
 test('phones and the TV page block selecting, copying and saving questions; only the answer box takes a selection', () => {

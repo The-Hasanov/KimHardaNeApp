@@ -18,12 +18,16 @@ import { NumberField, pointsLabel, withoutIpcPrefix } from './gameShared';
 
 const { api } = window;
 const MAX_POOL_VALUES = 8;
+const MAX_LIST_VALUES = 50;
 const POINTS = { min: -1000, max: 1000 };
 
 export function roundProblemOf(system, questionCount) {
+  if (system?.mode === 'list') {
+    return questionCount > system.list.length ? `This round has ${questionCount} questions, but “${system.name}” has points for only ${system.list.length}. Add points to the list or play fewer questions.` : null;
+  }
   if (!system || system.mode !== 'pool' || system.pool.some(entry => entry.uses == null)) return null;
   const picks = system.pool.reduce((sum, entry) => sum + entry.uses, 0);
-  return questionCount > picks ? `This round has ${questionCount} questions, but “${system.name}” allows only ${picks} picks.` : null;
+  return questionCount > picks ? `This round has ${questionCount} questions, but “${system.name}” allows only ${picks} picks. Add uses to the pool or play fewer questions.` : null;
 }
 
 export function usePointSystems() {
@@ -59,7 +63,7 @@ export function PointSystemSelect({ id = 'point-system', pointSystems, value, on
         {onManage && <Button variant="ghost" size="sm" className="text-muted-foreground" onClick={onManage}><PencilIcon />Edit point systems</Button>}
       </div>
       {problem && (
-        <p className="flex items-center gap-2 text-sm text-destructive"><TriangleAlertIcon className="size-4 shrink-0" />{problem} Add uses to the pool or play fewer questions.</p>
+        <p className="flex items-center gap-2 text-sm text-destructive"><TriangleAlertIcon className="size-4 shrink-0" />{problem}</p>
       )}
     </div>
   );
@@ -83,26 +87,58 @@ function ExtraCard({ id, Icon, title, description, isOn, onToggle, isDisabled = 
 
 const Example = ({ children }) => <p className="basis-full text-sm text-muted-foreground">{children}</p>;
 
+const listedPoints = draft => draft.list.map(entry => entry.points);
+
 function streakExample(draft) {
-  const base = draft.mode === 'pool' ? null : draft.simple.correct;
   const { from, bonus, isGrowing } = draft.streak;
-  const length = from + 2;
+  const length = draft.mode === 'list' ? draft.list.length : from + 2;
   const bonuses = Array.from({ length }, (_, i) => (i + 1 >= from ? bonus * (isGrowing ? i + 2 - from : 1) : 0));
-  if (base == null) return `Correct answers ${from} to ${length} in a row add ${bonuses.slice(from - 1).map(pointsLabel).join(', ')} on top of the picked points. A wrong or missing answer starts the count again.`;
-  const points = bonuses.map(extra => base + extra);
+  if (draft.mode === 'list' && length < from) return `Your list has ${length} ${length === 1 ? 'question' : 'questions'}, so no round reaches ${from} correct in a row.`;
+  if (draft.mode === 'pool') return `Correct answers ${from} to ${length} in a row add ${bonuses.slice(from - 1).map(pointsLabel).join(', ')} on top of the picked points. A wrong or missing answer starts the count again.`;
+  const points = bonuses.map((extra, i) => (draft.mode === 'list' ? draft.list[i].points : draft.simple.correct) + extra);
   return `${length} correct in a row: ${points.join(', ')} = ${points.reduce((sum, value) => sum + value, 0)}. A wrong or missing answer starts the count again.`;
 }
 
 function allOrNothingExample(draft) {
-  const all = draft.mode === 'pool' ? 'the picked points' : `5 × ${draft.simple.correct} = ${5 * draft.simple.correct}`;
-  return `5 questions, all correct: ${all}. One wrong answer${draft.allOrNothing.unansweredCountsAsWrong ? ' or no answer' : ''}: 0 for the round.`;
+  const count = draft.mode === 'list' ? draft.list.length : 5;
+  const sum = listedPoints(draft).reduce((total, points) => total + points, 0);
+  const all = draft.mode === 'pool' ? 'the picked points' : draft.mode === 'list' ? `${listedPoints(draft).join(' + ')} = ${sum}` : `5 × ${draft.simple.correct} = ${5 * draft.simple.correct}`;
+  return `${count} ${count === 1 ? 'question' : 'questions'}, all correct: ${all}. One wrong answer${draft.allOrNothing.unansweredCountsAsWrong ? ' or no answer' : ''}: 0 for the round.`;
 }
 
 function perfectBonusExample(draft) {
   const bonus = pointsLabel(draft.perfectBonus.points);
   if (draft.mode === 'pool') return `A round with every answer right gets the picked points ${bonus}.`;
-  const earned = 5 * draft.simple.correct;
-  return `5 questions, all correct: ${earned} ${bonus} = ${earned + draft.perfectBonus.points}. One wrong${draft.allOrNothing.isOn && !draft.allOrNothing.unansweredCountsAsWrong ? '' : ' or missing'} answer and there is no bonus.`;
+  const count = draft.mode === 'list' ? draft.list.length : 5;
+  const earned = draft.mode === 'list' ? listedPoints(draft).reduce((total, points) => total + points, 0) : 5 * draft.simple.correct;
+  return `${count} ${count === 1 ? 'question' : 'questions'}, all correct: ${earned} ${bonus} = ${earned + draft.perfectBonus.points}. One wrong${draft.allOrNothing.isOn && !draft.allOrNothing.unansweredCountsAsWrong ? '' : ' or missing'} answer and there is no bonus.`;
+}
+
+function ListEditor({ list, onChange }) {
+  const update = (index, changes) => onChange(list.map((entry, i) => (i === index ? { ...entry, ...changes } : entry)));
+  const add = () => onChange([...list, { ...list.at(-1) }]);
+  return (
+    <div className="basis-full space-y-2">
+      <div className="grid grid-cols-[5.5rem_repeat(3,6rem)_2rem] gap-x-3 text-sm font-medium">
+        <span>Question</span><span>Points</span><span>Wrong</span><span>No answer</span>
+      </div>
+      {list.map((entry, index) => (
+        <div key={index} className="grid grid-cols-[5.5rem_repeat(3,6rem)_2rem] items-center gap-x-3">
+          <span className="text-sm text-muted-foreground tabular-nums">Question {index + 1}</span>
+          <NumberField id={`list-points-${index}`} placeholder="Points" value={entry.points} min={0} max={POINTS.max} className="w-24" onChange={points => update(index, { points })} />
+          <NumberField id={`list-wrong-${index}`} placeholder="Wrong" value={entry.wrong} min={POINTS.min} max={POINTS.max} className="w-24" onChange={wrong => update(index, { wrong })} />
+          <NumberField id={`list-unanswered-${index}`} placeholder="No answer" value={entry.unanswered} min={POINTS.min} max={POINTS.max} className="w-24"
+            onChange={unanswered => update(index, { unanswered })} />
+          <Button size="icon-sm" variant="ghost" className="text-muted-foreground" aria-label={`Remove question ${index + 1}`} disabled={list.length <= 1}
+            onClick={() => onChange(list.filter((_entry, i) => i !== index))}><XIcon /></Button>
+        </div>
+      ))}
+      <div className="flex flex-wrap items-center gap-3 pt-1">
+        <Button size="sm" variant="outline" onClick={add} disabled={list.length >= MAX_LIST_VALUES}><PlusIcon />Add question</Button>
+        <span className="text-sm text-muted-foreground">Questions score in this order. A round needs a row for each of its questions.</span>
+      </div>
+    </div>
+  );
 }
 
 function PoolEditor({ pool, onChange }) {
@@ -147,7 +183,7 @@ function PointSystemEditor({ system, onOpenChange, onSaved }) {
   }, [system]);
   if (!draft) return null;
   const set = (key, changes) => setDraft(current => ({ ...current, [key]: typeof changes === 'object' && !Array.isArray(changes) ? { ...current[key], ...changes } : changes }));
-  const hasDuplicates = new Set(draft.pool.map(entry => entry.points)).size !== draft.pool.length;
+  const hasDuplicates = draft.mode === 'pool' && new Set(draft.pool.map(entry => entry.points)).size !== draft.pool.length;
   const save = async () => {
     try {
       const { id, pointSystems } = await api.savePointSystem(draft);
@@ -177,6 +213,7 @@ function PointSystemEditor({ system, onOpenChange, onSaved }) {
               <Tabs value={draft.mode} onValueChange={mode => set('mode', mode)} className="ml-auto">
                 <TabsList>
                   <TabsTrigger value="simple" className="px-3">Fixed points</TabsTrigger>
+                  <TabsTrigger value="list" className="px-3">Point list</TabsTrigger>
                   <TabsTrigger value="pool" className="px-3">Point pool</TabsTrigger>
                 </TabsList>
               </Tabs>
@@ -188,7 +225,8 @@ function PointSystemEditor({ system, onOpenChange, onSaved }) {
                 <NumberField id="simple-unanswered" label="No answer" value={draft.simple.unanswered} {...POINTS} onChange={unanswered => set('simple', { unanswered })} />
                 <Example>Use a negative number as a penalty.</Example>
               </div>
-            ) : <PoolEditor pool={draft.pool} onChange={pool => set('pool', pool)} />}
+            ) : draft.mode === 'list' ? <ListEditor list={draft.list} onChange={list => set('list', list)} />
+              : <PoolEditor pool={draft.pool} onChange={pool => set('pool', pool)} />}
           </div>
           <ExtraCard id="streak" Icon={FlameIcon} title="Streak bonus" description="Extra points for correct answers in a row."
             isOn={draft.streak.isOn} onToggle={isOn => set('streak', { isOn })}>
@@ -216,8 +254,8 @@ function PointSystemEditor({ system, onOpenChange, onSaved }) {
             <Example>{perfectBonusExample(draft)}</Example>
           </ExtraCard>
           <ExtraCard id="risk" Icon={DicesIcon} title="Risk" description="Players can risk an answer: more points when right, a bigger loss when wrong."
-            isOn={draft.risk.isOn} onToggle={isOn => set('risk', { isOn })} isDisabled={draft.mode === 'pool'}
-            disabledReason="Not with a point pool: picking a high value already is a risk.">
+            isOn={draft.risk.isOn} onToggle={isOn => set('risk', { isOn })} isDisabled={draft.mode !== 'simple'}
+            disabledReason={draft.mode === 'pool' ? 'Not with a point pool: picking a high value already is a risk.' : 'Not with a point list: each question already has its own points.'}>
             <NumberField id="risk-correct" label="Risked correct" value={draft.risk.correct} {...POINTS} onChange={correct => set('risk', { correct })} />
             <NumberField id="risk-wrong" label="Risked wrong" value={draft.risk.wrong} {...POINTS} onChange={wrong => set('risk', { wrong })} />
             <NumberField id="risk-limit" label="Risks per round" value={draft.risk.limit} min={1} max={99} placeholder="Any" isOptional onChange={limit => set('risk', { limit })} />

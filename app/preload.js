@@ -36,6 +36,8 @@ contextBridge.exposeInMainWorld('api', {
   partyCloseAnswers: () => ipcRenderer.invoke('party-close-answers'),
   partyNext: () => ipcRenderer.invoke('party-next'),
   partyFinishRound: () => ipcRenderer.invoke('party-finish-round'),
+  partyAdjust: (playerId, position, points) => ipcRenderer.invoke('party-adjust', playerId, position, points),
+  partyUnban: (playerId, position) => ipcRenderer.invoke('party-unban', playerId, position),
   partySetCorrect: (playerId, position, isCorrect) => ipcRenderer.invoke('party-set-correct', playerId, position, isCorrect),
   partyKick: playerId => ipcRenderer.invoke('party-kick', playerId),
   partyAnnounce: text => ipcRenderer.invoke('party-announce', text),

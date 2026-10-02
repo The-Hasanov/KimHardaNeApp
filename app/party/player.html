@@ -42,22 +42,6 @@ header { position: sticky; top: 0; z-index: 3; margin: -16px -16px 0; padding: 1
 .time-fill { height: 100%; width: 100%; background: var(--primary); transform-origin: left; transition: transform .2s linear, background-color .3s; }
 .time-fill.low { background: var(--warn); }
 .dock { position: sticky; bottom: 0; z-index: 3; margin: auto -16px calc(-24px - env(safe-area-inset-bottom)); padding: 12px 16px calc(12px + env(safe-area-inset-bottom)); background: linear-gradient(to bottom, transparent, var(--bg) 16px); }
-.skip { width: 100%; display: flex; flex-direction: column; gap: 10px; padding: 12px 14px; border-radius: 14px; background: var(--card); color: var(--fg); border: 1px solid var(--border); text-align: left; transition: background-color .2s, border-color .2s, transform .1s; -webkit-tap-highlight-color: transparent; }
-.skip:active { transform: scale(.98); }
-.skip:disabled { opacity: 1; cursor: default; transform: none; }
-.skip:disabled .skip-title { color: var(--muted); }
-.skip-main { display: flex; align-items: center; gap: 12px; }
-.skip-icon { flex: none; width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center; background: var(--bg); border: 1px solid var(--border); }
-.skip-text { flex: 1; min-width: 0; display: flex; flex-direction: column; line-height: 1.3; }
-.skip-title { font-size: 16px; font-weight: 700; }
-.skip-hint { font-size: 13px; font-weight: 500; color: var(--muted); }
-.skip-count { font-size: 15px; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--muted); }
-.skip-segments { display: flex; gap: 4px; height: 6px; }
-.skip-segments i { flex: 1; border-radius: 3px; background: var(--border); transition: background-color .25s; }
-.skip-segments i.on { background: var(--good); }
-.skip.on { border-color: color-mix(in srgb, var(--good) 55%, transparent); background: color-mix(in srgb, var(--good) 12%, var(--card)); }
-.skip.on .skip-icon { background: var(--good); border-color: var(--good); color: var(--bg); }
-.skip.on .skip-count { color: var(--good); }
 .center { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; gap: 8px; }
 h1 { font-size: 24px; line-height: 1.25; margin: 0; }
 .muted { color: var(--muted); }
@@ -82,10 +66,36 @@ button:disabled { opacity: .5; }
 .error { color: var(--bad); font-size: 14px; min-height: 1.5em; margin: 0; }
 .link { background: none; color: inherit; padding: 0; font-weight: inherit; text-decoration: underline dotted; text-underline-offset: 3px; border-radius: 0; }
 .ghost { display: inline-flex; align-items: center; gap: 6px; background: var(--card); color: var(--fg); border: 1px solid var(--border); border-radius: 999px; padding: 8px 14px; font-size: 14px; }
-.banner { position: fixed; left: 50%; top: 12px; transform: translateX(-50%); display: flex; align-items: center; gap: 8px; padding: 8px 14px; border-radius: 999px; font-size: 14px; font-weight: 600; background: var(--warn); color: #000; z-index: 5; box-shadow: 0 4px 16px rgb(0 0 0 / .25); }
+.banner { position: fixed; left: 50%; top: 12px; transform: translateX(-50%); width: min(420px, calc(100% - 24px)); display: flex; flex-direction: column; gap: 2px; padding: 10px 14px; border-radius: 14px; font-size: 14px; font-weight: 600; background: var(--warn); color: #000; z-index: 5; box-shadow: 0 4px 16px rgb(0 0 0 / .25); }
+.banner-title { display: flex; align-items: center; gap: 8px; font-size: 15px; font-weight: 700; }
+.banner-text { font-weight: 500; }
 .banner[hidden] { display: none; }
 .dot-pulse { width: 8px; height: 8px; border-radius: 50%; background: currentColor; animation: pulse 1s ease-in-out infinite; }
 @keyframes pulse { 50% { opacity: .3; } }
+.swipe-dock { display: flex; flex-direction: column; gap: 8px; }
+.swipe-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding: 0 6px; }
+.swipe-title { font-size: 15px; font-weight: 700; }
+.swipe-count { font-size: 13px; font-weight: 600; color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.swipe { --swipe: 0; --knob: 52px; position: relative; display: block; width: 100%; height: calc(var(--knob) + 8px); padding: 0; border-radius: 999px; background: var(--card); border: 1px solid var(--border); color: var(--fg); overflow: hidden; touch-action: pan-y; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent; transition: background-color .25s, border-color .25s; }
+.swipe:disabled { opacity: 1; cursor: default; }
+.swipe-small { --knob: 36px; width: 196px; flex: none; }
+.swipe-fill { position: absolute; top: 0; bottom: 0; left: 0; width: calc(var(--knob) + 8px + (100% - var(--knob) - 8px) * var(--swipe)); border-radius: inherit; background: color-mix(in srgb, var(--good) 22%, transparent); }
+.swipe-knob { position: absolute; top: 3px; left: calc(3px + (100% - var(--knob) - 8px) * var(--swipe)); width: var(--knob); height: var(--knob); border-radius: 50%; display: grid; place-items: center; background: var(--fg); color: var(--bg); box-shadow: 0 2px 10px rgb(0 0 0 / .28); }
+.swipe-knob svg { width: 45%; height: 45%; }
+.swipe-label { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; padding: 0 16px 0 calc(var(--knob) + 12px); font-size: 16px; font-weight: 700; white-space: nowrap; opacity: calc(1 - var(--swipe) * 1.8); pointer-events: none; }
+.swipe-small .swipe-label { font-size: 13px; padding: 0 12px 0 calc(var(--knob) + 8px); }
+.swipe-label span { background: linear-gradient(100deg, var(--muted) 35%, var(--fg) 50%, var(--muted) 65%) 0 0 / 250% 100%; -webkit-background-clip: text; background-clip: text; color: transparent; animation: shimmer 2.6s linear infinite; }
+@keyframes shimmer { from { background-position: 100% 0; } to { background-position: -150% 0; } }
+.swipe:not(.swiping) .swipe-knob, .swipe:not(.swiping) .swipe-fill { transition: left .28s cubic-bezier(.3, 1.3, .5, 1), width .28s cubic-bezier(.3, 1.3, .5, 1), background-color .25s; }
+.swipe.on { background: color-mix(in srgb, var(--good) 14%, var(--card)); border-color: color-mix(in srgb, var(--good) 55%, transparent); }
+.swipe.on .swipe-fill { background: transparent; }
+.swipe.on .swipe-knob { background: var(--good); color: var(--bg); }
+.swipe.on .swipe-label { padding: 0 calc(var(--knob) + 12px) 0 16px; opacity: calc(var(--swipe) * 1.8 - .8); }
+.swipe.on .swipe-label span, .swipe:disabled .swipe-label span { animation: none; background: none; color: var(--muted); }
+.swipe.on .swipe-label span { color: var(--good); }
+.swipe:disabled .swipe-knob { background: var(--border); color: var(--muted); box-shadow: none; }
+.swipe:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+@media (prefers-reduced-motion: reduce) { .swipe-label span { animation: none; } }
 .overlay { position: fixed; inset: 0; background: rgb(0 0 0 / .5); display: flex; align-items: center; justify-content: center; padding: 16px; z-index: 10; }
 .overlay .card { background: var(--bg); width: 100%; max-width: 420px; }
 .row { display: flex; gap: 8px; }
@@ -99,6 +109,9 @@ button:disabled { opacity: .5; }
 .notice-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
 .notice-label { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; opacity: .7; }
 .notice-text { font-size: 17px; font-weight: 600; line-height: 1.35; overflow-wrap: anywhere; }
+.ban-notice { background: #b91c1c; color: #fff; }
+.ban-notice .notice-icon { background: rgb(255 255 255 / .18); }
+.ban-notice .notice-icon svg { width: 18px; height: 18px; }
 .notice-close { flex: none; width: 32px; height: 32px; padding: 0; display: grid; place-items: center; border-radius: 50%; background: transparent; color: inherit; opacity: .7; }
 .react-toggle { width: 32px; flex: none; padding: 0; justify-content: center; }
 .react-toggle.on { background: var(--primary); border-color: var(--primary); color: var(--primary-fg); }
@@ -141,26 +154,6 @@ header .bar { gap: 6px; }
 .composer-send svg { width: 22px; height: 22px; }
 .composer-meta { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 30px; padding: 0 4px 0 8px; }
 .composer-status { font-size: 13px; min-height: 0; }
-.skip-chip { flex: none; display: inline-flex; align-items: center; gap: 6px; padding: 5px 12px; border-radius: 99px; border: 1px solid var(--border); background: var(--card); color: var(--fg); font-size: 13px; font-weight: 700; }
-.skip-chip[hidden], .react-toggle[hidden] { display: none; }
-.skip-chip svg { width: 14px; height: 14px; }
-.skip-chip .count { color: var(--muted); font-weight: 600; }
-.skip-chip.on { background: color-mix(in srgb, var(--good) 16%, var(--card)); border-color: color-mix(in srgb, var(--good) 55%, transparent); color: var(--good); }
-.skip-chip.on .count { color: var(--good); }
-.hold { touch-action: manipulation; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
-.hold-icon { position: relative; flex: none; display: grid; place-items: center; }
-.hold-icon > :not(.hold-ring) { grid-area: 1 / 1; }
-.hold-ring { grid-area: 1 / 1; width: 44px; height: 44px; margin: -4px; transform: rotate(-90deg); pointer-events: none; }
-.hold-ring circle { fill: none; stroke: var(--good); stroke-width: 3; stroke-linecap: round; stroke-dasharray: 100; stroke-dashoffset: 100; opacity: 0; transition: none; }
-.hold.holding .hold-ring circle { stroke-dashoffset: 0; opacity: 1; transition: stroke-dashoffset 1s linear; }
-.skip.hold.holding, .skip-chip.hold.holding { transform: scale(.97); }
-.chip-icon { display: grid; place-items: center; width: 18px; height: 18px; }
-.skip-chip.hold { position: relative; overflow: hidden; isolation: isolate; gap: 9px; padding: 8px 16px 8px 12px; font-size: 14px; }
-.skip.hold, .skip-chip.hold { position: relative; overflow: hidden; isolation: isolate; }
-.skip.hold::before, .skip-chip.hold::before { content: ''; position: absolute; inset: 0; z-index: -1; background: color-mix(in srgb, var(--good) 24%, transparent); transform: scaleX(0); transform-origin: left; transition: none; }
-.skip.hold.holding::before, .skip-chip.hold.holding::before { transform: scaleX(1); transition: transform 1s linear; }
-.skip-chip .hold-ring { width: 28px; height: 28px; margin: -5px; }
-.skip-chip .hold-ring circle { stroke-width: 3.5; }
 .danger { background: color-mix(in srgb, var(--bad) 12%, transparent); color: var(--bad); border: 1px solid color-mix(in srgb, var(--bad) 45%, transparent); }
 .sheet-overlay { align-items: flex-end; padding: 0; }
 .sheet { max-width: 640px !important; border-radius: 20px 20px 0 0; border-bottom: 0; padding: 16px 16px calc(24px + env(safe-area-inset-bottom)); gap: 16px; animation: rise .2s ease-out; }
@@ -182,6 +175,7 @@ header .bar { gap: 6px; }
 .stake-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
 .stake-label { font-size: 12px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
 .stake-hint { font-size: 13px; font-weight: 500; color: var(--muted); text-align: right; }
+.list-worth { font-size: 22px; font-weight: 800; font-variant-numeric: tabular-nums; line-height: 1.1; }
 .pool-picks { display: flex; gap: 8px; }
 .pool-pick { flex: 1; min-width: 0; min-height: 52px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px; padding: 6px 4px; border-radius: 12px; border: 1px solid var(--border); background: var(--card); color: var(--fg); }
 .pool-pick .pool-points { font-size: 20px; font-weight: 800; font-variant-numeric: tabular-nums; line-height: 1.1; }
@@ -252,7 +246,7 @@ ol.board .time { font-size: 13px; color: var(--muted); font-variant-numeric: tab
   .composer-emojis { justify-content: center; gap: 12px; }
 }
 button:not(:disabled):hover { filter: brightness(1.08); }
-button:focus-visible, .skip:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+button:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
 </style>
 </head>
 <body>
@@ -269,7 +263,9 @@ let timerElement = null;
 let retryTimer = null;
 let lastHeardAt = Date.now();
 const SILENCE_BEFORE_RECONNECT_MS = 50000;
-const banner = el('div', { class: 'banner', hidden: true }, el('span', { class: 'dot-pulse' }), 'Reconnecting…');
+const banner = el('div', { class: 'banner', role: 'status', hidden: true },
+  el('span', { class: 'banner-title' }, el('span', { class: 'dot-pulse' }), 'Connection lost · reconnecting…'),
+  el('span', { class: 'banner-text' }, 'Stay on this page. Leaving it still counts as leaving the game.'));
 document.body.append(banner);
 
 function readSession() {
@@ -417,7 +413,10 @@ function connect() {
   events?.close();
   lastHeardAt = Date.now();
   events = new EventSource(`/events?token=${encodeURIComponent(session.token)}`);
-  events.onopen = () => { banner.hidden = true; };
+  events.onopen = () => {
+    banner.hidden = true;
+    sendMissedAway();
+  };
   events.onmessage = message => {
     lastHeardAt = Date.now();
     banner.hidden = true;
@@ -682,11 +681,27 @@ function updateAnnouncement() {
 
 let isAway = false;
 
+let missedAway = null;
+
 function reportAway() {
   if (isAway || !session?.token || state?.phase !== 'question') return;
   isAway = true;
-  const body = JSON.stringify({ token: session.token });
+  const at = { round: state.round, index: state.index };
+  if (!banner.hidden || !navigator.onLine) {
+    missedAway = at;
+    return;
+  }
+  const body = JSON.stringify({ token: session.token, ...at });
   if (!navigator.sendBeacon?.('/away', body)) fetch('/away', { method: 'POST', body, keepalive: true }).catch(() => {});
+}
+
+async function sendMissedAway() {
+  if (!missedAway || !session?.token) return;
+  const at = missedAway;
+  try {
+    const response = await fetch('/away', { method: 'POST', body: JSON.stringify({ token: session.token, ...at }) });
+    if (response.ok && missedAway === at) missedAway = null;
+  } catch {}
 }
 
 function cameBack() {
@@ -807,7 +822,9 @@ function updateReactions() {
 
 const ICONS = {
   skip: '<path d="m5 4 10 8-10 8z"/><path d="M19 5v14"/>',
+  chevrons: '<path d="m6 17 5-5-5-5"/><path d="m13 17 5-5-5-5"/>',
   check: '<path d="M20 6 9 17l-5-5"/>',
+  ban: '<circle cx="12" cy="12" r="10"/><path d="m4.9 4.9 14.2 14.2"/>',
   arrow: '<path d="M5 12h14"/><path d="m13 6 6 6-6 6"/>',
   pencil: '<path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/>',
   settings: '<path d="M12.2 2h-.4a2 2 0 0 0-2 2v.2a2 2 0 0 1-1 1.7l-.4.3a2 2 0 0 1-2 0l-.2-.1a2 2 0 0 0-2.7.7l-.2.4a2 2 0 0 0 .7 2.7l.2.1a2 2 0 0 1 1 1.7v.5a2 2 0 0 1-1 1.7l-.2.1a2 2 0 0 0-.7 2.7l.2.4a2 2 0 0 0 2.7.7l.2-.1a2 2 0 0 1 2 0l.4.3a2 2 0 0 1 1 1.7v.2a2 2 0 0 0 2 2h.4a2 2 0 0 0 2-2v-.2a2 2 0 0 1 1-1.7l.4-.3a2 2 0 0 1 2 0l.2.1a2 2 0 0 0 2.7-.7l.2-.4a2 2 0 0 0-.7-2.7l-.2-.1a2 2 0 0 1-1-1.7v-.5a2 2 0 0 1 1-1.7l.2-.1a2 2 0 0 0 .7-2.7l-.2-.4a2 2 0 0 0-2.7-.7l-.2.1a2 2 0 0 1-2 0l-.4-.3a2 2 0 0 1-1-1.7V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/>',
@@ -830,68 +847,80 @@ async function toggleSkip() {
   } catch {}
 }
 
-const SKIP_HOLD_MS = 1000;
-const holdHint = () => (state.skip?.isMine ? 'Hold to take it back' : 'Hold to skip');
+const SWIPE_TO_SKIP = 0.8;
+const SKIP_TITLES = { show: 'Next page', waiting: 'Start the question', question: "I'm done", reveal: 'Next question' };
 
-function holdRing(...inside) {
-  const ring = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-  ring.setAttribute('class', 'hold-ring');
-  ring.setAttribute('viewBox', '0 0 40 40');
-  ring.innerHTML = '<circle cx="20" cy="20" r="18" pathLength="100"/>';
-  return el('span', { class: 'hold-icon' }, ring, ...inside);
-}
-
-function holdToSkip(button) {
-  let timer = null;
-  const stop = () => {
-    clearTimeout(timer);
-    timer = null;
-    button.classList.remove('holding');
+function swipeTrack(id, size) {
+  const track = el('button', { type: 'button', class: `swipe swipe-${size}`, id },
+    el('span', { class: 'swipe-fill' }),
+    el('span', { class: 'swipe-label' }, el('span', { id: `${id}-label` })),
+    el('span', { class: 'swipe-knob', id: `${id}-knob` }));
+  let startX = null;
+  let distance = 1;
+  let progress = 0;
+  const rest = () => (track.classList.contains('on') ? 1 : 0);
+  const follow = value => {
+    progress = value;
+    track.style.setProperty('--swipe', value);
   };
-  const start = () => {
-    if (timer || button.disabled) return;
-    button.classList.add('holding');
-    timer = setTimeout(() => {
-      stop();
-      navigator.vibrate?.(30);
-      toggleSkip();
-    }, SKIP_HOLD_MS);
-  };
-  const release = () => {
-    if (!timer) return;
-    stop();
-    showReactionToast(el('span', {}, holdHint()));
-  };
-  button.addEventListener('pointerdown', event => event.button === 0 && start());
-  button.addEventListener('pointerup', release);
-  button.addEventListener('pointerleave', stop);
-  button.addEventListener('pointercancel', stop);
-  button.addEventListener('contextmenu', event => event.preventDefault());
-  button.addEventListener('keydown', event => {
-    if (event.key !== 'Enter' && event.key !== ' ') return;
-    event.preventDefault();
-    if (!event.repeat) start();
+  track.addEventListener('pointerdown', event => {
+    if (track.disabled || event.button !== 0) return;
+    const knob = track.querySelector('.swipe-knob');
+    distance = Math.max(1, track.clientWidth - knob.offsetWidth - 8);
+    startX = event.clientX;
+    track.setPointerCapture(event.pointerId);
+    track.classList.add('swiping');
   });
-  button.addEventListener('keyup', event => (event.key === 'Enter' || event.key === ' ') && release());
-  return button;
+  track.addEventListener('pointermove', event => {
+    if (startX != null) follow(Math.max(0, Math.min(1, rest() + (event.clientX - startX) / distance)));
+  });
+  track.addEventListener('pointerup', () => {
+    if (startX == null) return;
+    startX = null;
+    track.classList.remove('swiping');
+    const moved = Math.abs(progress - rest());
+    if (moved >= SWIPE_TO_SKIP) {
+      navigator.vibrate?.(30);
+      track.classList.toggle('on');
+      toggleSkip();
+    } else if (moved < 0.05) showReactionToast(el('span', {}, track.classList.contains('on') ? 'Swipe left to take it back' : 'Swipe right to skip'));
+    follow(rest());
+  });
+  track.addEventListener('pointercancel', () => {
+    startX = null;
+    track.classList.remove('swiping');
+    follow(rest());
+  });
+  track.addEventListener('contextmenu', event => event.preventDefault());
+  track.addEventListener('keydown', event => {
+    if ((event.key === 'Enter' || event.key === ' ') && !event.repeat) {
+      event.preventDefault();
+      toggleSkip();
+    }
+  });
+  return track;
 }
 
-const SKIP_TITLES = { show: 'Next', waiting: 'Start the question', question: "I'm done", reveal: 'Next' };
-const MAX_SKIP_SEGMENTS = 12;
+function showSwipe(id, { isOn, isDisabled = false, label, knobIcon }) {
+  const track = document.getElementById(id);
+  if (!track || track.classList.contains('swiping')) return;
+  track.disabled = isDisabled;
+  track.classList.toggle('on', isOn);
+  track.style.setProperty('--swipe', isOn ? 1 : 0);
+  track.setAttribute('aria-pressed', String(isOn));
+  track.setAttribute('aria-label', label);
+  document.getElementById(`${id}-label`).textContent = label;
+  document.getElementById(`${id}-knob`).replaceChildren(icon(knobIcon));
+}
 
 function skipDock() {
-  return el('div', { class: 'dock', id: 'skip-dock' },
-    holdToSkip(el('button', { type: 'button', class: 'skip hold', id: 'skip-button' },
-      el('span', { class: 'skip-main' },
-        holdRing(el('span', { class: 'skip-icon', id: 'skip-icon' })),
-        el('span', { class: 'skip-text' }, el('span', { class: 'skip-title', id: 'skip-title' }), el('span', { class: 'skip-hint', id: 'skip-hint' })),
-        el('span', { class: 'skip-count', id: 'skip-count' })),
-      el('span', { class: 'skip-segments', id: 'skip-segments' }))));
+  return el('div', { class: 'dock swipe-dock', id: 'skip-dock' },
+    el('div', { class: 'swipe-head' }, el('span', { class: 'swipe-title', id: 'skip-title' }), el('span', { class: 'swipe-count', id: 'skip-count' })),
+    swipeTrack('skip-button', 'large'));
 }
 
 function skipChip() {
-  return holdToSkip(el('button', { type: 'button', class: 'skip-chip hold', id: 'skip-chip' },
-    holdRing(el('span', { class: 'chip-icon', id: 'skip-chip-icon' })), 'Done', el('span', { class: 'count', id: 'skip-chip-count' })));
+  return swipeTrack('skip-chip', 'small');
 }
 
 function updateSkipChip() {
@@ -900,10 +929,7 @@ function updateSkipChip() {
   const skip = state.skip;
   chip.hidden = !skip?.isAvailable;
   if (chip.hidden) return;
-  chip.classList.toggle('on', !!skip.isMine);
-  chip.title = skip.isMine ? 'Hold to take it back' : 'Hold to skip. Moves on when everyone is done';
-  document.getElementById('skip-chip-icon').replaceChildren(icon(skip.isMine ? ICONS.check : ICONS.skip));
-  document.getElementById('skip-chip-count').textContent = `${skip.count}/${skip.of}`;
+  showSwipe('skip-chip', { isOn: !!skip.isMine, label: skip.isMine ? `Done · ${skip.count}/${skip.of}` : 'Swipe when done', knobIcon: skip.isMine ? ICONS.check : ICONS.chevrons });
 }
 
 function updateSkip() {
@@ -913,26 +939,15 @@ function updateSkip() {
   const skip = state.skip;
   dock.hidden = !skip?.isAvailable && !skip?.isHostChecking;
   if (dock.hidden) return;
-  const button = document.getElementById('skip-button');
-  button.disabled = !skip.isAvailable;
   if (!skip.isAvailable) {
-    button.classList.remove('on');
-    document.getElementById('skip-icon').replaceChildren(icon(ICONS.hourglass));
     document.getElementById('skip-title').textContent = 'The host is checking answers';
-    document.getElementById('skip-hint').textContent = 'Only the host can move on now';
     document.getElementById('skip-count').textContent = '';
-    document.getElementById('skip-segments').replaceChildren();
-    return;
+    return showSwipe('skip-button', { isOn: false, isDisabled: true, label: 'Only the host can move on', knobIcon: ICONS.hourglass });
   }
   const others = skip.of - skip.count;
-  button.classList.toggle('on', !!skip.isMine);
-  document.getElementById('skip-icon').replaceChildren(icon(skip.isMine ? ICONS.check : ICONS.skip));
   document.getElementById('skip-title').textContent = skip.isMine ? `Waiting for ${others} ${others === 1 ? 'player' : 'players'}` : SKIP_TITLES[state.phase];
-  document.getElementById('skip-hint').textContent = skip.isMine ? 'Hold to take it back' : 'Hold to skip · moves on when everyone skips';
-  document.getElementById('skip-count').textContent = `${skip.count}/${skip.of}`;
-  const segmentCount = Math.min(skip.of, MAX_SKIP_SEGMENTS);
-  const filled = Math.round((skip.count / Math.max(skip.of, 1)) * segmentCount);
-  document.getElementById('skip-segments').replaceChildren(...Array.from({ length: segmentCount }, (_, i) => el('i', { class: i < filled ? 'on' : '' })));
+  document.getElementById('skip-count').textContent = `${skip.count} of ${skip.of} ready`;
+  showSwipe('skip-button', { isOn: !!skip.isMine, label: skip.isMine ? 'Swipe back to undo' : 'Swipe to skip', knobIcon: skip.isMine ? ICONS.check : ICONS.chevrons });
 }
 
 const roundFacts = me => el('div', { class: 'congrats-facts' },
@@ -1038,10 +1053,19 @@ function updateStakes() {
   const system = state.rules.pointSystem;
   const stake = state.stake;
   const hasPool = system?.mode === 'pool';
+  const hasList = system?.mode === 'list';
   const hasRisk = !!system?.risk?.isOn;
-  row.hidden = !stake || (!hasPool && !hasRisk);
+  row.hidden = !stake || (!hasPool && !hasList && !hasRisk);
   if (row.hidden) return;
   const error = stakeError && el('span', { class: 'stake-hint error-text' }, stakeError);
+  if (hasList) {
+    const entry = system.list[state.index] ?? system.list.at(-1);
+    const penalties = (entry.wrong || entry.unanswered) && stakeHint(`Wrong ${pointsLabel(entry.wrong)}`, `No answer ${pointsLabel(entry.unanswered)}`);
+    row.replaceChildren(...[el('div', { class: 'stake-head' },
+      el('span', { class: 'stake-label', lang: 'en' }, 'This question'),
+      el('span', { class: 'list-worth' }, `${pointsLabel(entry.points)} pts`)), penalties].filter(Boolean));
+    return;
+  }
   if (hasPool) {
     const picked = system.pool[stake.pick];
     row.replaceChildren(
@@ -1066,6 +1090,19 @@ function updateStakes() {
     el('strong', {}, stake.isRisked ? 'Risked' : canRisk ? 'Risk it' : 'No risks left'),
     error || stakeHint(`Right ${pointsLabel(system.risk.correct)}`, `Wrong ${pointsLabel(system.risk.wrong)}`, risks)),
   el('span', { class: 'risk-switch' })));
+}
+
+function banNotice() {
+  return el('div', { class: 'notice ban-notice', id: 'ban-notice', role: 'alert', hidden: !state.isBanned },
+    el('span', { class: 'notice-icon' }, icon(ICONS.ban)),
+    el('div', { class: 'notice-body' },
+      el('span', { class: 'notice-label', lang: 'en' }, 'You left the game'),
+      el('span', { class: 'notice-text' }, "This question won't count for you.")));
+}
+
+function updateBan() {
+  const notice = document.getElementById('ban-notice');
+  if (notice) notice.hidden = !state.isBanned;
 }
 
 function updateAnswerStatus() {
@@ -1116,6 +1153,7 @@ function renderScreen(next) {
     if (nameElement) nameElement.textContent = next.me.name;
     updateSkip();
     updateStakes();
+    updateBan();
     return updateAnswerStatus();
   }
   if (next.phase === 'question' && renderedScreen !== screen) alertQuestionStart();
@@ -1159,23 +1197,24 @@ function renderScreen(next) {
   if (next.phase === 'question') {
     isAway = false;
     if (document.visibilityState === 'hidden') reportAway();
-    show(topBar(), questionBlock(), rulesBlock(), composerDock());
+    show(topBar(), banNotice(), questionBlock(), rulesBlock(), composerDock());
     updateStakes();
     updateSkip();
     return updateAnswerStatus();
   }
   if (next.phase === 'judging') {
-    return show(topBar(), questionBlock(), el('div', { class: 'card' },
+    return show(topBar(), banNotice(), questionBlock(), el('div', { class: 'card' },
       el('strong', {}, "Time's up! Checking answers…"),
       el('span', { class: 'muted' }, `Your answer: ${next.myAnswer || '—'}`)));
   }
   if (next.phase === 'reveal') {
     const reveal = next.reveal;
     const earned = el('span', { class: 'points' }, pointsLabel(reveal.points), reveal.streakBonus > 0 && el('span', { class: 'bonus' }, ` ${pointsLabel(reveal.streakBonus)} streak`));
-    const verdict = reveal.isCorrect == null ? el('div', { class: 'verdict bad' }, 'No answer', reveal.points !== 0 && earned)
+    const verdict = next.isBanned ? el('div', { class: 'verdict bad' }, 'Not counted')
+      : reveal.isCorrect == null ? el('div', { class: 'verdict bad' }, 'No answer', reveal.points !== 0 && earned)
       : reveal.isPending ? el('div', { class: 'verdict' }, '? The host is checking')
       : el('div', { class: `verdict ${reveal.isCorrect ? 'good' : 'bad'}` }, reveal.isCorrect ? '✓ Correct' : '✗ Wrong', earned);
-    return done(show(topBar(), el('div', { class: 'card' },
+    return done(show(topBar(), banNotice(), el('div', { class: 'card' },
       verdict,
       reveal.isRoundLost && next.rules.pointSystem.allOrNothing.isOn && el('span', { class: 'round-lost' }, 'All or nothing: this round now scores 0 for you'),
       reveal.perfectBonus > 0 && el('span', { class: 'perfect-bonus' }, `🏅 Every answer right: ${pointsLabel(reveal.perfectBonus)} all correct bonus`),
