@@ -1,0 +1,10 @@
+2048 passages sampled from bench.sqlite, 200 single queries; rows/s sorted by length per batch size
+
+model                          device     cold ms  q p50  q p95     b8   b16   b32   b64  b128  unsorted32  rss MB  peak MB  download MB  int8
+Xenova/multilingual-e5-small   cpu/q8         570    1.6    3.3    478   495   460   427   374         329     534     1028          129  yes
+Xenova/multilingual-e5-base    cpu/q8         677    2.9    4.5    212   203   182   171   148         117     696     1625          282  yes
+Xenova/bge-m3                  cpu/q8        1074    8.4   11.3     75    75    71    62    53          49     936     2262          560  yes
+
+Xenova/multilingual-e5-small cpu/q8: loaded config.json, tokenizer.json, tokenizer_config.json, onnx/model_quantized.onnx; {"file":"model_quantized.onnx","megabytes":113,"int8":true,"ops":{"MatMulInteger":true,"DynamicQuantizeLinear":true,"QLinearMatMul":false}}
+Xenova/multilingual-e5-base cpu/q8: loaded config.json, tokenizer.json, tokenizer_config.json, onnx/model_quantized.onnx; {"file":"model_quantized.onnx","megabytes":266,"int8":true,"ops":{"MatMulInteger":true,"DynamicQuantizeLinear":true,"QLinearMatMul":false}}
+Xenova/bge-m3 cpu/q8: loaded config.json, tokenizer.json, tokenizer_config.json, onnx/model_quantized.onnx; {"file":"model_quantized.onnx","megabytes":543,"int8":true,"ops":{"MatMulInteger":true,"DynamicQuantizeLinear":true,"QLinearMatMul":false}}

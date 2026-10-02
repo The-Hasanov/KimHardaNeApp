@@ -1,0 +1,11 @@
+query set                    mode      as is MRR h@10   filled MRR h@10
+bench: all 300 (300)         ai          73   85         72   85
+bench: all 300 (300)         hybrid      84   91         83   91
+bench: paraphrase (60)       ai          39   58         37   55
+bench: paraphrase (60)       hybrid      40   60         39   57
+placeholder: recall (31)     ai          85   87         85   87
+placeholder: recall (31)     hybrid      87   87         87   87
+placeholder: with answer (31) ai          70   81         82   84
+placeholder: with answer (31) hybrid      75   84         82   84
+
+placeholder questions are   23% of the corpus and   17% of AI top-10 hits for the 300 bench queries as is,   15% when filled

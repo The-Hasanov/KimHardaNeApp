@@ -1,7 +1,7 @@
 {
   "name": "kimhardaneapp",
   "productName": "KimHardaNeApp",
-  "version": "2.1.1",
+  "version": "2.2.0",
   "private": true,
   "description": "Quiz questions: search, edit and play them, from the data sources you install",
   "author": "KimHardaNeApp",

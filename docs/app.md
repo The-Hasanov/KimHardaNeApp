@@ -46,7 +46,13 @@ npm test         # offline tests for the scraper, data sources, search, ranking,
   ignoring case, diacritics, punctuation and small typos in each word (a swap of two letters is one typo),
   "a" for "ə", "sh"/"ch" for "ş"/"ç", joining words ("və", "ilə") and the order of a list's parts; otherwise by meaning with the AI model,
   *correct* at 86% similarity or more, *not sure* from 60%, *wrong* below. Crediting notes such as
-  "Yalnız dəqiq cavablar" are not treated as answers, and exact-only or very short answers skip the AI check.
+  "Yalnız dəqiq cavablar" are not treated as answers. On a "Yalnız dəqiq cavablar" question only the answer or a listed
+  alternative counts, ignoring only case, punctuation, diacritics and "a"/"sh"/"ch" typing: no typos and no AI check.
+  Very short answers skip the AI check too. Numbers and dates are never fuzzy: a typo may not change a number
+  (12346 is not 12345), and an answer with a different number, Roman numeral, Azerbaijani number word ("doqquz",
+  "ikinci", "min doqquz yüz qırx beş") or month is wrong however close its meaning. AI similarity is supporting
+  evidence only: when an answer leaves out the answer's number or part of a list ("Adəm" for "Adəm və Həvva"), the
+  AI can at most say *not sure*, so the host decides.
   You can overrule every verdict with *Correct* / *Wrong*. The score and every answer are saved; *Your results*
   in the Play setup lists past games, where verdicts can still be changed or a game deleted.
 - **Party mode** (Game tab, *Party*): players join from any phone, tablet or computer with a web browser (below, *phones* means any of
@@ -185,8 +191,20 @@ the party header turns them off and on for everyone. Windows
   the app then downloads the model from Hugging Face (587 MB) and builds the AI index on the computer (about
   30 min for 68,000 questions here, longer on slower CPUs), with progress in Settings and the status line.
   Search and editing keep working meanwhile, and an interrupted build resumes on the next start. Turning it off
-  deletes the model and the vectors (about 900 MB). The choice is kept in `settings.json` in the user data
-  folder, and the installed app keeps the model in `%APPDATA%\KimHardaNeApp\models`.
+  stops the build, frees the memory and keeps the model and the vectors on disk, so turning it on again only embeds
+  questions that are new or changed. *Delete AI files* (shown in Settings while AI search is off) removes the model and
+  the vectors (about 900 MB). The choice is kept in `settings.json` in the user data folder, and the installed app keeps
+  the model in `%APPDATA%\KimHardaNeApp\models`.
+- **AI worker:** the model runs in a worker thread (`aiWorker.js`), so neither indexing nor a search blocks the window.
+  The vectors live in shared memory: a search sends only the query vector and a filter mask, and the worker scans the
+  vectors in place. One model instance serves search, answer checks and indexing one request at a time; indexing
+  pauses its next batch while a search or answer check is waiting. Turning AI search off or quitting stops the worker,
+  and if the worker fails, AI search shows the error with *Retry* and searches fall back to keywords.
+- **Vector versions:** every stored vector is labelled with its embedding setup: model, pinned Hugging Face revision,
+  precision, size, pooling, normalization, prefixes and passage text. A vector whose label or question text no longer
+  matches is never mixed in; that question is embedded again. Vectors made by version 2.1.1 and earlier, which carry only the
+  model name, are kept when the downloaded model file matches the pinned revision's SHA-256 and the setup is the one
+  they were made with. Vectors with the wrong size or non-finite values are not stored.
 - **Hybrid** (the default) fuses the two rankings with reciprocal rank fusion (`k = 10`, AI weight 0.5). Each
   result shows its `kw` (BM25) and `ai` (cosine) scores. The game and edited-only filters apply to every mode.
 - **Editing** covers the question, answer, accepted answers, comment, host note, handout text and sources.
@@ -251,8 +269,8 @@ the party header turns them off and on for everyone. Windows
   image, and it is stored under a hashed name with an extension from that list. Pictures not saved yet are shown
   from the site; the card counts them. The installed app keeps the database and pictures in
   `%APPDATA%\KimHardaNeApp\data` (`kimhardane.sqlite`, `images/`).
-- **Cost:** about 6 s to open. A search takes about 110 ms (0.5 s for the first one while the model warms
-  up). Memory use is about 1 GB with AI search on (index, 280 MB of vectors and the model), much less with it off.
+- **Cost:** about 6 s to open. A search takes about 70 ms (0.5 s for the first one while the model warms
+  up), and about 0.25 s while the index is being built. Memory use is about 1 GB with AI search on (index, 280 MB of vectors and the model), much less with it off.
 
 ## Installer, versions and updates
 
@@ -321,3 +339,27 @@ Findings:
 - With a weak AI model, letting any word match is the best keyword setting. With bge-m3, requiring every
   word is better, because the AI half catches what exact matching misses.
 - Remaining misses are mostly paraphrases that need outside knowledge, such as "reggae star" for Bob Marley.
+- gte-multilingual-base (CLS pooling, no prefixes, as its model card says) scores 57 macro AI-only and 80 at its best
+  hybrid on dev, and 75 on the test half against 84 for the shipped bge-m3 hybrid, so bge-m3 stays.
+
+Caches in `bench/cache/` record the model revision, preprocessing and a hash of every passage, and are rebuilt when
+either changes. Each results file starts with the machine, OS, runtime versions, model revisions, precision, execution
+provider and how many questions have vectors.
+
+**Indexing speed** (`node bench/speed.js cpu q8 Xenova/bge-m3`, 2,048 passages, Ryzen 7 9800X3D, idle machine, two runs):
+sorting passages by length lifts batch 32 from 49 to 75–77 rows/s; batch 16 gives 80 and batch 8 80–81. The app
+indexes in batches of 16 sorted by length: as fast as 8, and a search during indexing waits for at most half a batch
+of 32 (measured p50 0.23 s instead of 0.48 s).
+
+**Answer check benchmark** (`node bench/judge.js 300`, `bench/judge-results.txt`): the production `judge.js` on 108
+hand-labeled answers and about 1,400 answers generated from 300 questions, split into dev and test by answer, so no
+answer is in both. It reports the production thresholds and, separately, thresholds calibrated on dev. With bge-m3 at
+the production thresholds (0.86 / 0.60), on the test half:
+
+| Test half | n | false accept | false reject | not sure |
+|---|---|---|---|---|
+| Hand-labeled | 45 | 4% (1 of 25) | 10% (2 of 20) | 51% |
+| Generated | 698 | 0% (0 of 303) | 0.8% (3 of 395) | 6% |
+
+Calibrating on dev gives 0.79 / 0.62, which accepts more wrong hand-labeled answers on test (8%), so the production
+thresholds stay. The hand-labeled set is small: one answer is 4 points.

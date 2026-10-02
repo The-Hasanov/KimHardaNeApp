@@ -1,18 +1,18 @@
 'use strict';
 const fs = require('node:fs');
 const path = require('node:path');
-const crypto = require('node:crypto');
 const ai = require('../ai');
 const { Store, embeddable } = require('../store');
+const { cachedVectorsProblem } = require('../bench');
 
 const model = process.argv[2];
 const DB = process.env.QUIZ_DB || path.join(__dirname, '..', '..', 'data', 'kimhardane.sqlite');
 const base = path.join(__dirname, 'cache', model.replace(/[^\w.-]+/g, '_'));
 const meta = JSON.parse(fs.readFileSync(`${base}.json`, 'utf8'));
 const store = new Store(DB);
-const uids = crypto.createHash('sha1').update(store.rows.map(r => r.uid).join('\n')).digest('hex');
-if (meta.uids !== uids || (meta.kind ?? 'ta') !== 'ta') throw new Error('cache does not match this database / passage kind');
-store.loadVectors(model, ai.MODELS[model].dim);
+const problem = cachedVectorsProblem(store, model, 'ta');
+if (problem) throw new Error(`${model}: cache ${problem}`);
+store.loadVectors(ai.embeddingSpace(model));
 const buf = fs.readFileSync(`${base}.f32`);
 const vecs = new Float32Array(buf.buffer, buf.byteOffset, buf.byteLength / 4);
 const idx = store.rows.map((r, i) => i).filter(i => embeddable(store.rows[i]));

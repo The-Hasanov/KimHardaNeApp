@@ -334,6 +334,7 @@ export default function App() {
   const isBrowsing = view === 'search' || isMine;
   const aiWork = describeAiWork(aiStatus);
   const changeAiSearch = isOn => api.setAiSearch(isOn).then(setAiStatus);
+  const removeAiFiles = () => api.removeAiFiles().then(setAiStatus, e => toast.error('Could not delete the AI files', { description: e.message }));
   const dataSources = useDataSources(() => {
     api.info().then(setInfo);
     refreshLists();
@@ -743,7 +744,7 @@ export default function App() {
           isAiReady={isAiReady} onOpenSettings={() => openSettings('general')} />
       </div>
       <SettingsDialog open={isSettingsOpen} onOpenChange={setIsSettingsOpen} tab={settingsTab} onTabChange={setSettingsTab}
-        aiStatus={aiStatus} onAiSearchChange={changeAiSearch} dataSources={dataSources} />
+        aiStatus={aiStatus} onAiSearchChange={changeAiSearch} onRemoveAiFiles={removeAiFiles} dataSources={dataSources} />
       <ListNameDialog open={isCreatingListForCurrent} title="New list" confirmLabel="Create and add"
         onOpenChange={setIsCreatingListForCurrent} onSubmit={createListWithCurrent} />
 

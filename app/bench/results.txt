@@ -1,3 +1,10 @@
+machine: AMD Ryzen 7 9800X3D 8-Core Processor, 16 logical CPUs, 31 GB RAM; Windows 11 Pro 10.0.26200 x64; CPU busy before the run: 2%
+runtime: Node 26.7.0, onnxruntime-node 1.30.0, @huggingface/transformers 4.3.0, execution provider cpu, precision q8
+model: Xenova/multilingual-e5-small @ 761b726dd34fb83930e26aab4e9ac3899aa1fa78, mean pooling, normalized, prefixes query "query: " passage "passage: "
+model: Xenova/multilingual-e5-base @ 1ec9243030a27d1a115d5c340572074c125b58b2, mean pooling, normalized, prefixes query "query: " passage "passage: "
+model: Xenova/bge-m3 @ 4de13258303883538bd53b696b452bf8099f0858, cls pooling, normalized, prefixes query "" passage ""
+model: onnx-community/gte-multilingual-base @ 2edbf5e672aab465f9ed4c154a8b61791c082c69, cls pooling, normalized, prefixes query "" passage ""
+
 300 queries: 60 recall, 60 paraphrase, 60 ascii, 60 typo, 60 answer; dev/test split by target
 
 ## Keyword (dev)
@@ -28,71 +35,55 @@ kw OR fuzzy=0.2 prefix=false boost=none                     85   16   85   78   
 kw OR fuzzy=0.2 prefix=false boost=answer3                  81   14   81   75  100    70    64   81
 best keyword on dev: kw OR fuzzy=0.2 prefix=true boost=current
 
+multilingual-e5-small: 68562 of 68562 embeddable questions have vectors
+
 ## multilingual-e5-small (query embed 4 ms)
 config                                                     rec para asc typo ans  macro  h@1 h@10   (MRR@10 %)
-ai multilingual-e5-small                                    72    2   53   56   63    49    40   67
-hy multilingual-e5-small default k=10 w=0.5                 95    5   89   81   94    73    70   79
-hy multilingual-e5-small default k=10 w=1                   95    5   89   81   94    73    70   79
-hy multilingual-e5-small default k=10 w=2                   89    2   74   69   78    63    57   76
-hy multilingual-e5-small default k=30 w=0.5                 95    5   89   81   92    72    69   79
-hy multilingual-e5-small default k=30 w=1                   95    5   89   81   90    72    69   79
-hy multilingual-e5-small default k=30 w=2                   92    2   74   69   82    64    59   75
-hy multilingual-e5-small default k=60 w=0.5                 95    5   89   81   90    72    69   79
-hy multilingual-e5-small default k=60 w=1                   95    5   89   81   89    72    69   79
-hy multilingual-e5-small default k=60 w=2                   92    2   79   77   82    66    62   75
-hy multilingual-e5-small bestkw k=10 w=0.5                  92   18   94   89   94    77    73   84
-hy multilingual-e5-small bestkw k=10 w=1                    89   15   93   89   90    75    70   85
-hy multilingual-e5-small bestkw k=10 w=2                    88    8   78   76   76    65    59   79
-hy multilingual-e5-small bestkw k=30 w=0.5                  91   18   93   88   91    76    71   85
-hy multilingual-e5-small bestkw k=30 w=1                    89   20   92   85   87    75    69   85
-hy multilingual-e5-small bestkw k=30 w=2                    88   14   78   75   80    67    61   78
-hy multilingual-e5-small bestkw k=60 w=0.5                  91   19   92   85   88    75    69   85
-hy multilingual-e5-small bestkw k=60 w=1                    88   18   88   85   86    73    67   83
-hy multilingual-e5-small bestkw k=60 w=2                    88   16   81   80   80    69    63   80
+ai multilingual-e5-small                                    71    2   50   55   64    48    41   63
+hy multilingual-e5-small default k=10 w=0.5                 95    5   89   78   94    72    69   78
+hy multilingual-e5-small default k=10 w=1                   95    5   89   78   90    71    68   78
+hy multilingual-e5-small default k=10 w=2                   87    2   72   65   77    61    55   74
+hy multilingual-e5-small default k=30 w=0.5                 95    5   89   78   91    72    69   78
+hy multilingual-e5-small default k=30 w=1                   95    5   89   78   88    71    67   78
+hy multilingual-e5-small default k=30 w=2                   89    2   76   72   81    64    60   73
+hy multilingual-e5-small default k=60 w=0.5                 95    5   89   78   90    71    68   78
+hy multilingual-e5-small default k=60 w=1                   95    5   89   78   87    71    67   78
+hy multilingual-e5-small default k=60 w=2                   92    3   76   74   81    65    61   73
+hy multilingual-e5-small bestkw k=10 w=0.5                  92   18   93   89   92    77    72   83
+hy multilingual-e5-small bestkw k=10 w=1                    87   16   93   88   86    74    67   84
+hy multilingual-e5-small bestkw k=10 w=2                    87    9   74   71   77    63    57   77
+hy multilingual-e5-small bestkw k=30 w=0.5                  91   18   91   88   89    75    69   85
+hy multilingual-e5-small bestkw k=30 w=1                    87   20   91   87   85    74    67   85
+hy multilingual-e5-small bestkw k=30 w=2                    87   11   78   81   77    67    61   76
+hy multilingual-e5-small bestkw k=60 w=0.5                  91   20   91   87   87    75    69   85
+hy multilingual-e5-small bestkw k=60 w=1                    87   19   86   84   84    72    65   83
+hy multilingual-e5-small bestkw k=60 w=2                    88   16   78   82   77    68    62   76
 
-## multilingual-e5-small+comment (query embed 0 ms)
-config                                                     rec para asc typo ans  macro  h@1 h@10   (MRR@10 %)
-ai multilingual-e5-small+comment                            77   13   63   58   72    57    49   69
-hy multilingual-e5-small+comment default k=10 w=0.5         95   15   94   80   94    76    72   81
-hy multilingual-e5-small+comment default k=10 w=1           95   15   94   80   91    75    71   81
-hy multilingual-e5-small+comment default k=10 w=2           85   15   73   68   83    65    59   77
-hy multilingual-e5-small+comment default k=30 w=0.5         95   15   94   80   89    75    70   81
-hy multilingual-e5-small+comment default k=30 w=1           95   15   94   80   89    75    70   81
-hy multilingual-e5-small+comment default k=30 w=2           86   15   75   68   86    66    61   75
-hy multilingual-e5-small+comment default k=60 w=0.5         95   15   94   80   89    75    70   81
-hy multilingual-e5-small+comment default k=60 w=1           95   15   94   80   89    74    70   81
-hy multilingual-e5-small+comment default k=60 w=2           89   15   81   73   86    69    65   76
-hy multilingual-e5-small+comment bestkw k=10 w=0.5          91   21   91   89   93    77    72   84
-hy multilingual-e5-small+comment bestkw k=10 w=1            88   22   91   82   88    74    67   85
-hy multilingual-e5-small+comment bestkw k=10 w=2            82   20   73   72   82    66    61   77
-hy multilingual-e5-small+comment bestkw k=30 w=0.5          89   22   88   84   88    74    67   84
-hy multilingual-e5-small+comment bestkw k=30 w=1            87   20   86   82   86    72    65   84
-hy multilingual-e5-small+comment bestkw k=30 w=2            84   20   78   71   83    67    63   77
-hy multilingual-e5-small+comment bestkw k=60 w=0.5          88   21   84   83   86    73    65   85
-hy multilingual-e5-small+comment bestkw k=60 w=1            86   20   84   79   85    71    65   82
-hy multilingual-e5-small+comment bestkw k=60 w=2            84   20   81   73   83    68    64   77
+multilingual-e5-base: 68562 of 68562 embeddable questions have vectors
 
 ## multilingual-e5-base (query embed 5 ms)
 config                                                     rec para asc typo ans  macro  h@1 h@10   (MRR@10 %)
-ai multilingual-e5-base                                     73   10   54   54   57    50    41   66
-hy multilingual-e5-base default k=10 w=0.5                  93   13   88   78   91    73    69   79
-hy multilingual-e5-base default k=10 w=1                    93   13   88   78   89    72    69   79
-hy multilingual-e5-base default k=10 w=2                    88   11   67   66   74    61    56   70
-hy multilingual-e5-base default k=30 w=0.5                  93   13   88   78   89    72    69   79
-hy multilingual-e5-base default k=30 w=1                    93   13   88   78   87    72    68   79
-hy multilingual-e5-base default k=30 w=2                    88   13   71   68   76    63    59   69
-hy multilingual-e5-base default k=60 w=0.5                  93   13   88   78   84    71    67   79
-hy multilingual-e5-base default k=60 w=1                    93   13   88   78   85    71    68   79
-hy multilingual-e5-base default k=60 w=2                    90   13   71   68   77    64    61   69
-hy multilingual-e5-base bestkw k=10 w=0.5                   91   21   92   92   91    77    73   84
-hy multilingual-e5-base bestkw k=10 w=1                     88   22   90   88   85    75    69   85
-hy multilingual-e5-base bestkw k=10 w=2                     85   16   69   73   76    64    59   73
-hy multilingual-e5-base bestkw k=30 w=0.5                   91   26   89   88   89    77    71   85
-hy multilingual-e5-base bestkw k=30 w=1                     87   23   87   84   82    73    67   84
-hy multilingual-e5-base bestkw k=30 w=2                     86   18   73   74   77    66    62   72
-hy multilingual-e5-base bestkw k=60 w=0.5                   90   25   88   86   82    74    68   85
-hy multilingual-e5-base bestkw k=60 w=1                     87   21   85   81   81    71    65   83
-hy multilingual-e5-base bestkw k=60 w=2                     86   18   74   75   79    66    63   74
+ai multilingual-e5-base                                     69   14   50   55   54    48    41   67
+hy multilingual-e5-base default k=10 w=0.5                  88   17   87   76   93    72    69   80
+hy multilingual-e5-base default k=10 w=1                    88   17   87   76   87    71    67   80
+hy multilingual-e5-base default k=10 w=2                    83   17   66   66   67    60    55   73
+hy multilingual-e5-base default k=30 w=0.5                  88   17   87   76   87    71    67   80
+hy multilingual-e5-base default k=30 w=1                    88   17   87   76   86    71    67   80
+hy multilingual-e5-base default k=30 w=2                    83   17   71   66   71    61    57   71
+hy multilingual-e5-base default k=60 w=0.5                  88   17   87   76   85    71    67   80
+hy multilingual-e5-base default k=60 w=1                    88   17   87   76   85    71    67   80
+hy multilingual-e5-base default k=60 w=2                    85   17   71   66   75    63    59   73
+hy multilingual-e5-base bestkw k=10 w=0.5                   89   22   92   92   93    78    73   85
+hy multilingual-e5-base bestkw k=10 w=1                     89   26   90   89   82    75    69   86
+hy multilingual-e5-base bestkw k=10 w=2                     83   19   66   78   67    63    57   77
+hy multilingual-e5-base bestkw k=30 w=0.5                   89   24   88   90   87    76    69   85
+hy multilingual-e5-base bestkw k=30 w=1                     88   25   84   87   82    73    67   85
+hy multilingual-e5-base bestkw k=30 w=2                     84   23   68   79   71    65    59   75
+hy multilingual-e5-base bestkw k=60 w=0.5                   89   24   83   87   82    73    66   85
+hy multilingual-e5-base bestkw k=60 w=1                     87   25   81   85   80    72    66   84
+hy multilingual-e5-base bestkw k=60 w=2                     84   23   68   80   75    66    61   76
+
+bge-m3: 68562 of 68562 embeddable questions have vectors
 
 ## bge-m3 (query embed 12 ms)
 config                                                     rec para asc typo ans  macro  h@1 h@10   (MRR@10 %)
@@ -116,19 +107,43 @@ hy bge-m3 bestkw k=60 w=0.5                                 91   28   95   93   
 hy bge-m3 bestkw k=60 w=1                                   92   27   94   93   93    80    75   87
 hy bge-m3 bestkw k=60 w=2                                   92   29   89   88   93    78    72   90
 
+gte-multilingual-base: 68562 of 68562 embeddable questions have vectors
+
+## gte-multilingual-base (query embed 6 ms)
+config                                                     rec para asc typo ans  macro  h@1 h@10   (MRR@10 %)
+ai gte-multilingual-base                                    82   20   60   69   54    57    47   77
+hy gte-multilingual-base default k=10 w=0.5                 96   21   93   81   97    78    73   85
+hy gte-multilingual-base default k=10 w=1                   96   21   93   81   94    77    73   85
+hy gte-multilingual-base default k=10 w=2                   93   21   77   78   76    69    62   81
+hy gte-multilingual-base default k=30 w=0.5                 96   21   93   81   96    77    73   85
+hy gte-multilingual-base default k=30 w=1                   96   21   93   81   94    77    73   85
+hy gte-multilingual-base default k=30 w=2                   91   21   78   78   82    70    64   81
+hy gte-multilingual-base default k=60 w=0.5                 96   21   93   81   93    77    72   85
+hy gte-multilingual-base default k=60 w=1                   96   21   93   81   92    77    72   85
+hy gte-multilingual-base default k=60 w=2                   91   21   81   78   84    71    65   81
+hy gte-multilingual-base bestkw k=10 w=0.5                  93   25   93   92   97    80    77   84
+hy gte-multilingual-base bestkw k=10 w=1                    93   28   93   93   94    80    77   87
+hy gte-multilingual-base bestkw k=10 w=2                    87   28   77   82   73    69    62   81
+hy gte-multilingual-base bestkw k=30 w=0.5                  93   26   93   92   96    80    77   84
+hy gte-multilingual-base bestkw k=30 w=1                    93   26   93   89   94    79    76   86
+hy gte-multilingual-base bestkw k=30 w=2                    90   25   77   85   76    71    64   81
+hy gte-multilingual-base bestkw k=60 w=0.5                  93   26   94   89   93    79    75   86
+hy gte-multilingual-base bestkw k=60 w=1                    93   26   93   88   92    78    75   85
+hy gte-multilingual-base bestkw k=60 w=2                    91   24   77   85   78    71    65   81
+
 ## Test split (held out)
 config                                                     rec para asc typo ans  macro  h@1 h@10   (MRR@10 %)
-before tuning: hy e5-small default k=60 w=1                 97   15   94   75   75    71    67   79
+before tuning: hy e5-small default k=60 w=1                 97   16   94   77   75    72    68   78
 shipped now: hy bge-m3 default k=10 w=0.5                  100   47   97   88   89    84    79   92
 best keyword: kw OR fuzzy=0.2 prefix=true boost=current     98   19   98   92   94    80    77   86
-ai only: ai e5-small                                        71   15   56   55   42    48    41   62
-best hybrid: hy e5-small bestkw k=10 w=0.5                  97   22   97   97   83    79    74   87
-ai only: ai e5-small+comment                                73   16   57   62   46    51    43   65
-best hybrid: hy e5-small+comment bestkw k=10 w=0.5          97   23   97   92   91    80    75   87
-ai only: ai e5-base                                         74   19   47   59   36    47    39   65
-best hybrid: hy e5-base bestkw k=10 w=0.5                   96   21   98   98   86    80    76   86
+ai only: ai e5-small                                        72   16   56   59   42    49    43   61
+best hybrid: hy e5-small bestkw k=10 w=0.5                  97   22   98   95   86    80    75   87
+ai only: ai e5-base                                         73   14   44   59   45    47    41   57
+best hybrid: hy e5-base bestkw k=10 w=0.5                   94   21   97   89   85    77    71   86
 ai only: ai bge-m3                                          88   47   68   85   76    73    67   84
 best hybrid: hy bge-m3 default k=10 w=0.5                  100   47   97   88   89    84    79   92
+ai only: ai gte-base                                        77   20   50   69   51    53    47   66
+best hybrid: hy gte-base bestkw k=10 w=1                    94   26   90   81   84    75    68   89
 BEST on dev: hy bge-m3 default k=10 w=0.5                  100   47   97   88   89    84    79   92
 
 best overall = hy bge-m3 default k=10 w=0.5 {"combineWith":"AND","fuzzy":0.2,"prefix":true,"boost":{"answer":2,"text":1.5},"rrfK":10,"aiWeight":0.5}

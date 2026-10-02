@@ -4,39 +4,59 @@ const path = require('node:path');
 const crypto = require('node:crypto');
 const ai = require('./ai');
 const { Store, TUNING, fold, passage, embeddable } = require('./store');
+const { environment } = require('./bench/environment');
 
 const DB = process.env.QUIZ_DB || path.join(__dirname, '..', 'data', 'kimhardane.sqlite');
 const CACHE = path.join(__dirname, 'bench', 'cache');
 const slug = model => model.replace(/[^\w.-]+/g, '_');
-const uidsHash = store => crypto.createHash('sha1').update(store.rows.map(r => r.uid).join('\n')).digest('hex');
 const PASSAGES = { ta: passage, tac: r => `${passage(r)}\n${r.comment ?? ''}` };
+const passagesHash = (store, kind) => store.rows.reduce((hash, r) => hash.update(`${r.uid}\0${PASSAGES[kind](r)}\0`), crypto.createHash('sha1')).digest('hex');
 const cacheName = (model, kind) => slug(model) + (kind === 'ta' ? '' : `@${kind}`);
 
 async function embedCorpus(model, kind = 'ta') {
   const store = new Store(DB);
   const { dim } = ai.MODELS[model];
   const vecs = new Float32Array(store.rows.length * dim);
-  const todo = store.rows.map((r, i) => i).filter(i => embeddable(store.rows[i]));
+  const text = i => PASSAGES[kind](store.rows[i]);
+  const todo = store.rows.map((r, i) => i).filter(i => embeddable(store.rows[i])).sort((a, b) => text(a).length - text(b).length);
   const t0 = Date.now();
   for (let k = 0; k < todo.length; k += ai.BATCH) {
     const idx = todo.slice(k, k + ai.BATCH);
-    (await ai.embed(idx.map(i => PASSAGES[kind](store.rows[i])), 'passage', model)).forEach((v, j) => vecs.set(v, idx[j] * dim));
+    (await ai.embed(idx.map(text), 'passage', model)).forEach((v, j) => {
+      if (v.length !== dim || !v.every(Number.isFinite)) throw new Error(`${model}: unusable vector for ${store.rows[idx[j]].uid}`);
+      vecs.set(v, idx[j] * dim);
+    });
     if ((k / ai.BATCH) % 100 === 0) console.log(`${model}: ${k}/${todo.length} ${Math.round(k / ((Date.now() - t0) / 1000))}/s`);
   }
   fs.mkdirSync(CACHE, { recursive: true });
   fs.writeFileSync(path.join(CACHE, `${cacheName(model, kind)}.f32`), Buffer.from(vecs.buffer));
-  fs.writeFileSync(path.join(CACHE, `${cacheName(model, kind)}.json`), JSON.stringify({ model, kind, dim, rows: store.rows.length, uids: uidsHash(store) }));
+  fs.writeFileSync(path.join(CACHE, `${cacheName(model, kind)}.json`), JSON.stringify({ model, kind, dim, rows: store.rows.length, space: ai.embeddingSpace(model).id, passages: passagesHash(store, kind) }));
   console.log(`${model} ${kind}: done in ${Math.round((Date.now() - t0) / 1000)} s`);
 }
 
-function useModel(store, model, kind) {
-  if (model === ai.MODEL && kind === 'ta') return store.loadVectors(model, ai.MODELS[model].dim);
-  const meta = JSON.parse(fs.readFileSync(path.join(CACHE, `${cacheName(model, kind)}.json`), 'utf8'));
-  if (meta.uids !== uidsHash(store)) throw new Error(`${model}: cache is for a different question set; re-run embed`);
+function cachedVectorsProblem(store, model, kind) {
+  const metaFile = path.join(CACHE, `${cacheName(model, kind)}.json`);
+  if (!fs.existsSync(metaFile)) return 'no cache';
+  const meta = JSON.parse(fs.readFileSync(metaFile, 'utf8'));
+  if (meta.space !== ai.embeddingSpace(model).id) return 'made with another model revision or preprocessing';
+  if (meta.passages !== passagesHash(store, kind)) return 'made from other question texts';
+  return null;
+}
+
+async function useModel(store, model, kind) {
+  const space = ai.embeddingSpace(model);
+  if (model === ai.MODEL && kind === 'ta') {
+    store.loadVectors({ ...space, legacyModel: await ai.legacyModelFor(space) });
+    return store.vectorCount;
+  }
+  const problem = cachedVectorsProblem(store, model, kind);
+  if (problem) throw new Error(`${model} ${kind}: cache ${problem}; run node bench.js embed ${model} ${kind}`);
   const buf = fs.readFileSync(path.join(CACHE, `${cacheName(model, kind)}.f32`));
+  const vecs = new Float32Array(buf.buffer, buf.byteOffset, buf.byteLength / 4);
+  if (vecs.length !== store.rows.length * space.dim || !vecs.every(Number.isFinite)) throw new Error(`${model} ${kind}: cache has unusable vectors`);
   const has = Uint8Array.from(store.rows, r => (embeddable(r) ? 1 : 0));
-  Object.assign(store, { model, dim: meta.dim, has, vectorCount: has.reduce((a, b) => a + b, 0),
-    vecs: new Float32Array(buf.buffer, buf.byteOffset, buf.byteLength / 4) });
+  Object.assign(store, { space, dim: space.dim, has, vectorCount: has.reduce((a, b) => a + b, 0), vecs });
+  return store.vectorCount;
 }
 
 const ASCII = { ə: 'e', ı: 'i', ş: 's', ç: 'c', ğ: 'g', ö: 'o', ü: 'u', Ə: 'E', İ: 'I', Ş: 'S', Ç: 'C', Ğ: 'G', Ö: 'O', Ü: 'U' };
@@ -118,6 +138,7 @@ async function run() {
   const queries = buildQueries(store);
   const report = [];
   const log = line => { console.log(line); report.push(line); };
+  const embeddableCount = store.rows.filter(embeddable).length;
   log(`${queries.length} queries: ${TYPES.map(t => `${queries.filter(q => q.type === t).length} ${t}`).join(', ')}; dev/test split by target`);
 
   const BOOSTS = { current: TUNING.boost, none: {}, answer3: { answer: 3, text: 1.5, comment: 0.5 } };
@@ -138,13 +159,15 @@ async function run() {
 
   const variants = [];
   for (const model of Object.keys(ai.MODELS)) for (const kind of Object.keys(PASSAGES)) {
-    if ((model === ai.MODEL && kind === 'ta') || fs.existsSync(path.join(CACHE, `${cacheName(model, kind)}.f32`))) {
+    if ((model === ai.MODEL && kind === 'ta') || !cachedVectorsProblem(store, model, kind)) {
       variants.push({ model, kind, short: model.split('/')[1] + (kind === 'ta' ? '' : '+comment') });
     }
   }
   const hyConfigs = [], qvecsByModel = new Map();
+  report.unshift(...await environment(variants.map(v => v.model).filter((m, i, all) => all.indexOf(m) === i)), '');
   for (const { model, kind, short } of variants) {
-    useModel(store, model, kind);
+    const coverage = await useModel(store, model, kind);
+    log(`\n${short}: ${coverage} of ${embeddableCount} embeddable questions have vectors${coverage < embeddableCount ? ' (INCOMPLETE: AI results are understated)' : ''}`);
     const qvecs = qvecsByModel.get(model) ?? qvecsByModel.set(model, new Map()).get(model);
     const t0 = Date.now();
     for (const x of queries) if (!qvecs.has(x.q)) qvecs.set(x.q, await ai.embedQuery(x.q, model));
@@ -193,4 +216,4 @@ if (require.main === module) {
   (cmd === 'embed' ? embedCorpus(arg, process.argv[4]) : run()).catch(e => { console.error(e); process.exit(1); });
 }
 
-module.exports = { ascii, typo, norm, summarize };
+module.exports = { ascii, typo, norm, summarize, buildQueries, evaluate, cachedVectorsProblem };

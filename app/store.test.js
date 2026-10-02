@@ -6,8 +6,10 @@ const os = require('node:os');
 const path = require('node:path');
 const { fileURLToPath } = require('node:url');
 const { DatabaseSync } = require('node:sqlite');
-const { Store, fold, DIM } = require('./store');
+const { Store, fold, hashOf, DIM } = require('./store');
 const { tempDb } = require('./testDb');
+
+const FAKE_SPACE = { id: 'fake-model', dim: DIM };
 
 const vec = (a, b = a, w = 0) => {
   const v = new Float32Array(DIM);
@@ -20,7 +22,7 @@ const vec = (a, b = a, w = 0) => {
 function store(withVectors = false) {
   const s = new Store(tempDb());
   s.buildIndex();
-  s.loadVectors('fake-model');
+  s.loadVectors(FAKE_SPACE);
   if (withVectors) s.putVectors(s.staleRows(), [vec(0), vec(1), vec(2)]);
   return s;
 }
@@ -74,7 +76,7 @@ test('save writes only changes, marks edited, reindexes and invalidates the vect
   assert.equal(s.vectorCount, 2);
   assert.deepEqual(s.staleRows().map(r => r.uid), ['1:question:1']);
   const again = new Store(s.db.location());
-  again.loadVectors('fake-model');
+  again.loadVectors(FAKE_SPACE);
   assert.equal(again.vectorCount, 2);
   assert.throws(() => s.save('nope', { text: 'x' }), /unknown question/);
 });
@@ -240,4 +242,65 @@ test('point systems are saved by name, renamed, and deleted', () => {
   assert.deepEqual(s.pointSystems().map(system => system.name), ['Brave pool', 'Classic']);
   s.deletePointSystem(other);
   assert.deepEqual(s.pointSystems().map(system => system.id), [id]);
+});
+
+test('vectors from an older embedding setup are not loaded unless their model and preprocessing are verified', () => {
+  const s = store(true);
+  const relabel = s.db.prepare('UPDATE embeddings SET hash = ? WHERE uid = ?');
+  for (const uid of ['1:question:1', '1:question:2']) relabel.run(hashOf('legacy-model', s.get(uid)), uid);
+  const unverified = new Store(s.db.location());
+  unverified.loadVectors(FAKE_SPACE);
+  assert.equal(unverified.vectorCount, 1);
+  assert.equal(unverified.legacyVectorCount('legacy-model'), 2);
+  assert.deepEqual(unverified.staleRows().map(r => r.uid), ['1:question:1', '1:question:2']);
+  const verified = new Store(s.db.location());
+  verified.loadVectors({ ...FAKE_SPACE, legacyModel: 'legacy-model' });
+  assert.equal(verified.vectorCount, 3);
+  assert.equal(verified.legacyVectorCount('legacy-model'), 0);
+  const reopened = new Store(s.db.location());
+  reopened.loadVectors(FAKE_SPACE);
+  assert.equal(reopened.vectorCount, 3);
+});
+
+test('vectors with the wrong size, non-finite values or an outdated passage are not stored', () => {
+  const s = store();
+  const [first, second, third] = s.staleRows();
+  const withNaN = vec(1).map((x, i) => (i === 5 ? NaN : x));
+  const edited = { ...third, answer: 'an answer from before the edit' };
+  assert.equal(s.putVectors([first, second, edited], [new Float32Array(DIM - 1), withNaN, vec(2)]), 0);
+  assert.equal(s.vectorCount, 0);
+  assert.equal(s.storedVectorCount(), 0);
+  const reopened = new Store(s.db.location());
+  reopened.db.exec("INSERT INTO embeddings (uid, hash, vec) VALUES ('1:question:1', 'x', x'00')");
+  reopened.db.prepare('UPDATE embeddings SET vec = ?, hash = ? WHERE uid = ?').run(new Uint8Array(new Float32Array(DIM).fill(Infinity).buffer), hashOf(FAKE_SPACE.id, first), first.uid);
+  reopened.loadVectors(FAKE_SPACE);
+  assert.equal(reopened.vectorCount, 0);
+});
+
+test('a failed vector write rolls back, leaves memory untouched and the next write works', () => {
+  const s = store();
+  const [first, second] = s.staleRows();
+  s.db.exec(`CREATE TRIGGER refuse BEFORE INSERT ON embeddings WHEN NEW.uid = '${second.uid}' BEGIN SELECT RAISE(ABORT, 'disk full'); END`);
+  assert.throws(() => s.putVectors([first, second], [vec(0), vec(1)]), /disk full/);
+  assert.equal(s.db.isTransaction, false);
+  assert.deepEqual([s.vectorCount, s.storedVectorCount()], [0, 0]);
+  assert.equal(s.putVectors([first], [vec(0)]), 1);
+  assert.deepEqual([s.vectorCount, s.storedVectorCount()], [1, 1]);
+});
+
+test('vector search runs on shared memory and every change that moves rows changes the generation', () => {
+  const s = store(true);
+  assert.ok(s.vecs.buffer instanceof SharedArrayBuffer && s.has.buffer instanceof SharedArrayBuffer);
+  const allowed = s.allowedRows({ games: ['3sual:1'] });
+  assert.deepEqual(s.nearest(vec(2), allowed).map(h => s.rows[h.i].uid), ['1:question:1', '1:question:2']);
+  const before = s.generation;
+  const own = s.createQuestion({ text: 'Ən hündür dağ hansıdır?', answer: 'Şahdağ' });
+  assert.equal(s.generation, before);
+  s.deleteQuestion(own.uid);
+  assert.ok(s.generation > before);
+  for (const change of [() => s.reload(), () => s.unloadVectors()]) {
+    const generation = s.generation;
+    change();
+    assert.ok(s.generation > generation);
+  }
 });

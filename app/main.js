@@ -4,7 +4,7 @@ const { autoUpdater } = require('electron-updater');
 const { execFile } = require('node:child_process');
 const fs = require('node:fs');
 const path = require('node:path');
-const { Store, OWN_SOURCE_ID } = require('./store');
+const { Store, OWN_SOURCE_ID, POOL, semanticHitsOf } = require('./store');
 const { prepareLibrary } = require('./data');
 const { DATA_SOURCES, dataSourceById, describe, removeDataSource } = require('./sources');
 const ai = require('./ai');
@@ -47,7 +47,9 @@ function readSettings() {
 const writeSettings = changes => fs.writeFileSync(settingsFile(), JSON.stringify({ ...readSettings(), ...changes }));
 
 const isAiReady = () => aiStatus.state === 'ready';
-const AI_BUSY_STATES = ['downloading', 'loading', 'indexing', 'ready', 'stopping'];
+const AI_BUSY_STATES = ['downloading', 'loading', 'indexing', 'ready', 'stopping', 'removing'];
+const VECTOR_BYTES = ai.MODELS[ai.MODEL].dim * 4;
+const aiOffStatus = () => ({ state: 'off', storedBytes: ai.modelBytes() + store.storedVectorCount() * VECTOR_BYTES });
 
 function setAiStatus(win, status) {
   aiStatus = status;
@@ -61,7 +63,7 @@ async function prepareAi(win, signal) {
     if (needsDownload) ai.deleteModel();
     report(needsDownload ? { state: 'downloading', loaded: 0, total: 0 } : { state: 'loading' });
     await ai.load(ai.MODEL, { signal, onDownload: ({ loaded, total }) => needsDownload && report({ state: 'downloading', loaded, total }) });
-    if (!store.vecs) store.loadVectors(ai.MODEL, ai.MODELS[ai.MODEL].dim);
+    if (!store.vecs) await loadAiVectors();
     const stale = store.staleRows();
     const startedAt = Date.now();
     if (stale.length) report({ state: 'indexing', done: 0, total: stale.length });
@@ -76,21 +78,64 @@ async function prepareAi(win, signal) {
   }
 }
 
+async function loadAiVectors() {
+  const space = ai.embeddingSpace();
+  store.loadVectors(space);
+  if (!store.legacyVectorCount(ai.LEGACY_VECTORS.model)) return;
+  const legacyModel = await ai.legacyModelFor(space);
+  if (legacyModel) store.loadVectors({ ...space, legacyModel });
+}
+
 function turnOnAi(win) {
   if (AI_BUSY_STATES.includes(aiStatus.state)) return;
   const controller = new AbortController();
   aiJob = { controller, finished: prepareAi(win, controller.signal) };
 }
 
-async function turnOffAi(win) {
-  setAiStatus(win, { state: 'stopping' });
+async function stopAi() {
   aiJob?.controller.abort();
   await aiJob?.finished;
   aiJob = null;
-  await ai.unload();
-  ai.deleteModel();
-  store.dropVectors();
-  setAiStatus(win, { state: 'off' });
+  await ai.stop();
+  store.unloadVectors();
+}
+
+async function turnOffAi(win) {
+  if (['off', 'stopping', 'removing'].includes(aiStatus.state)) return;
+  setAiStatus(win, { state: 'stopping' });
+  await stopAi();
+  setAiStatus(win, aiOffStatus());
+}
+
+async function removeAiFiles(win) {
+  if (aiStatus.state !== 'off') throw new Error('Turn off AI search before removing its files');
+  setAiStatus(win, { state: 'removing' });
+  try {
+    await ai.stop();
+    ai.deleteModel();
+    store.dropVectors();
+  } finally {
+    setAiStatus(win, aiOffStatus());
+  }
+}
+
+function watchAiWorker(win) {
+  ai.onUnexpectedStop(error => {
+    if (!['loading', 'indexing', 'ready'].includes(aiStatus.state)) return;
+    aiJob?.controller.abort();
+    aiJob = null;
+    setAiStatus(win, { state: 'error', message: error.message });
+  });
+}
+
+async function searchWithAi(opts) {
+  const qvec = await ai.embedQuery(opts.q);
+  for (let attempt = 0; attempt < 3 && isAiReady(); attempt++) {
+    const generation = store.generation;
+    const found = await ai.nearest(store, qvec, store.allowedRows(opts), POOL);
+    if (generation === store.generation && isAiReady()) return store.search(opts, qvec, semanticHitsOf(found));
+  }
+  return store.search(opts);
 }
 
 const APP_ICON = path.join(__dirname, 'icon.png');
@@ -195,6 +240,8 @@ app.whenReady().then(() => {
   const ready = new Promise(resolve => setTimeout(resolve, 100)).then(() => {
     store = openStore();
     store.buildIndex();
+    aiStatus = aiOffStatus();
+    watchAiWorker(win);
     if (readSettings().aiSearch) turnOnAi(win);
   });
   const handle = (channel, fn) => ipcMain.handle(channel, async (_e, ...args) => { await ready; return fn(...args); });
@@ -206,9 +253,13 @@ app.whenReady().then(() => {
     await (isOn ? turnOnAi(win) : turnOffAi(win));
     return aiStatus;
   });
+  handle('remove-ai-files', async () => {
+    await removeAiFiles(win);
+    return aiStatus;
+  });
   handle('search', async opts => {
-    const useAi = opts.q?.trim() && opts.mode !== 'keyword' && isAiReady();
-    return store.search(opts, useAi ? await ai.embedQuery(opts.q) : null);
+    if (!opts.q?.trim() || opts.mode === 'keyword' || !isAiReady()) return store.search(opts);
+    return ai.beforeIndexing(() => searchWithAi(opts)).catch(() => store.search(opts));
   });
   handle('get', uid => store.get(uid));
   handle('game-questions', (games, count) => store.randomPlayableQuestions(games, count, party ? [...party.game.shownUids] : []));
@@ -221,7 +272,8 @@ app.whenReady().then(() => {
   handle('reorder-list', (listId, uidsInOrder) => store.reorderList(listId, uidsInOrder));
   handle('list-questions', listId => store.listQuestions(listId));
   handle('list-ids-containing', uid => store.listIdsContaining(uid));
-  const judgeNow = (question, given) => judgeAnswer(question, given, isAiReady() ? texts => ai.embed(texts, 'query') : null);
+  const judgeNow = (question, given) => judgeAnswer(question, given, isAiReady() ? texts => ai.beforeIndexing(() => ai.embed(texts, 'query')) : null)
+    .catch(() => judgeAnswer(question, given, null));
   handle('start-play-game', settings => store.startPlayGame(settings));
   handle('submit-play-answer', async (gameId, { position, uid, givenAnswer, secondsUsed }) => {
     const judged = await judgeNow(store.get(uid), givenAnswer);
@@ -441,6 +493,7 @@ app.whenReady().then(() => {
 app.on('will-quit', () => {
   dataSourceJob?.abort();
   aiJob?.controller.abort();
+  ai.stop();
   party?.close();
   store?.db.close();
 });

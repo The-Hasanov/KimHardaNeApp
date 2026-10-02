@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { CircleAlertIcon, CircleCheckIcon, DatabaseIcon, MoonIcon, RotateCcwIcon, SettingsIcon, SparklesIcon } from 'lucide-react';
+import { CircleAlertIcon, CircleCheckIcon, DatabaseIcon, MoonIcon, RotateCcwIcon, SettingsIcon, SparklesIcon, Trash2Icon } from 'lucide-react';
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter,
   AlertDialogHeader, AlertDialogTitle,
@@ -34,16 +34,19 @@ export function describeAiWork(status) {
         percent: (status.done / status.total) * 100,
       };
     case 'stopping':
-      return { text: 'Removing the AI model and index…' };
+      return { text: 'Turning off AI search…' };
+    case 'removing':
+      return { text: 'Deleting the AI model and index…' };
     default:
       return null;
   }
 }
 
-export default function SettingsDialog({ open, onOpenChange, tab, onTabChange, aiStatus, onAiSearchChange, dataSources }) {
-  const [isConfirmingTurnOff, setIsConfirmingTurnOff] = useState(false);
+export default function SettingsDialog({ open, onOpenChange, tab, onTabChange, aiStatus, onAiSearchChange, onRemoveAiFiles, dataSources }) {
+  const [isConfirmingRemoval, setIsConfirmingRemoval] = useState(false);
   const nightMode = useNightMode();
-  const isAiOn = !['off', 'stopping'].includes(aiStatus.state);
+  const isAiOn = !['off', 'stopping', 'removing'].includes(aiStatus.state);
+  const hasAiFiles = aiStatus.state === 'off' && aiStatus.storedBytes > 0;
   const work = describeAiWork(aiStatus);
 
   return (
@@ -72,10 +75,19 @@ export default function SettingsDialog({ open, onOpenChange, tab, onTabChange, a
                       Finds questions by meaning, even when they share no words with the search. Adds the Hybrid and AI search modes.
                     </p>
                   </div>
-                  <Switch id="ai-search" checked={isAiOn} disabled={aiStatus.state === 'stopping'}
-                    onCheckedChange={isChecked => (isChecked ? onAiSearchChange(true) : setIsConfirmingTurnOff(true))} />
+                  <Switch id="ai-search" checked={isAiOn} disabled={['stopping', 'removing'].includes(aiStatus.state)} onCheckedChange={onAiSearchChange} />
                 </div>
-                {aiStatus.state === 'off' && (
+                {hasAiFiles && (
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <p className="flex-1 text-xs text-muted-foreground">
+                      The AI model and index stay on this computer ({megabytes(aiStatus.storedBytes)} MB), so turning AI search on again is quick.
+                    </p>
+                    <Button variant="outline" className="text-destructive hover:text-destructive" onClick={() => setIsConfirmingRemoval(true)}>
+                      <Trash2Icon />Delete AI files
+                    </Button>
+                  </div>
+                )}
+                {aiStatus.state === 'off' && !hasAiFiles && (
                   <p className="text-xs text-muted-foreground">
                     Turning it on downloads the AI model (about 590 MB, from Hugging Face) and builds the AI index on this computer,
                     roughly 30–60 minutes. Search and editing keep working meanwhile. Needs about 900 MB of disk space.
@@ -108,18 +120,18 @@ export default function SettingsDialog({ open, onOpenChange, tab, onTabChange, a
           </Tabs>
         </DialogContent>
       </Dialog>
-      <AlertDialog open={isConfirmingTurnOff} onOpenChange={setIsConfirmingTurnOff}>
+      <AlertDialog open={isConfirmingRemoval} onOpenChange={setIsConfirmingRemoval}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Turn off AI search?</AlertDialogTitle>
+            <AlertDialogTitle>Delete the AI files?</AlertDialogTitle>
             <AlertDialogDescription>
-              The AI model and the AI index are deleted from this computer, freeing about 900 MB. Turning AI search on again
-              downloads and rebuilds them.
+              The AI model and the AI index are deleted from this computer, freeing about {megabytes(aiStatus.storedBytes ?? 0)} MB. Turning AI
+              search on again downloads the model (about 590 MB) and rebuilds the index, roughly 30–60 minutes.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Keep it on</AlertDialogCancel>
-            <AlertDialogAction variant="destructive" onClick={() => onAiSearchChange(false)}>Turn off and delete</AlertDialogAction>
+            <AlertDialogCancel>Keep them</AlertDialogCancel>
+            <AlertDialogAction variant="destructive" onClick={onRemoveAiFiles}>Delete AI files</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

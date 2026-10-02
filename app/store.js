@@ -68,7 +68,24 @@ const fold = s => s.toLowerCase().normalize('NFD').replace(/\p{M}/gu, '').replac
 const passage = r => `${r.text ?? ''}\n${r.answer ?? ''}`;
 const embeddable = r => /[\p{L}\p{N}]/u.test(passage(r));
 const gameKeyOf = row => `${row.source_id}:${row.game_id}`;
-const hashOf = (model, r) => crypto.createHash('sha1').update(`${model}\0${passage(r)}`).digest('hex');
+const hashOf = (spaceId, r) => crypto.createHash('sha1').update(`${spaceId}\0${passage(r)}`).digest('hex');
+const sharedArray = (Type, length) => new Type(new SharedArrayBuffer(length * Type.BYTES_PER_ELEMENT));
+const isUsableVector = (v, dim) => v?.length === dim && v.every(Number.isFinite);
+
+const semanticHitsOf = ({ indices, scores }) => indices.map((i, k) => ({ i, ai: scores[k] }));
+
+function topMatches(vecs, has, dim, qvec, allowed, limit) {
+  const indices = [], scores = [];
+  for (let i = 0; i < has.length; i++) {
+    if (!has[i] || (allowed && !allowed[i])) continue;
+    let score = 0;
+    for (let d = 0, o = i * dim; d < dim; d++) score += vecs[o + d] * qvec[d];
+    indices.push(i);
+    scores.push(score);
+  }
+  const order = Uint32Array.from(indices.keys()).sort((a, b) => scores[b] - scores[a]).slice(0, limit);
+  return { indices: Array.from(order, k => indices[k]), scores: Array.from(order, k => scores[k]) };
+}
 
 class Store {
   constructor(file, { imagesRoot = path.dirname(path.resolve(file)) } = {}) {
@@ -89,6 +106,7 @@ class Store {
     const resultColumns = this.db.prepare('PRAGMA table_info(party_results)').all().map(c => c.name);
     if (!resultColumns.includes('correct_ms')) this.db.exec('ALTER TABLE party_results ADD COLUMN correct_ms INTEGER NOT NULL DEFAULT 0');
     if (!resultColumns.includes('points')) this.db.exec('ALTER TABLE party_results ADD COLUMN points INTEGER NOT NULL DEFAULT 0; UPDATE party_results SET points = correct');
+    this.generation = 0;
     this.loadRows();
     this.vecs = null;
     this.vectorCount = 0;
@@ -99,6 +117,19 @@ class Store {
     this.rows = this.db.prepare(`SELECT ${LIST_COLS} FROM questions ORDER BY package_id, ordinal, kind, value_id`).all();
     this.pos = new Map(this.rows.map((r, i) => [r.uid, i]));
     this.authorCache = null;
+    this.generation++;
+  }
+
+  inTransaction(work) {
+    this.db.exec('BEGIN');
+    try {
+      const result = work();
+      this.db.exec('COMMIT');
+      return result;
+    } catch (e) {
+      if (this.db.isTransaction) this.db.exec('ROLLBACK');
+      throw e;
+    }
   }
 
   authorRows(id) {
@@ -112,7 +143,7 @@ class Store {
   reload() {
     this.loadRows();
     this.buildIndex();
-    if (this.model) this.loadVectors(this.model, this.dim);
+    if (this.space) this.loadVectors(this.space);
   }
 
   buildIndex() {
@@ -120,18 +151,29 @@ class Store {
     this.index.addAll(this.rows);
   }
 
-  loadVectors(model, dim = DIM) {
-    this.model = model;
-    this.dim = dim;
-    this.vecs = new Float32Array(this.rows.length * this.dim);
-    this.has = new Uint8Array(this.rows.length);
+  loadVectors(space) {
+    this.space = space;
+    this.dim = space.dim;
+    this.vecs = sharedArray(Float32Array, this.rows.length * this.dim);
+    this.has = sharedArray(Uint8Array, this.rows.length);
     this.vectorCount = 0;
+    this.generation++;
+    const adopted = [];
     for (const { uid, hash, vec } of this.db.prepare('SELECT uid, hash, vec FROM embeddings').iterate()) {
       const i = this.pos.get(uid);
-      if (i === undefined || vec.byteLength !== this.dim * 4 || hash !== hashOf(model, this.rows[i]) || !embeddable(this.rows[i])) continue;
-      this.vecs.set(new Float32Array(vec.buffer.slice(vec.byteOffset, vec.byteOffset + vec.byteLength)), i * this.dim);
+      if (i === undefined || vec.byteLength !== this.dim * 4 || !embeddable(this.rows[i])) continue;
+      const isCurrent = hash === hashOf(space.id, this.rows[i]);
+      if (!isCurrent && !(space.legacyModel && hash === hashOf(space.legacyModel, this.rows[i]))) continue;
+      const v = new Float32Array(vec.buffer.slice(vec.byteOffset, vec.byteOffset + vec.byteLength));
+      if (!isUsableVector(v, this.dim)) continue;
+      if (!isCurrent) adopted.push(uid);
+      this.vecs.set(v, i * this.dim);
       this.has[i] = 1;
       this.vectorCount++;
+    }
+    if (adopted.length) {
+      const relabel = this.db.prepare('UPDATE embeddings SET hash = ? WHERE uid = ?');
+      this.inTransaction(() => adopted.forEach(uid => relabel.run(hashOf(space.id, this.rows[this.pos.get(uid)]), uid)));
     }
   }
 
@@ -139,28 +181,45 @@ class Store {
     return this.rows.filter((r, i) => !this.has?.[i] && embeddable(r));
   }
 
-  dropVectors() {
-    this.db.exec('DELETE FROM embeddings');
-    this.db.exec('VACUUM');
-    this.model = null;
+  unloadVectors() {
+    this.space = null;
     this.vecs = null;
     this.has = null;
     this.vectorCount = 0;
+    this.generation++;
+  }
+
+  dropVectors() {
+    this.db.exec('DELETE FROM embeddings');
+    this.db.exec('VACUUM');
+    this.unloadVectors();
+  }
+
+  legacyVectorCount(legacyModel) {
+    let count = 0;
+    for (const { uid, hash } of this.db.prepare('SELECT uid, hash FROM embeddings').iterate()) {
+      const i = this.pos.get(uid);
+      if (i !== undefined && hash === hashOf(legacyModel, this.rows[i])) count++;
+    }
+    return count;
+  }
+
+  storedVectorCount() {
+    return this.db.prepare('SELECT COUNT(*) AS n FROM embeddings').get().n;
   }
 
   putVectors(rows, vectors) {
-    if (!this.vecs) return;
+    if (!this.vecs) return 0;
     const put = this.db.prepare('INSERT OR REPLACE INTO embeddings (uid, hash, vec) VALUES (?, ?, ?)');
-    this.db.exec('BEGIN');
-    rows.forEach((r, k) => {
-      const v = vectors[k], i = this.pos.get(r.uid);
-      if (i === undefined) return;
-      put.run(r.uid, hashOf(this.model, r), new Uint8Array(v.buffer, v.byteOffset, v.byteLength));
+    const usable = rows.map((r, k) => [r, vectors[k], this.pos.get(r.uid)])
+      .filter(([r, v, i]) => i !== undefined && isUsableVector(v, this.dim) && passage(r) === passage(this.rows[i]));
+    this.inTransaction(() => usable.forEach(([r, v]) => put.run(r.uid, hashOf(this.space.id, r), new Uint8Array(v.buffer, v.byteOffset, v.byteLength))));
+    for (const [, v, i] of usable) {
       this.vecs.set(v, i * this.dim);
       if (!this.has[i]) this.vectorCount++;
       this.has[i] = 1;
-    });
-    this.db.exec('COMMIT');
+    }
+    return usable.length;
   }
 
   cosine(i, qvec) {
@@ -170,12 +229,18 @@ class Store {
     return s;
   }
 
-  search({ q = '', mode = 'hybrid', games = [], edited = false, withImage = false, author = null, limit = 100 } = {}, qvec = null) {
-    const t0 = performance.now();
+  allowedRows({ games = [], edited = false, withImage = false, author = null } = {}) {
+    if (!games.length && !edited && !withImage && author == null) return null;
     const byAuthor = author == null ? null : this.authorRows(+author);
     const inGames = games.length ? new Set(games) : null;
-    const keep = i => (!inGames || inGames.has(gameKeyOf(this.rows[i]))) && (!edited || this.rows[i].edited_at)
-      && (!withImage || this.rows[i].rekvizit_url) && (!byAuthor || byAuthor.has(i));
+    return Uint8Array.from(this.rows, (row, i) => (!inGames || inGames.has(gameKeyOf(row))) && (!edited || row.edited_at)
+      && (!withImage || row.rekvizit_url) && (!byAuthor || byAuthor.has(i)) ? 1 : 0);
+  }
+
+  search({ q = '', mode = 'hybrid', limit = 100, ...filters } = {}, qvec = null, semanticHits = null) {
+    const t0 = performance.now();
+    const allowed = this.allowedRows(filters);
+    const keep = i => !allowed || allowed[i] === 1;
     let ranked;
     if (!q.trim()) {
       ranked = [];
@@ -186,7 +251,7 @@ class Store {
     const kw = mode === 'ai' && qvec ? [] : this.index
       .search(q, { prefix, fuzzy: term => (term.length > 4 ? fuzzy : 0), combineWith, boost })
       .map(h => ({ i: this.pos.get(h.id), kw: h.score, terms: h.terms })).filter(h => keep(h.i));
-    const sem = mode === 'keyword' || !qvec ? [] : this.nearest(qvec, keep);
+    const sem = mode === 'keyword' || !qvec ? [] : semanticHits ?? this.nearest(qvec, allowed);
     const info = { matches: sem.length && mode === 'ai' ? null : kw.length, ai: sem.length > 0, t0, qvec };
     if (!sem.length) ranked = kw.map(h => ({ ...h, score: h.kw }));
     else if (!kw.length || mode === 'ai') ranked = sem.map(h => ({ ...h, score: h.ai }));
@@ -205,10 +270,8 @@ class Store {
     return this.result(ranked, limit, info);
   }
 
-  nearest(qvec, keep) {
-    const hits = [];
-    for (let i = 0; i < this.rows.length; i++) if (this.has?.[i] && keep(i)) hits.push({ i, ai: this.cosine(i, qvec) });
-    return hits.sort((a, b) => b.ai - a.ai).slice(0, POOL);
+  nearest(qvec, allowed) {
+    return this.has ? semanticHitsOf(topMatches(this.vecs, this.has, this.dim, qvec, allowed, POOL)) : [];
   }
 
   result(ranked, limit, { matches, ai = false, t0, qvec = null }) {
@@ -266,7 +329,7 @@ class Store {
     const row = this.db.prepare(`SELECT ${LIST_COLS} FROM questions WHERE uid = ?`).get(uid);
     this.rows[i] = row;
     if (this.index) this.index.replace(row);
-    if (this.has?.[i] && hashOf(this.model, row) !== hashOf(this.model, cur)) {
+    if (this.has?.[i] && passage(row) !== passage(cur)) {
       this.has[i] = 0;
       this.vectorCount--;
     }
@@ -283,9 +346,9 @@ class Store {
     this.pos.set(uid, i);
     this.index?.add(this.rows[i]);
     if (this.vecs && this.has.length < this.rows.length) {
-      const vecs = new Float32Array(this.rows.length * this.dim);
+      const vecs = sharedArray(Float32Array, this.rows.length * this.dim);
       vecs.set(this.vecs);
-      const has = new Uint8Array(this.rows.length);
+      const has = sharedArray(Uint8Array, this.rows.length);
       has.set(this.has);
       Object.assign(this, { vecs, has });
     }
@@ -295,13 +358,14 @@ class Store {
   deleteQuestion(uid) {
     const i = this.pos.get(uid);
     if (i === undefined || this.rows[i].source_id !== OWN_SOURCE_ID) throw new Error('Only your own questions can be deleted');
-    this.db.exec('BEGIN');
-    for (const table of ['questions', 'embeddings', 'list_questions']) this.db.prepare(`DELETE FROM ${table} WHERE uid = ?`).run(uid);
-    this.db.exec('COMMIT');
+    this.inTransaction(() => {
+      for (const table of ['questions', 'embeddings', 'list_questions']) this.db.prepare(`DELETE FROM ${table} WHERE uid = ?`).run(uid);
+    });
     this.index?.discard(uid);
     this.rows.splice(i, 1);
     this.pos = new Map(this.rows.map((r, k) => [r.uid, k]));
     this.authorCache = null;
+    this.generation++;
     if (!this.vecs) return;
     if (this.has[i]) this.vectorCount--;
     this.vecs.copyWithin(i * this.dim, (i + 1) * this.dim);
@@ -393,10 +457,10 @@ class Store {
   }
 
   deleteList(listId) {
-    this.db.exec('BEGIN');
-    this.db.prepare('DELETE FROM list_questions WHERE list_id = ?').run(listId);
-    this.db.prepare('DELETE FROM lists WHERE id = ?').run(listId);
-    this.db.exec('COMMIT');
+    this.inTransaction(() => {
+      this.db.prepare('DELETE FROM list_questions WHERE list_id = ?').run(listId);
+      this.db.prepare('DELETE FROM lists WHERE id = ?').run(listId);
+    });
   }
 
   addToList(listId, uid) {
@@ -410,9 +474,7 @@ class Store {
 
   reorderList(listId, uidsInOrder) {
     const setPosition = this.db.prepare('UPDATE list_questions SET position = ? WHERE list_id = ? AND uid = ?');
-    this.db.exec('BEGIN');
-    uidsInOrder.forEach((uid, index) => setPosition.run(index + 1, listId, uid));
-    this.db.exec('COMMIT');
+    this.inTransaction(() => uidsInOrder.forEach((uid, index) => setPosition.run(index + 1, listId, uid)));
   }
 
   listQuestions(listId) {
@@ -453,10 +515,10 @@ class Store {
   }
 
   deletePlayGame(gameId) {
-    this.db.exec('BEGIN');
-    this.db.prepare('DELETE FROM play_answers WHERE game_id = ?').run(gameId);
-    this.db.prepare('DELETE FROM play_games WHERE id = ?').run(gameId);
-    this.db.exec('COMMIT');
+    this.inTransaction(() => {
+      this.db.prepare('DELETE FROM play_answers WHERE game_id = ?').run(gameId);
+      this.db.prepare('DELETE FROM play_games WHERE id = ?').run(gameId);
+    });
   }
 
   playGames() {
@@ -475,9 +537,9 @@ class Store {
       ON CONFLICT (name_key) DO UPDATE SET name = excluded.name, points = points + excluded.points, correct = correct + excluded.correct,
         wrong = wrong + excluded.wrong, unanswered = unanswered + excluded.unanswered, correct_ms = correct_ms + excluded.correct_ms,
         rounds = rounds + 1, updated_at = excluded.updated_at`);
-    this.db.exec('BEGIN');
-    for (const { name, correct, points = correct, wrong, unanswered, correctMs = 0 } of results) add.run(name.toLowerCase(), name, points, correct, wrong, unanswered, correctMs);
-    this.db.exec('COMMIT');
+    this.inTransaction(() => {
+      for (const { name, correct, points = correct, wrong, unanswered, correctMs = 0 } of results) add.run(name.toLowerCase(), name, points, correct, wrong, unanswered, correctMs);
+    });
   }
 
   partyResults() {
@@ -578,4 +640,4 @@ class Store {
   }
 }
 
-module.exports = { Store, OWN_SOURCE_ID, OWN_IMAGE_PREFIX, MEDIA_TYPES, IMAGE_COLUMNS, mediaKind, TUNING, LISTS_SCHEMA, PLAY_SCHEMA, PARTY_RESULTS_SCHEMA, PARTY_PROFILES_SCHEMA, POINT_SYSTEMS_SCHEMA, GAME_TEMPLATES_SCHEMA, SHOW_PAGES_SCHEMA, EMBEDDINGS_SCHEMA, fold, passage, embeddable, hashOf, DIM };
+module.exports = { Store, OWN_SOURCE_ID, OWN_IMAGE_PREFIX, MEDIA_TYPES, IMAGE_COLUMNS, mediaKind, TUNING, LISTS_SCHEMA, PLAY_SCHEMA, PARTY_RESULTS_SCHEMA, PARTY_PROFILES_SCHEMA, POINT_SYSTEMS_SCHEMA, GAME_TEMPLATES_SCHEMA, SHOW_PAGES_SCHEMA, EMBEDDINGS_SCHEMA, fold, passage, embeddable, hashOf, topMatches, semanticHitsOf, POOL, DIM };

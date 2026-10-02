@@ -1,0 +1,9 @@
+machine: AMD Ryzen 7 9800X3D 8-Core Processor, 16 logical CPUs, 31 GB RAM; Windows 11 Pro 10.0.26200 x64; CPU busy before the run: 3%
+runtime: Node 26.7.0, onnxruntime-node 1.30.0, @huggingface/transformers 4.3.0, execution provider cpu, precision q8
+model: Xenova/bge-m3 @ 4de13258303883538bd53b696b452bf8099f0858, cls pooling, normalized, prefixes query "" passage ""
+2048 passages sampled from after.sqlite, 200 single queries; rows/s sorted by length per batch size
+
+model                          device     cold ms  q p50  q p95     b8   b16   b32   b64  b128  unsorted32  rss MB  peak MB  download MB  int8
+Xenova/bge-m3                  cpu/q8        1002    7.9   11.1     80    80    77    68    58          49     960     2281          560  yes
+
+Xenova/bge-m3 cpu/q8: loaded config.json, tokenizer.json, tokenizer_config.json, onnx/model_quantized.onnx; {"file":"model_quantized.onnx","megabytes":543,"int8":true,"ops":{"MatMulInteger":true,"DynamicQuantizeLinear":true,"QLinearMatMul":false}}

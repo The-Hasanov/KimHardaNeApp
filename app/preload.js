@@ -7,6 +7,7 @@ contextBridge.exposeInMainWorld('api', {
   get: uid => ipcRenderer.invoke('get', uid),
   aiStatus: () => ipcRenderer.invoke('ai-status'),
   setAiSearch: isOn => ipcRenderer.invoke('set-ai-search', isOn),
+  removeAiFiles: () => ipcRenderer.invoke('remove-ai-files'),
   onAi: cb => ipcRenderer.on('ai', (_e, status) => cb(status)),
   gameQuestions: (games, count) => ipcRenderer.invoke('game-questions', games, count),
   lists: () => ipcRenderer.invoke('lists'),
