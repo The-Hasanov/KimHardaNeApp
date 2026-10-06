@@ -63,8 +63,9 @@ the TV never receive it early.
 Download `KimHardaNeApp-Setup-<version>.exe` from
 [Releases](https://github.com/The-Hasanov/KimHardaNeApp/releases) and run it. The installer is not
 code-signed, so Windows SmartScreen warns on the first install: choose **More info → Run anyway**.
-On a Mac with Apple silicon, download `KimHardaNeApp-<version>-arm64.dmg`, drag the app to Applications, and on the
-first launch choose **System Settings → Privacy & Security → Open Anyway**.
+On a Mac with Apple silicon, download `KimHardaNeApp-<version>-arm64.dmg` and drag the app to Applications. The app is
+signed and notarized by Apple, so it opens without warnings. It does not update itself; download the new `.dmg` for
+each release.
 
 Version 2 starts with an empty question bank: questions, lists and results from version 1 are not carried over,
 and version 1 export files do not import. Install the question banks again from *Settings → Data sources*.
