@@ -326,6 +326,7 @@ app.whenReady().then(() => {
   handle('party-kick', withParty((game, playerId) => game.kick(playerId)));
   handle('party-announce', withParty((game, text) => game.announce(text)));
   handle('party-set-reactions-on', withParty((game, areOn) => game.setReactionsOn(areOn)));
+  handle('party-set-mid-game-join-on', withParty((game, isOn) => game.setMidGameJoinOn(isOn)));
   handle('party-back-to-lobby', withParty((game, keepScores) => game.backToLobby({ keepScores })));
   handle('party-close', closeParty);
   handle('party-results', () => store.partyResults());
@@ -371,14 +372,17 @@ app.whenReady().then(() => {
     store.deleteShowPage(id);
     return showPagesWithUse();
   });
-  handle('pick-show-page-image', async () => {
+  handle('pick-show-page-media', async type => {
+    const isVideo = type === 'video';
     const { canceled, filePaths } = await dialog.showOpenDialog(win, {
-      title: 'Add a picture', properties: ['openFile'], filters: [{ name: 'Pictures', extensions: ['png', 'jpg', 'jpeg', 'gif', 'webp'] }],
+      title: isVideo ? 'Add a video' : 'Add a picture or GIF', properties: ['openFile'],
+      filters: [isVideo ? { name: 'Videos', extensions: ['mp4', 'm4v', 'webm'] } : { name: 'Pictures and GIFs', extensions: ['png', 'jpg', 'jpeg', 'gif', 'webp'] }],
     });
     if (canceled) return null;
-    if (fs.statSync(filePaths[0]).size > 50 * 1024 * 1024) throw new Error('Pick a picture smaller than 50 MB');
+    const maxMegabytes = isVideo ? 300 : 50;
+    if (fs.statSync(filePaths[0]).size > maxMegabytes * 1024 * 1024) throw new Error(`Pick a ${isVideo ? 'video' : 'picture'} smaller than ${maxMegabytes} MB`);
     const image = store.saveOwnMedia({ bytes: fs.readFileSync(filePaths[0]), extension: path.extname(filePaths[0]).toLowerCase() });
-    return { type: 'image', image, src: store.imageSrc(image) };
+    return { type: isVideo ? 'video' : 'image', image, src: store.imageSrc(image), isFullscreen: false, ...(isVideo && { isLooping: false }) };
   });
   handle('party-profiles', () => store.partyProfiles());
   handle('clear-party-profile-pin', name => {

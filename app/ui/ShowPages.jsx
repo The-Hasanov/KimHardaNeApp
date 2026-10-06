@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { cn } from 'cn';
 import {
-  ArrowDownIcon, ArrowUpIcon, CopyIcon, FastForwardIcon, LockIcon, ImagePlusIcon, LayoutTemplateIcon, PencilIcon, PlusIcon, ClapperboardIcon, TimerIcon, Trash2Icon, TypeIcon, XIcon,
+  ArrowDownIcon, ArrowUpIcon, CopyIcon, FastForwardIcon, FilmIcon, LockIcon, ImagePlusIcon, LayoutTemplateIcon, PencilIcon, PlusIcon, ClapperboardIcon, TimerIcon, Trash2Icon, TypeIcon, XIcon,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import {
@@ -20,12 +20,26 @@ const { api } = window;
 const MAX_BLOCKS = 12;
 const NEW_SHOW_PAGE = { title: '', seconds: 10, canPlayersSkip: true, blocks: [{ type: 'text', text: '', isLarge: false }] };
 
+function SlideMedia({ block, className }) {
+  return block.type === 'video'
+    ? <video key={`${block.src}:${!!block.isLooping}`} src={block.src} className={className} autoPlay muted loop={!!block.isLooping} playsInline />
+    : <img src={block.src} alt="" className={className} />;
+}
+
 export function ShowPageSlide({ page, className }) {
+  const fullscreenBlock = page.blocks.find(block => block.isFullscreen);
+  if (fullscreenBlock) {
+    return (
+      <div className={cn('aspect-video overflow-hidden rounded-lg bg-black', className)}>
+        <SlideMedia block={fullscreenBlock} className="size-full object-contain" />
+      </div>
+    );
+  }
   return (
     <div className={cn('flex aspect-video flex-col items-center justify-center gap-[4%] overflow-hidden rounded-lg bg-neutral-950 p-[5%] text-center text-white', className)}>
       {page.title && <p className="text-[clamp(0.9rem,3.2cqw,2.5rem)] leading-tight font-semibold">{page.title}</p>}
-      {page.blocks.map((block, index) => (block.type === 'image'
-        ? <img key={index} src={block.src} alt="" className="max-h-[45%] min-h-0 max-w-full rounded object-contain" />
+      {page.blocks.map((block, index) => (block.src
+        ? <SlideMedia key={index} block={block} className="max-h-[45%] min-h-0 max-w-full rounded object-contain" />
         : block.text && (
           <p key={index} className={cn('whitespace-pre-line text-neutral-300', block.isLarge ? 'text-[clamp(0.8rem,2.6cqw,2rem)] font-medium text-white' : 'text-[clamp(0.6rem,1.8cqw,1.4rem)]')}>
             {block.text}
@@ -39,9 +53,18 @@ function BlockEditor({ block, index, count, onChange, onMove, onRemove }) {
   return (
     <li className="flex gap-3 rounded-lg border p-3">
       <div className="min-w-0 flex-1 space-y-2">
-        {block.type === 'image' ? (
-          <img src={block.src} alt="" className="max-h-40 rounded border object-contain" />
-        ) : <>
+        {block.src ? <>
+          <SlideMedia block={block} className="max-h-40 rounded border object-contain" />
+          <div className="flex items-center gap-2">
+            <Switch id={`block-${index}-fullscreen`} size="sm" checked={!!block.isFullscreen} onCheckedChange={isFullscreen => onChange({ ...block, isFullscreen })} />
+            <Label htmlFor={`block-${index}-fullscreen`} className="text-xs font-normal">Fullscreen</Label>
+            {block.type === 'video' && <>
+              <Switch id={`block-${index}-loop`} size="sm" className="ml-3" checked={!!block.isLooping} onCheckedChange={isLooping => onChange({ ...block, isLooping })} />
+              <Label htmlFor={`block-${index}-loop`} className="text-xs font-normal">Loop</Label>
+            </>}
+          </div>
+          {block.isFullscreen && <p className="text-xs text-muted-foreground">Fills the whole screen; the title and the other blocks are hidden.</p>}
+        </> : <>
           <Textarea aria-label={`Text ${index + 1}`} value={block.text} rows={3} maxLength={2000} placeholder="Greeting, round rules, a joke…"
             onChange={e => onChange({ ...block, text: e.target.value })} />
           <div className="flex items-center gap-2">
@@ -72,12 +95,12 @@ function ShowPageEditor({ page, onOpenChange, onSaved }) {
     [blocks[index], blocks[index + delta]] = [blocks[index + delta], blocks[index]];
     setBlocks(blocks);
   };
-  const addPicture = async () => {
+  const addMedia = async type => {
     try {
-      const block = await api.pickShowPageImage();
+      const block = await api.pickShowPageMedia(type);
       if (block) setBlocks([...draft.blocks, block]);
     } catch (e) {
-      toast.error('Picture not added', { description: withoutIpcPrefix(e) });
+      toast.error(type === 'video' ? 'Video not added' : 'Picture not added', { description: withoutIpcPrefix(e) });
     }
   };
   const save = async () => {
@@ -129,7 +152,8 @@ function ShowPageEditor({ page, onOpenChange, onSaved }) {
               <Button variant="outline" size="sm" disabled={isFull} onClick={() => setBlocks([...draft.blocks, { type: 'text', text: '', isLarge: false }])}>
                 <TypeIcon />Add text
               </Button>
-              <Button variant="outline" size="sm" disabled={isFull} onClick={addPicture}><ImagePlusIcon />Add picture</Button>
+              <Button variant="outline" size="sm" disabled={isFull} onClick={() => addMedia('image')} title="A picture (PNG, JPEG, WebP) or an animated GIF"><ImagePlusIcon />Add picture or GIF</Button>
+              <Button variant="outline" size="sm" disabled={isFull} onClick={() => addMedia('video')} title="A video (MP4, WebM)"><FilmIcon />Add video</Button>
             </div>
           </div>
           <div className="space-y-2">
@@ -140,7 +164,7 @@ function ShowPageEditor({ page, onOpenChange, onSaved }) {
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
-          <Button onClick={save} disabled={isSaving || (!draft.title.trim() && !draft.blocks.some(block => block.type === 'image' || block.text?.trim()))}>Save</Button>
+          <Button onClick={save} disabled={isSaving || (!draft.title.trim() && !draft.blocks.some(block => block.src || block.text?.trim()))}>Save</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -166,7 +190,7 @@ export default function ShowPages({ showPages, onShowPagesChange }) {
         <div className="min-w-0 flex-1 space-y-1">
           <h1 className="text-2xl font-semibold">Show pages</h1>
           <p className="text-muted-foreground">
-            Pages with text and pictures for the TV and the phones: greet the players, explain a round's rules, anything you like. Add them
+            Pages with text, pictures and videos for the TV and the phones: greet the players, explain a round's rules, anything you like. Add them
             before any party round; each stays on screen for its seconds, and several play one after another.
           </p>
         </div>

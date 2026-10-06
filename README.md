@@ -18,10 +18,10 @@ game from the app. Bring your own questions or install a question bank from *Dat
   in a chat-style bar, send reactions that show on the TV and on everyone's screen, skip a wait together, rename
   themselves and reconnect without losing their place. Answer times break ties, the leaderboard (or, if you choose, nothing) shows between rounds, the last round
   ends with a podium for the winners, and
-  an all-time leaderboard ranks everyone by total points. The host can send messages to all players and sees who
-  leaves the game screen during a question. Questions cannot be selected or copied on the phones or the TV page.
+  an all-time leaderboard ranks everyone by total points. The host can send messages to all players, sees who
+  leaves the game screen during a question, and can close joining once the game has started. Questions cannot be selected or copied on the phones or the TV page.
 - **Your own quiz show**: name the party and plan its rounds, each with its own questions, timers and point
-  system. Put **show pages** (titles, text and pictures, each on screen for its own seconds) before or after any
+  system. Put **show pages** (titles, text, pictures, GIFs and videos, each on screen for its own seconds, any picture or video fullscreen if you like) before or after any
   round to greet the players, explain the rules or announce a break. Save the whole show as a template and play it again.
 - **Point systems**: fixed points for right, wrong and blank answers, a point list that gives each question its own
   points in order (10, 50, 10, 50), or a point pool where players pick 10, 20 or 30 for each question. Add a streak bonus, all or nothing, a bonus for an all-correct round, or let players

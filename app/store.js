@@ -411,7 +411,7 @@ class Store {
 
   showPages() {
     return this.db.prepare('SELECT id, title, blocks, seconds, can_players_skip, updated_at FROM show_pages ORDER BY id').all()
-      .map(({ can_players_skip: canPlayersSkip, ...row }) => ({ ...row, canPlayersSkip: !!canPlayersSkip, blocks: JSON.parse(row.blocks).map(block => (block.type === 'image' ? { ...block, src: this.imageSrc(block.image) } : block)) }));
+      .map(({ can_players_skip: canPlayersSkip, ...row }) => ({ ...row, canPlayersSkip: !!canPlayersSkip, blocks: JSON.parse(row.blocks).map(block => (block.image ? { ...block, src: this.imageSrc(block.image) } : block)) }));
   }
 
   saveShowPage({ id = null, title, blocks, seconds, canPlayersSkip = true }) {

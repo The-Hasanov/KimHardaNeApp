@@ -94,8 +94,10 @@ npm test         # offline tests for the scraper, data sources, search, ranking,
   until they are played (between rounds too). The party cannot open, and a round cannot start, while a planned round does
   not fit its point system or its list is gone; the round shows why in red. **Show pages** turn the party into a show:
   on *Game → Show pages* (`ShowPages.jsx`, `show_pages` table, `showPages.js` cleans them) the host makes pages with a
-  title, text blocks (normal or large) and pictures (copied to `images/own/` like other own media), and the seconds each
-  stays on screen, with a live preview of the TV. Each round's editor has *Show pages before this round* and *Show pages
+  title, text blocks (normal or large), pictures and GIFs, and videos (MP4, WebM; copied to `images/own/` like other own media), and the seconds each
+  stays on screen, with a live preview of the TV. A picture or video set to *Fullscreen* fills the whole TV and phone screen and hides the
+  page's title and other blocks; a video can *Loop*. Videos start by themselves: with sound on the TV, muted on the phones, where a round
+  button in the corner (or a tap on the video) turns the sound on, and later videos on that phone keep it. Each round's editor has *Show pages before this round* and *Show pages
   after this round*: add several, reorder them or remove them (*Manage show pages* opens the tab, or a window during a
   party). When the round starts, its pages before play one after another on the TV and every phone (phase `show`), then the
   first question comes. Its pages after play once the host leaves the round results (*Next round* or *New game*), and then
@@ -183,7 +185,8 @@ with the player's name in the TV's bottom-right corner (five at a time, about 4 
 (two at a time, about 3 s each), in the order sent; one that waits too long (15 s for the TV, 8 s for phones) is dropped, and it shows next to the player's name in the
 host's player lists for a few seconds when it reaches the TV. *Show reactions* in the phone's Settings hides them and the tray for that player (saved in the
 player's profile); *Reactions* in
-the party header turns them off and on for everyone. Windows
+the party header turns them off and on for everyone. *Join mid-game* in the party header (on by default) lets new names join
+after the first round has started; off, they are told the host closed joining, while players already in can still come back on any device. Windows
   Firewall asks once whether KimHardaNeApp may accept connections on private networks; allow it.
 - **Lists**: *Add to list* in the editor puts the open question into one or more of your lists, or creates a
   new list with it. The **Lists** tab shows each list in order: move questions up or down, open one in the

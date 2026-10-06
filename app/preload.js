@@ -42,6 +42,7 @@ contextBridge.exposeInMainWorld('api', {
   partyKick: playerId => ipcRenderer.invoke('party-kick', playerId),
   partyAnnounce: text => ipcRenderer.invoke('party-announce', text),
   partySetReactionsOn: areOn => ipcRenderer.invoke('party-set-reactions-on', areOn),
+  partySetMidGameJoinOn: isOn => ipcRenderer.invoke('party-set-mid-game-join-on', isOn),
   onPartyReaction: cb => {
     const listener = (_e, reaction) => cb(reaction);
     ipcRenderer.on('party-reaction', listener);
@@ -61,7 +62,7 @@ contextBridge.exposeInMainWorld('api', {
   showPages: () => ipcRenderer.invoke('show-pages'),
   saveShowPage: page => ipcRenderer.invoke('save-show-page', page),
   deleteShowPage: id => ipcRenderer.invoke('delete-show-page', id),
-  pickShowPageImage: () => ipcRenderer.invoke('pick-show-page-image'),
+  pickShowPageMedia: type => ipcRenderer.invoke('pick-show-page-media', type),
   partyProfiles: () => ipcRenderer.invoke('party-profiles'),
   clearPartyProfilePin: name => ipcRenderer.invoke('clear-party-profile-pin', name),
   deletePartyProfile: (name, options) => ipcRenderer.invoke('delete-party-profile', name, options),

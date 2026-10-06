@@ -64,6 +64,7 @@ class PartyGame {
     this.onRoundFinished = onRoundFinished;
     this.onReaction = onReaction;
     this.areReactionsOn = true;
+    this.isMidGameJoinOn = true;
     this.reactionTimes = new Map();
     this.reactionQueues = { tv: [], players: [] };
     this.reactionsShown = { tv: 0, players: 0 };
@@ -132,6 +133,7 @@ class PartyGame {
     const holder = this.playerNamed(clean);
     if (holder && !this.profiles.hasPin(clean)) throw new PartyError(409, 'That name is taken');
     if (holder) return this.moveToNewDevice(holder);
+    if (!this.isMidGameJoinOn && (this.round > 0 || this.phase !== 'lobby')) throw new PartyError(409, 'The game has started and the host closed joining');
     if (this.players.size >= PARTY_LIMITS.players) throw new PartyError(409, 'The game is full');
     const player = { id: crypto.randomUUID(), token: crypto.randomBytes(16).toString('hex'), name: clean, countsFrom: { round: this.round, position: this.closedCount } };
     this.loadProfile(player);
@@ -415,6 +417,11 @@ class PartyGame {
     this.changed();
   }
 
+  setMidGameJoinOn(isOn) {
+    this.isMidGameJoinOn = !!isOn;
+    this.changed();
+  }
+
   leave(token) {
     this.kick(this.playerByToken(token).id);
   }
@@ -503,7 +510,7 @@ class PartyGame {
   showImageSrc(url) {
     const page = this.phase === 'show' && Number(url.searchParams.get('page')) === this.showIndex ? this.showPages[this.showIndex] : null;
     const block = page?.blocks[Number(url.searchParams.get('block'))];
-    if (block?.type !== 'image') throw new PartyError(404, 'No media');
+    if (!block?.src) throw new PartyError(404, 'No media');
     return block.src;
   }
 
@@ -511,7 +518,7 @@ class PartyGame {
     const page = this.phase === 'show' ? this.showPages[this.showIndex] : null;
     return page && {
       index: this.showIndex, total: this.showPages.length, isAfterRound: this.isShowingAfterRound, title: page.title, seconds: page.seconds, canPlayersSkip: page.canPlayersSkip !== false,
-      blocks: page.blocks.map((block, position) => (block.type === 'image' ? { type: 'image', src: imageUrl(block, position) } : block)),
+      blocks: page.blocks.map((block, position) => (block.src ? { type: block.type, src: imageUrl(block, position), isFullscreen: !!block.isFullscreen, isLooping: !!block.isLooping } : block)),
     };
   }
 
@@ -768,6 +775,7 @@ class PartyGame {
       skips: this.skipStatus(),
       announcement: this.announcement,
       areReactionsOn: this.areReactionsOn,
+      isMidGameJoinOn: this.isMidGameJoinOn,
       showPagesAfterCount: this.phase === 'finished' ? this.showPagesAfter.length : 0,
       isLastRound: this.isLastRound,
       isLeaderboardHidden: this.isLeaderboardHidden,

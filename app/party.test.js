@@ -23,6 +23,18 @@ test('joining needs a unique, non-empty name', () => {
   assert.throws(() => game.playerByToken('forged'), /Join/);
 });
 
+test('with mid-game joining off, new names join in the lobby only, and players already in stay', () => {
+  const game = newGame();
+  game.setMidGameJoinOn(false);
+  const aysel = game.join('Aysel');
+  game.startRound(ROUND);
+  assert.throws(() => game.join('Nicat'), /closed joining/);
+  assert.equal(game.playerByToken(aysel.token).name, 'Aysel');
+  game.setMidGameJoinOn(true);
+  assert.equal(game.join('Nicat').name, 'Nicat');
+  assert.equal(game.hostView().isMidGameJoinOn, true);
+});
+
 test('answers are taken only while a question is open and stay hidden from players until the reveal', async () => {
   const game = newGame();
   const aysel = game.join('Aysel');

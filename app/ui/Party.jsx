@@ -3,7 +3,7 @@ import QRCode from 'qrcode';
 import { cn } from 'cn';
 import {
   AppWindowIcon, ArrowRightIcon, BanIcon, CastIcon, DicesIcon, MegaphoneIcon, SendIcon, SmilePlusIcon, CheckIcon, ChevronDownIcon, CircleHelpIcon, DoorClosedIcon, EyeIcon, EyeOffIcon, FlagIcon, GamepadIcon, PauseIcon, PlayIcon, QrCodeIcon,
-  RotateCcwIcon, SkipForwardIcon, TimerIcon, Trash2Icon, TriangleAlertIcon, TrophyIcon, TvIcon, Undo2Icon, UserXIcon, UsersIcon, WifiOffIcon, XIcon,
+  RotateCcwIcon, SkipForwardIcon, TimerIcon, Trash2Icon, TriangleAlertIcon, TrophyIcon, TvIcon, Undo2Icon, UserPlusIcon, UserXIcon, UsersIcon, WifiOffIcon, XIcon,
 } from 'lucide-react';
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter,
@@ -804,6 +804,9 @@ export default function PartyScreen({ party, isVisible, lobbySettings, onBackToL
             <Toggle variant="outline" size="sm" pressed={party.areReactionsOn} onPressedChange={areOn => api.partySetReactionsOn(areOn)}
               title={party.areReactionsOn ? 'Players can send reactions to the TV. Click to turn them off.' : 'Reactions are off. Click to let players send them.'}
               className="aria-pressed:bg-muted"><SmilePlusIcon />Reactions</Toggle>
+            <Toggle variant="outline" size="sm" pressed={party.isMidGameJoinOn} onPressedChange={isOn => api.partySetMidGameJoinOn(isOn)}
+              title={party.isMidGameJoinOn ? 'New players can join after the game starts. Click to close joining once a round starts.' : 'New players cannot join once a round starts; players already in can still come back. Click to let them join.'}
+              className="aria-pressed:bg-muted"><UserPlusIcon />Join mid-game</Toggle>
             {isInRound && <Button variant="outline" size="sm" onClick={() => api.partyFinishRound()}><FlagIcon />End round</Button>}
             <ToggleGroup type="single" variant="outline" size="sm" spacing={0} value={party.screen} aria-label="What the TV shows"
               onValueChange={screen => screen && api.partySetScreen(screen)}>

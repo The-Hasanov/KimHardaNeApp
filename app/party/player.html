@@ -50,6 +50,12 @@ h1 { font-size: 24px; line-height: 1.25; margin: 0; }
 .show-text { margin: 0; white-space: pre-line; color: var(--muted); font-size: 17px; line-height: 1.45; }
 .show-text.large { color: inherit; font-size: 22px; font-weight: 600; }
 .show-image { display: block; max-width: 100%; max-height: 40vh; border-radius: 12px; }
+.show-full { flex: 1; min-height: 0; display: flex; margin: 12px -16px 0; background: var(--bg); }
+.show-full > .video-wrap { flex: 1; }
+.video-wrap { position: relative; display: flex; justify-content: center; max-width: 100%; }
+.video-sound { position: absolute; right: 10px; bottom: 10px; width: 44px; height: 44px; padding: 0; display: flex; align-items: center; justify-content: center; border: 0; border-radius: 999px; background: rgb(0 0 0 / .6); color: #fff; }
+.video-sound svg { width: 22px; height: 22px; }
+.show-full-media { width: 100%; height: 100%; min-height: 50vh; object-fit: contain; }
 .big-number { font-size: 120px; font-weight: 700; line-height: 1; font-variant-numeric: tabular-nums; }
 .question { font-size: 20px; line-height: 1.45; font-weight: 500; white-space: pre-line; margin: 0; }
 .note { border: 1px solid color-mix(in srgb, var(--warn) 40%, transparent); background: color-mix(in srgb, var(--warn) 12%, transparent); border-radius: 10px; padding: 10px 12px; font-size: 14px; }
@@ -156,8 +162,9 @@ header .bar { gap: 6px; }
 .composer-status { font-size: 13px; min-height: 0; }
 .danger { background: color-mix(in srgb, var(--bad) 12%, transparent); color: var(--bad); border: 1px solid color-mix(in srgb, var(--bad) 45%, transparent); }
 .sheet-overlay { align-items: flex-end; padding: 0; }
-.sheet { max-width: 640px !important; border-radius: 20px 20px 0 0; border-bottom: 0; padding: 16px 16px calc(24px + env(safe-area-inset-bottom)); gap: 16px; animation: rise .2s ease-out; }
+.sheet { max-width: 640px !important; max-height: calc(100vh - 16px); max-height: calc(100dvh - 16px); overflow-y: auto; overscroll-behavior: contain; border-radius: 20px 20px 0 0; border-bottom: 0; padding: 16px 16px calc(24px + env(safe-area-inset-bottom)); gap: 16px; animation: rise .2s ease-out; }
 @keyframes rise { from { transform: translateY(24px); opacity: 0; } }
+.sheet .sent:empty { display: none; }
 .sheet-head { display: flex; align-items: center; justify-content: space-between; }
 .sheet-title { font-size: 20px; }
 .sheet-section { display: flex; flex-direction: column; gap: 10px; padding-top: 16px; border-top: 1px solid var(--border); }
@@ -242,7 +249,7 @@ ol.board .time { font-size: 13px; color: var(--muted); font-variant-numeric: tab
   h1 { font-size: 32px; }
   .overlay:not(.sheet-overlay) .card, .sheet { border-radius: 20px; border-bottom: 1px solid var(--border); margin-bottom: 10vh; }
   .sheet-overlay { align-items: center; padding: 16px; }
-  .sheet { max-width: 480px !important; }
+  .sheet { max-width: 480px !important; max-height: calc(90dvh - 32px); }
   .composer-emojis { justify-content: center; gap: 12px; }
 }
 button:not(:disabled):hover { filter: brightness(1.08); }
@@ -820,6 +827,8 @@ function updateReactions() {
   else app.querySelector('.reactions-slot')?.replaceChildren(el('p', { class: 'reaction-label' }, 'Reactions · everyone sees them'), tray);
 }
 
+let isVideoSoundOn = false;
+
 const ICONS = {
   skip: '<path d="m5 4 10 8-10 8z"/><path d="M19 5v14"/>',
   chevrons: '<path d="m6 17 5-5-5-5"/><path d="m13 17 5-5-5-5"/>',
@@ -835,6 +844,8 @@ const ICONS = {
   dice: '<rect width="12" height="12" x="2" y="10" rx="2"/><path d="m17.92 14 3.5-3.5a2.24 2.24 0 0 0 0-3l-5-4.92a2.24 2.24 0 0 0-3 0L10 6"/><path d="M6 18h.01"/><path d="M10 14h.01"/><path d="M15 6h.01"/><path d="M18 9h.01"/>',
   lock: '<rect width="18" height="11" x="3" y="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>',
   megaphone: '<path d="m3 11 18-5v12L3 14v-3z"/><path d="M11.6 16.8a3 3 0 1 1-5.8-1.6"/>',
+  soundOff: '<path d="M11 5 6 9H2v6h4l5 4z"/><path d="m22 9-6 6"/><path d="m16 9 6 6"/>',
+  soundOn: '<path d="M11 5 6 9H2v6h4l5 4z"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M19 5a10 10 0 0 1 0 14"/>',
 };
 
 const nameButton = () => el('button', { type: 'button', class: 'pill name-pill', onclick: showSettings, title: 'Settings' },
@@ -1183,10 +1194,40 @@ function renderScreen(next) {
   }
   if (next.phase === 'show') {
     const page = next.showPage;
+    const showMedia = (className, block) => {
+      const src = `${block.src}&token=${encodeURIComponent(session.token)}`;
+      if (block.type !== 'video') return el('img', { class: className, src, alt: '' });
+      const video = el('video', { class: className, playsInline: true, muted: true, defaultMuted: true, autoplay: true, loop: !!block.isLooping });
+      for (const name of ['muted', 'playsinline', 'webkit-playsinline', 'autoplay']) video.setAttribute(name, '');
+      video.src = src;
+      video.muted = !isVideoSoundOn;
+      const soundButton = el('button', { type: 'button', class: 'video-sound' });
+      const showSound = () => {
+        soundButton.replaceChildren(icon(video.muted ? ICONS.soundOff : ICONS.soundOn));
+        soundButton.setAttribute('aria-label', video.muted ? 'Turn the sound on' : 'Turn the sound off');
+      };
+      const toggleSound = () => {
+        video.muted = !video.muted;
+        isVideoSoundOn = !video.muted;
+        video.play().catch(() => {});
+        showSound();
+      };
+      soundButton.onclick = toggleSound;
+      video.onclick = toggleSound;
+      showSound();
+      requestAnimationFrame(() => video.play().catch(() => {
+        video.muted = true;
+        showSound();
+        video.play().catch(() => {});
+      }));
+      return el('div', { class: 'video-wrap' }, video, soundButton);
+    };
+    const fullscreenBlock = page.blocks.find(block => block.isFullscreen);
+    if (fullscreenBlock) return done(show(topBar(), el('div', { class: 'show-full' }, showMedia('show-full-media', fullscreenBlock)), skipDock()));
     return done(show(topBar(), el('div', { class: 'center show-page' },
       page.title && el('h1', {}, page.title),
-      page.blocks.map(block => (block.type === 'image'
-        ? el('img', { class: 'show-image', src: `${block.src}&token=${encodeURIComponent(session.token)}`, alt: '' })
+      page.blocks.map(block => (block.src
+        ? showMedia('show-image', block)
         : el('p', { class: block.isLarge ? 'show-text large' : 'show-text' }, block.text))),
       page.total > 1 && el('p', { class: 'muted' }, `${page.index + 1} of ${page.total}`)), skipDock()));
   }
